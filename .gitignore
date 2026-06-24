@@ -1,0 +1,6 @@
+.env
+.nascinema/
+__pycache__/
+*.pyc
+.venv/
+venv/
