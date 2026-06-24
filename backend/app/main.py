@@ -6,9 +6,12 @@ Watch Together will live. For now it just accepts connections.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from . import __version__
@@ -34,7 +37,9 @@ def create_fastapi() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
+        # We authenticate with bearer tokens (Authorization header), not cookies,
+        # so credentials stay off — which keeps "*" origins valid for browsers.
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -52,6 +57,14 @@ def create_fastapi() -> FastAPI:
         }
 
     app.include_router(movies_router)
+
+    # Serve the built Flutter web app (if present) at the root, so the UI is
+    # reachable in any browser with no client-side tooling. Mounted last so the
+    # /api/* routes above take precedence.
+    web_dir = Path(__file__).resolve().parents[2] / "frontend" / "build" / "web"
+    if web_dir.is_dir():
+        app.mount("/", StaticFiles(directory=str(web_dir), html=True), name="web")
+
     return app
 
 
