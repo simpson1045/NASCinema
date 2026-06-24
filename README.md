@@ -3,7 +3,7 @@
 > Self-hosted movies & TV from your NAS — own your living room, not a subscription
 
 [![Flutter](https://img.shields.io/badge/Flutter-Latest-blue.svg)](https://flutter.dev/)
-[![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.14-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688.svg)](https://fastapi.tiangolo.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-transcode-success.svg)](https://ffmpeg.org/)
@@ -96,7 +96,7 @@ Sidecar services (optional, NAS-hosted like NASRadio): **PGS/VOBSUB OCR worker**
 ### Backend
 | Component | Technology |
 |---|---|
-| Language | Python 3.12 |
+| Language | Python 3.14 (core backend; ML/audio sidecars may pin an older interpreter) |
 | Framework | FastAPI (async) + Uvicorn |
 | Database | PostgreSQL 16 |
 | Auth | scrypt hashing + itsdangerous signed tokens (ported from NASRadio) |

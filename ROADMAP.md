@@ -19,6 +19,7 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 - [x] Decide code-sharing — standalone now, extract a shared `nas-core` later (YAGNI)
 - [x] Write README + ROADMAP (this doc)
 - [x] Lock principles — multi-user & config-driven (nothing hardcoded), versioning is earned (start pre-v1.0)
+- [x] Target runtime: **Python 3.14** for the core backend (full binary-wheel support verified for FastAPI/psycopg/pydantic/uvicorn); ML/audio sidecars pin their own interpreter
 - [ ] Confirm FFmpeg/FFprobe on PATH (installed via winget ✅)
 - [ ] **Config model** — server settings via `.env`/admin UI, per-user settings in account; zero hardcoded paths/hosts/keys/devices ⭐
 - [ ] Repo scaffold: `backend/` (FastAPI app, `run.py`, `.env.example`) + `frontend/` (Flutter shell)
