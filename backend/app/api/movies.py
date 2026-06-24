@@ -7,12 +7,14 @@ scanner and Flutter grid can be exercised end-to-end.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..db import get_session
-from ..models import Movie
+from ..metadata import get_movie_videos
+from ..models import MediaFile, Movie
 from ..scanner import scan
 
 router = APIRouter(prefix="/api", tags=["library"])
@@ -93,6 +95,42 @@ async def get_movie(
         if f.kind == "extra"
     ]
     return data
+
+
+@router.get("/movies/{movie_id}/videos")
+async def movie_videos(
+    movie_id: int, session: AsyncSession = Depends(get_session)
+) -> dict:
+    movie = await session.scalar(select(Movie).where(Movie.id == movie_id))
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    if not movie.tmdb_id:
+        return {"videos": []}
+    return {"videos": await get_movie_videos(movie.tmdb_id)}
+
+
+class ExtraUpdate(BaseModel):
+    title: str | None = None
+    type: str | None = None
+
+
+@router.patch("/extras/{file_id}")
+async def update_extra(
+    file_id: int,
+    body: ExtraUpdate,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    mf = await session.scalar(
+        select(MediaFile).where(MediaFile.id == file_id, MediaFile.kind == "extra")
+    )
+    if not mf:
+        raise HTTPException(status_code=404, detail="Extra not found")
+    if body.title is not None and body.title.strip():
+        mf.extra_title = body.title.strip()
+    if body.type is not None and body.type.strip():
+        mf.extra_type = body.type.strip()
+    await session.commit()
+    return {"id": mf.id, "title": mf.extra_title, "type": mf.extra_type}
 
 
 @router.post("/scan")

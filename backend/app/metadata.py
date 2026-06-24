@@ -61,3 +61,34 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
         "genres": [g["name"] for g in detail.get("genres", [])],
         "match_confidence": _confidence(title, best.get("title") or ""),
     }
+
+
+async def get_movie_videos(tmdb_id: int) -> list[dict]:
+    """Official trailers/clips for a movie (YouTube-hosted) from TMDB."""
+    key = get_settings().tmdb_api_key
+    if not key:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                f"{TMDB_BASE}/movie/{tmdb_id}/videos", params={"api_key": key}
+            )
+            r.raise_for_status()
+            results = r.json().get("results", [])
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    videos = [
+        {
+            "name": v.get("name"),
+            "type": v.get("type"),
+            "key": v["key"],
+            "url": f"https://www.youtube.com/watch?v={v['key']}",
+        }
+        for v in results
+        if v.get("site") == "YouTube" and v.get("key")
+    ]
+    # Trailers first, then teasers/clips/featurettes.
+    order = {"Trailer": 0, "Teaser": 1, "Clip": 2, "Featurette": 3}
+    videos.sort(key=lambda v: order.get(v["type"], 9))
+    return videos

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/extra.dart';
 import '../models/movie.dart';
 import '../models/movie_file.dart';
+import '../models/video.dart';
 
 /// Parsed result of GET /api/health.
 class HealthStatus {
@@ -75,5 +76,34 @@ class ApiService {
         .map((e) => Extra.fromJson(e as Map<String, dynamic>))
         .toList();
     return (files: files, extras: extras);
+  }
+
+  Future<List<Video>> getMovieVideos(int id) async {
+    final r = await http
+        .get(_u('/api/movies/$id/videos'))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    final data = jsonDecode(r.body) as Map<String, dynamic>;
+    return ((data['videos'] ?? []) as List)
+        .map((e) => Video.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> updateExtra(int id, {String? title, String? type}) async {
+    final r = await http
+        .patch(
+          _u('/api/extras/$id'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'title': ?title,
+            'type': ?type,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
   }
 }

@@ -1,12 +1,19 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/extra.dart';
 import '../models/movie.dart';
 import '../models/movie_file.dart';
+import '../models/video.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+
+const _extraTypes = <String>[
+  'Featurette', 'Trailer', 'Deleted Scene', 'Behind the Scenes', 'Interview',
+  'Documentary', 'Music Video', 'Blooper', 'Short', 'Special', 'Extra',
+];
 
 class MovieDetailScreen extends StatefulWidget {
   const MovieDetailScreen({
@@ -23,17 +30,82 @@ class MovieDetailScreen extends StatefulWidget {
 }
 
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
-  late final Future<({List<MovieFile> files, List<Extra> extras})> _detail =
-      ApiService(widget.baseUrl).getMovieDetail(widget.movie.id);
+  late final ApiService _api = ApiService(widget.baseUrl);
+  List<MovieFile> _files = const [];
+  List<Extra> _extras = const [];
+  List<Video> _videos = const [];
+  bool _loading = true;
+  String? _error;
 
-  void _comingSoon([String what = 'Playback']) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$what lands in the next milestone 🍿'),
-        backgroundColor: NasColors.surfaceRaised,
-        duration: const Duration(seconds: 2),
-      ),
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final detailF = _api.getMovieDetail(widget.movie.id);
+      final videos =
+          await _api.getMovieVideos(widget.movie.id).catchError((_) => <Video>[]);
+      final detail = await detailF;
+      if (!mounted) return;
+      setState(() {
+        _files = detail.files;
+        _extras = detail.extras;
+        _videos = videos;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: NasColors.surfaceRaised,
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  Future<void> _editExtra(Extra e) async {
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (_) => _EditExtraDialog(extra: e),
     );
+    if (result == null) return;
+    final (title, type) = result;
+    try {
+      await _api.updateExtra(e.id, title: title, type: type);
+      setState(() {
+        final i = _extras.indexWhere((x) => x.id == e.id);
+        if (i >= 0) {
+          _extras = List.of(_extras)
+            ..[i] = Extra(
+              id: e.id,
+              title: title,
+              type: type,
+              resolution: e.resolution,
+              duration: e.duration,
+              sizeBytes: e.sizeBytes,
+            );
+        }
+      });
+    } catch (err) {
+      _snack('Could not save: $err');
+    }
+  }
+
+  Future<void> _openVideo(Video v) async {
+    final uri = Uri.tryParse(v.url);
+    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _snack('Could not open the video');
+    }
   }
 
   @override
@@ -51,7 +123,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    _ActionsRow(onPlay: () => _comingSoon(), movie: movie),
+                    _ActionsRow(
+                        onPlay: () => _snack('Playback lands in the next milestone 🍿'),
+                        movie: movie),
                     if (movie.genres.isNotEmpty) ...[
                       const SizedBox(height: 18),
                       _Genres(genres: movie.genres),
@@ -60,20 +134,41 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                       const SizedBox(height: 22),
                       const _SectionLabel('Overview'),
                       const SizedBox(height: 8),
-                      Text(
-                        movie.overview!,
-                        style: const TextStyle(
-                          color: NasColors.text,
-                          fontSize: 14.5,
-                          height: 1.6,
-                        ),
-                      ),
+                      Text(movie.overview!,
+                          style: const TextStyle(
+                              color: NasColors.text, fontSize: 14.5, height: 1.6)),
                     ],
                     const SizedBox(height: 26),
-                    _DetailBody(
-                      future: _detail,
-                      onPlayExtra: () => _comingSoon('Extras playback'),
-                    ),
+                    if (_loading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
+                            child: SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: NasColors.amber))),
+                      )
+                    else if (_error != null)
+                      Text('Could not load details: $_error',
+                          style:
+                              const TextStyle(color: NasColors.bad, fontSize: 13))
+                    else ...[
+                      if (_extras.isNotEmpty) ...[
+                        _ExtrasSection(
+                            extras: _extras,
+                            onPlay: () => _snack('Extras playback lands soon 🍿'),
+                            onEdit: _editExtra),
+                        const SizedBox(height: 28),
+                      ],
+                      if (_videos.isNotEmpty) ...[
+                        _VideosSection(videos: _videos, onTap: _openVideo),
+                        const SizedBox(height: 28),
+                      ],
+                      const _SectionLabel('Files'),
+                      const SizedBox(height: 10),
+                      for (final f in _files) _FileCard(file: f),
+                    ],
                   ]),
                 ),
               ),
@@ -259,54 +354,15 @@ class _ActionsRow extends StatelessWidget {
   }
 }
 
-class _DetailBody extends StatelessWidget {
-  const _DetailBody({required this.future, required this.onPlayExtra});
-  final Future<({List<MovieFile> files, List<Extra> extras})> future;
-  final VoidCallback onPlayExtra;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<({List<MovieFile> files, List<Extra> extras})>(
-      future: future,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-                child: SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: NasColors.amber))),
-          );
-        }
-        if (snap.hasError) {
-          return Text('Could not load details: ${snap.error}',
-              style: const TextStyle(color: NasColors.bad, fontSize: 13));
-        }
-        final files = snap.data?.files ?? const [];
-        final extras = snap.data?.extras ?? const [];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (extras.isNotEmpty) ...[
-              _ExtrasSection(extras: extras, onPlay: onPlayExtra),
-              const SizedBox(height: 28),
-            ],
-            const _SectionLabel('Files'),
-            const SizedBox(height: 10),
-            for (final f in files) _FileCard(file: f),
-          ],
-        );
-      },
-    );
-  }
-}
-
 class _ExtrasSection extends StatelessWidget {
-  const _ExtrasSection({required this.extras, required this.onPlay});
+  const _ExtrasSection({
+    required this.extras,
+    required this.onPlay,
+    required this.onEdit,
+  });
   final List<Extra> extras;
   final VoidCallback onPlay;
+  final void Function(Extra) onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -324,9 +380,8 @@ class _ExtrasSection extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: NasColors.amber,
-                borderRadius: BorderRadius.circular(20),
-              ),
+                  color: NasColors.amber,
+                  borderRadius: BorderRadius.circular(20)),
               child: Text('${extras.length}',
                   style: const TextStyle(
                       color: NasColors.bg,
@@ -339,15 +394,14 @@ class _ExtrasSection extends StatelessWidget {
         for (final entry in byType.entries) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 8, top: 4),
-            child: Text(
-              '${entry.key}  ·  ${entry.value.length}',
-              style: const TextStyle(
-                  color: NasColors.violet,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600),
-            ),
+            child: Text('${entry.key}  ·  ${entry.value.length}',
+                style: const TextStyle(
+                    color: NasColors.violet,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600)),
           ),
-          for (final e in entry.value) _ExtraRow(extra: e, onPlay: onPlay),
+          for (final e in entry.value)
+            _ExtraRow(extra: e, onPlay: onPlay, onEdit: () => onEdit(e)),
           const SizedBox(height: 8),
         ],
       ],
@@ -356,51 +410,135 @@ class _ExtrasSection extends StatelessWidget {
 }
 
 class _ExtraRow extends StatelessWidget {
-  const _ExtraRow({required this.extra, required this.onPlay});
+  const _ExtraRow({
+    required this.extra,
+    required this.onPlay,
+    required this.onEdit,
+  });
   final Extra extra;
   final VoidCallback onPlay;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPlay,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: NasColors.surface,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: NasColors.amber.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+          color: NasColors.surface, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onPlay,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: NasColors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded,
+                          color: NasColors.amber, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(extra.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: NasColors.text, fontSize: 13.5)),
+                    ),
+                    if (extra.durationLabel != null) ...[
+                      const SizedBox(width: 10),
+                      Text(extra.durationLabel!,
+                          style: const TextStyle(
+                              color: NasColors.muted, fontSize: 12)),
+                    ],
+                  ],
+                ),
               ),
-              child: const Icon(Icons.play_arrow_rounded,
-                  color: NasColors.amber, size: 24),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(extra.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: NasColors.text, fontSize: 13.5)),
-            ),
-            if (extra.durationLabel != null) ...[
-              const SizedBox(width: 10),
-              Text(extra.durationLabel!,
-                  style:
-                      const TextStyle(color: NasColors.muted, fontSize: 12)),
-            ],
+          ),
+          IconButton(
+            onPressed: onEdit,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.edit_outlined,
+                color: NasColors.muted, size: 18),
+            tooltip: 'Rename / retype',
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+}
+
+class _VideosSection extends StatelessWidget {
+  const _VideosSection({required this.videos, required this.onTap});
+  final List<Video> videos;
+  final void Function(Video) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const _SectionLabel('Trailers & clips'),
+            const SizedBox(width: 8),
+            const Text('from TMDB · opens YouTube',
+                style: TextStyle(color: NasColors.muted, fontSize: 11)),
           ],
         ),
-      ),
+        const SizedBox(height: 12),
+        for (final v in videos)
+          InkWell(
+            onTap: () => onTap(v),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                  color: NasColors.surface,
+                  borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: NasColors.violet.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.smart_display_outlined,
+                        color: NasColors.violet, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(v.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: NasColors.text, fontSize: 13.5)),
+                  ),
+                  if (v.type.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    _Chip(v.type, NasColors.muted),
+                  ],
+                  const SizedBox(width: 6),
+                  const Icon(Icons.open_in_new,
+                      color: NasColors.muted, size: 16),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -419,9 +557,8 @@ class _Genres extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: NasColors.surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
+                color: NasColors.surface,
+                borderRadius: BorderRadius.circular(20)),
             child: Text(g,
                 style: const TextStyle(color: NasColors.muted, fontSize: 12)),
           ),
@@ -448,9 +585,7 @@ class _FileCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: NasColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
+          color: NasColors.surface, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -493,9 +628,8 @@ class _Chip extends StatelessWidget {
       padding: EdgeInsets.symmetric(
           horizontal: big ? 12 : 8, vertical: big ? 8 : 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(big ? 10 : 6),
-      ),
+          color: color.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(big ? 10 : 6)),
       child: Text(text,
           style: TextStyle(
               color: color,
@@ -517,5 +651,71 @@ class _SectionLabel extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.1));
+  }
+}
+
+class _EditExtraDialog extends StatefulWidget {
+  const _EditExtraDialog({required this.extra});
+  final Extra extra;
+
+  @override
+  State<_EditExtraDialog> createState() => _EditExtraDialogState();
+}
+
+class _EditExtraDialogState extends State<_EditExtraDialog> {
+  late final TextEditingController _title =
+      TextEditingController(text: widget.extra.title);
+  late String _type = _extraTypes.contains(widget.extra.type)
+      ? widget.extra.type
+      : 'Extra';
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: NasColors.surface,
+      title: const Text('Edit bonus feature',
+          style: TextStyle(color: NasColors.text, fontSize: 18)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _title,
+            style: const TextStyle(color: NasColors.text),
+            decoration: const InputDecoration(labelText: 'Name'),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _type,
+            dropdownColor: NasColors.surfaceRaised,
+            style: const TextStyle(color: NasColors.text),
+            decoration: const InputDecoration(labelText: 'Type'),
+            items: [
+              for (final t in _extraTypes)
+                DropdownMenuItem(value: t, child: Text(t)),
+            ],
+            onChanged: (v) => setState(() => _type = v ?? _type),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel',
+              style: TextStyle(color: NasColors.muted)),
+        ),
+        ElevatedButton(
+          onPressed: () =>
+              Navigator.of(context).pop((_title.text.trim(), _type)),
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
