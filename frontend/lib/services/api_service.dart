@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/extra.dart';
 import '../models/movie.dart';
 import '../models/movie_file.dart';
 
@@ -59,15 +60,20 @@ class ApiService {
         .toList();
   }
 
-  Future<List<MovieFile>> getMovieFiles(int id) async {
+  Future<({List<MovieFile> files, List<Extra> extras})> getMovieDetail(
+      int id) async {
     final r =
         await http.get(_u('/api/movies/$id')).timeout(const Duration(seconds: 15));
     if (r.statusCode != 200) {
       throw Exception('Backend returned HTTP ${r.statusCode}');
     }
     final data = jsonDecode(r.body) as Map<String, dynamic>;
-    return ((data['files'] ?? []) as List)
+    final files = ((data['files'] ?? []) as List)
         .map((e) => MovieFile.fromJson(e as Map<String, dynamic>))
         .toList();
+    final extras = ((data['extras'] ?? []) as List)
+        .map((e) => Extra.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return (files: files, extras: extras);
   }
 }

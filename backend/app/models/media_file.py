@@ -37,6 +37,12 @@ class MediaFile(Base):
     path: Mapped[str] = mapped_column(String(1024), unique=True, index=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
+    # 'feature' = the movie itself; 'extra' = bonus content (featurette, trailer,
+    # deleted scene, …). Extras carry their own display title + type.
+    kind: Mapped[str] = mapped_column(String(16), default="feature", index=True)
+    extra_type: Mapped[str | None] = mapped_column(String(32))
+    extra_title: Mapped[str | None] = mapped_column(String(512))
+
     # Probed with ffprobe at scan time.
     container: Mapped[str | None] = mapped_column(String(32))
     video_codec: Mapped[str | None] = mapped_column(String(32))

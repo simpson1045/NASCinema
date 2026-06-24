@@ -19,7 +19,8 @@ router = APIRouter(prefix="/api", tags=["library"])
 
 
 def _summary(m: Movie) -> dict:
-    primary = m.files[0] if m.files else None
+    features = [f for f in m.files if f.kind == "feature"]
+    primary = features[0] if features else (m.files[0] if m.files else None)
     return {
         "id": m.id,
         "title": m.title,
@@ -33,7 +34,7 @@ def _summary(m: Movie) -> dict:
         "tmdb_id": m.tmdb_id,
         "match_confidence": m.match_confidence,
         "locked": m.locked,
-        "file_count": len(m.files),
+        "file_count": len(features),
         "resolution": (
             f"{primary.width}x{primary.height}"
             if primary and primary.width
@@ -77,6 +78,19 @@ async def get_movie(
             "size_bytes": f.size_bytes,
         }
         for f in movie.files
+        if f.kind == "feature"
+    ]
+    data["extras"] = [
+        {
+            "id": f.id,
+            "title": f.extra_title or "Untitled",
+            "type": f.extra_type or "Extra",
+            "resolution": f"{f.width}x{f.height}" if f.width else None,
+            "duration": f.duration,
+            "size_bytes": f.size_bytes,
+        }
+        for f in movie.files
+        if f.kind == "extra"
     ]
     return data
 
