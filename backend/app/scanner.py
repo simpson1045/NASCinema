@@ -65,8 +65,22 @@ def _classify(full: str, media_dir: str) -> tuple[bool, str | None, str | None]:
     return False, (dirs[-1] if dirs else None), None
 
 
+_FOLDER_TITLE = re.compile(r"^(.*?)\s*\((\d{4})\)")
+
+
 def _derive_title(movie_folder: str | None, filename: str) -> tuple[str, int | None]:
-    """Title from whichever of the movie folder / filename carries a year."""
+    """Resolve the movie title + year.
+
+    A clean ``Title (Year)`` folder is authoritative and keeps sequel markers
+    intact (e.g. "Back to the Future Part III") — guessit would strip "Part III"
+    into a separate field, collapsing sequels onto the base film. Fall back to
+    guessit's year-bearing parse for files sitting loose in a directory.
+    """
+    if movie_folder:
+        m = _FOLDER_TITLE.match(movie_folder)
+        if m:
+            return m.group(1).strip(), int(m.group(2))
+
     finfo = guessit(movie_folder) if movie_folder else {}
     ninfo = guessit(filename)
     if finfo.get("year") and finfo.get("title"):
@@ -77,12 +91,36 @@ def _derive_title(movie_folder: str | None, filename: str) -> tuple[str, int | N
     return str(title), (finfo.get("year") or ninfo.get("year"))
 
 
-def _extra_title(filename: str, movie_title: str) -> str:
-    """Clean an extra's display name: drop a leading movie-title prefix and any
-    MakeMKV-style `_t07` disc-title suffix."""
+# Keyword -> extra type, matched against the filename (more specific than the
+# folder, which is often just one catch-all "Featurettes" dir).
+_EXTRA_NAME_TYPES = [
+    ("teaser", "Trailer"), ("trailer", "Trailer"), ("deleted", "Deleted Scene"),
+    ("behind the scenes", "Behind the Scenes"), ("making of", "Behind the Scenes"),
+    ("making-of", "Behind the Scenes"), ("interview", "Interview"),
+    ("documentary", "Documentary"), ("music video", "Music Video"),
+    ("blooper", "Blooper"), ("gag reel", "Blooper"), ("outtake", "Blooper"),
+    ("featurette", "Featurette"),
+]
+
+
+def _extra_type(filename: str, folder_key: str | None) -> str:
+    low = filename.lower()
+    for keyword, label in _EXTRA_NAME_TYPES:
+        if keyword in low:
+            return label
+    return EXTRA_TYPE_LABELS.get(folder_key, "Featurette")
+
+
+def _extra_title(filename: str, movie_title: str, extra_type: str) -> str:
+    """Clean an extra's display name: drop a leading movie-title prefix, a
+    redundant type prefix ("Behind the Scenes - "), and any MakeMKV-style `_t07`
+    disc-title suffix."""
     stem = Path(filename).stem
     if movie_title and stem.lower().startswith(movie_title.lower()):
         stem = stem[len(movie_title):].lstrip(" -_.")
+    stem = re.sub(
+        rf"^{re.escape(extra_type)}s?\s*[-:_]\s*", "", stem, flags=re.IGNORECASE
+    )
     stem = re.sub(r"[ _]t\d{1,3}$", "", stem)
     return stem.strip() or Path(filename).stem
 
@@ -161,8 +199,8 @@ async def scan(limit: int | None = None) -> dict:
                         )
                         if is_extra:
                             mf.kind = "extra"
-                            mf.extra_type = EXTRA_TYPE_LABELS.get(extras_key, "Extra")
-                            mf.extra_title = _extra_title(name, movie.title)
+                            mf.extra_type = _extra_type(name, extras_key)
+                            mf.extra_title = _extra_title(name, movie.title, mf.extra_type)
                         session.add(mf)
                         await session.commit()
                     except Exception:
