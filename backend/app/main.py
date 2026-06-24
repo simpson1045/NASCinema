@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from . import __version__
+from .api.movies import router as movies_router
 from .config import get_settings
 from .db import engine
 from .ffmpeg import ffmpeg_path, ffprobe_path
@@ -50,6 +51,7 @@ def create_fastapi() -> FastAPI:
             "media_dirs": len(settings.media_dir_list),
         }
 
+    app.include_router(movies_router)
     return app
 
 

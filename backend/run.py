@@ -30,7 +30,12 @@ def main() -> None:
     settings = get_settings()
 
     if args.scan:
-        print("[NASCinema] --scan is reserved for Phase 1 (library scanner). Skipping.")
+        from app.scanner import scan
+
+        print("[NASCinema] scanning library...")
+        stats = asyncio.run(scan())
+        print(f"[NASCinema] scan complete: {stats}")
+        return
 
     target = "app.main:app"
 
