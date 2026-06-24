@@ -20,11 +20,12 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 - [x] Write README + ROADMAP (this doc)
 - [x] Lock principles — multi-user & config-driven (nothing hardcoded), versioning is earned (start pre-v1.0)
 - [x] Target runtime: **Python 3.14** for the core backend (full binary-wheel support verified for FastAPI/psycopg/pydantic/uvicorn); ML/audio sidecars pin their own interpreter
-- [ ] Confirm FFmpeg/FFprobe on PATH (installed via winget ✅)
-- [ ] **Config model** — server settings via `.env`/admin UI, per-user settings in account; zero hardcoded paths/hosts/keys/devices ⭐
-- [ ] Repo scaffold: `backend/` (FastAPI app, `run.py`, `.env.example`) + `frontend/` (Flutter shell)
-- [ ] Flutter theme — encode the amber/violet token set
-- [ ] First admin user CLI (`manage_users.py`) + scrypt + itsdangerous tokens 🔁
+- [x] FFmpeg/FFprobe confirmed (auto-discovered on ALPINE; `/api/health` reports both available)
+- [x] **Config model** — `pydantic-settings` (`NASCINEMA_` env), ffmpeg auto-discovery, `.env` with generated secret key; zero hardcoded paths/hosts/keys/devices
+- [x] **Backend scaffold** — FastAPI + Socket.IO, async SQLAlchemy 2.0 + Alembic (`0001` users), auth (scrypt + itsdangerous + scoped media tokens), `run.py`; **boots on ALPINE, `/api/health` → `db:true`** 🔁
+- [x] First admin user CLI (`manage_users.py` create/list/passwd) 🔁
+- [ ] Frontend scaffold — Flutter shell + amber/violet theme
+- [ ] Create the first admin account (run `manage_users.py create <you> --role admin` interactively)
 - [ ] **Per-user settings store** — language, subtitle prefs, bandwidth cap, renderer devices, theme, integration accounts 🟡
 
 ---
