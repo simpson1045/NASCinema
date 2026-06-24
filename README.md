@@ -5,7 +5,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-Latest-blue.svg)](https://flutter.dev/)
 [![Python](https://img.shields.io/badge/Python-3.14-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688.svg)](https://fastapi.tiangolo.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue.svg)](https://www.postgresql.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-transcode-success.svg)](https://ffmpeg.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -77,7 +77,7 @@ Flutter Frontend (Windows / Android / Fire TV / iOS)
          v
 FastAPI Backend (Native Windows / Synology NAS)
     +-- async streaming (HTTP range, on-the-fly HLS segments)
-    +-- PostgreSQL 16 (library, users, watch state, sub/codec probe cache)
+    +-- PostgreSQL 17 (library, users, watch state, sub/codec probe cache)
     +-- itsdangerous signed tokens + scrypt hashing (ported from NASRadio)
     +-- Scoped read-only media tokens (stream/artwork/share links)
     +-- FFmpeg / FFprobe (probe, remux, transcode, HLS, trickplay, sub extract)
@@ -98,7 +98,7 @@ Sidecar services (optional, NAS-hosted like NASRadio): **PGS/VOBSUB OCR worker**
 |---|---|
 | Language | Python 3.14 (core backend; ML/audio sidecars may pin an older interpreter) |
 | Framework | FastAPI (async) + Uvicorn |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 17 |
 | Auth | scrypt hashing + itsdangerous signed tokens (ported from NASRadio) |
 | Media probe / transcode | FFmpeg + FFprobe |
 | Subtitle OCR | Tesseract / pgsrip (bitmap → SRT) |
@@ -125,7 +125,7 @@ Sidecar services (optional, NAS-hosted like NASRadio): **PGS/VOBSUB OCR worker**
 | Component | Technology |
 |---|---|
 | Runtime | Native Windows or Linux (FastAPI/Uvicorn) |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 17 |
 | Storage | Any SMB/NFS-accessible NAS (Synology, TrueNAS, Unraid, …) |
 | Reverse proxy | Any (e.g. Nginx Proxy Manager, Caddy, Traefik) |
 | DNS | Any (e.g. CloudFlare) |
