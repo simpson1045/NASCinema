@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'screens/library_screen.dart';
 import 'services/api_service.dart';
 import 'services/server_config.dart';
 import 'theme/app_theme.dart';
@@ -20,8 +21,7 @@ class NasCinemaApp extends StatelessWidget {
   }
 }
 
-/// Phase-0 shell: configure the backend address and confirm connectivity.
-/// The real login + library browser land in Phase 1.
+/// Configure the backend address, validate it, then enter the library.
 class ConnectScreen extends StatefulWidget {
   const ConnectScreen({super.key});
 
@@ -34,7 +34,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
   final _urlController = TextEditingController(text: 'http://localhost:8400');
   bool _busy = false;
   String? _error;
-  HealthStatus? _health;
 
   @override
   void initState() {
@@ -56,17 +55,19 @@ class _ConnectScreenState extends State<ConnectScreen> {
     setState(() {
       _busy = true;
       _error = null;
-      _health = null;
     });
     final url = _urlController.text.trim();
     try {
-      final status = await ApiService(url).health();
+      await ApiService(url).health(); // validate reachability
       await _config.set(url);
-      setState(() => _health = status);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => LibraryScreen(baseUrl: url)),
+      );
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
-      setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -93,6 +94,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   controller: _urlController,
                   keyboardType: TextInputType.url,
                   autocorrect: false,
+                  onSubmitted: (_) => _busy ? null : _connect(),
                   decoration: const InputDecoration(
                     hintText: 'http://your-server:8400',
                     prefixIcon: Icon(Icons.dns_outlined, color: NasColors.muted),
@@ -114,7 +116,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 ),
                 const SizedBox(height: 24),
                 if (_error != null) _ErrorBox(_error!),
-                if (_health != null) _HealthCard(_health!),
               ],
             ),
           ),
@@ -164,81 +165,9 @@ class _Brand extends StatelessWidget {
   }
 }
 
-class _HealthCard extends StatelessWidget {
-  const _HealthCard(this.health);
-  final HealthStatus health;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.check_circle, color: NasColors.ok, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Connected · backend v${health.version}',
-                  style: const TextStyle(
-                    color: NasColors.text,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StatusChip('database', health.db),
-                _StatusChip('ffmpeg', health.ffmpeg),
-                _StatusChip('ffprobe', health.ffprobe),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '${health.mediaDirs} media folder(s) configured',
-              style: const TextStyle(color: NasColors.muted, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip(this.label, this.ok);
-  final String label;
-  final bool ok;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = ok ? NasColors.ok : NasColors.bad;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(ok ? Icons.check : Icons.close, color: color, size: 15),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(color: color, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-}
-
 class _ErrorBox extends StatelessWidget {
   const _ErrorBox(this.message);
+
   final String message;
 
   @override

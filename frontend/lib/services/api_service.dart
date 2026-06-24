@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/movie.dart';
+
 /// Parsed result of GET /api/health.
 class HealthStatus {
   HealthStatus({
@@ -43,5 +45,16 @@ class ApiService {
       throw Exception('Backend returned HTTP ${r.statusCode}');
     }
     return HealthStatus.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
+  }
+
+  Future<List<Movie>> listMovies() async {
+    final r = await http.get(_u('/api/movies')).timeout(const Duration(seconds: 20));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    final data = jsonDecode(r.body) as Map<String, dynamic>;
+    return (data['movies'] as List)
+        .map((e) => Movie.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }
