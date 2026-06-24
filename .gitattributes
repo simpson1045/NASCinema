@@ -1,0 +1,7 @@
+# Normalize line endings to LF for text; mark common binaries.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
