@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/movie.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import 'movie_detail_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.baseUrl});
@@ -100,7 +101,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 mainAxisSpacing: 18,
               ),
               itemCount: movies.length,
-              itemBuilder: (context, i) => _PosterCard(movie: movies[i]),
+              itemBuilder: (context, i) => GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => MovieDetailScreen(
+                      movie: movies[i],
+                      baseUrl: widget.baseUrl,
+                    ),
+                  ),
+                ),
+                child: _PosterCard(movie: movies[i]),
+              ),
             ),
           );
         },

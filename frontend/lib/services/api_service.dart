@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/movie.dart';
+import '../models/movie_file.dart';
 
 /// Parsed result of GET /api/health.
 class HealthStatus {
@@ -55,6 +56,18 @@ class ApiService {
     final data = jsonDecode(r.body) as Map<String, dynamic>;
     return (data['movies'] as List)
         .map((e) => Movie.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<MovieFile>> getMovieFiles(int id) async {
+    final r =
+        await http.get(_u('/api/movies/$id')).timeout(const Duration(seconds: 15));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    final data = jsonDecode(r.body) as Map<String, dynamic>;
+    return ((data['files'] ?? []) as List)
+        .map((e) => MovieFile.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 }

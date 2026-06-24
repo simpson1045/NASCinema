@@ -53,6 +53,19 @@ class Movie {
   String? posterUrl({String size = 'w342'}) =>
       posterPath == null ? null : 'https://image.tmdb.org/t/p/$size$posterPath';
 
+  /// TMDB CDN backdrop URL, or null if unmatched.
+  String? backdropUrl({String size = 'w1280'}) =>
+      backdropPath == null
+          ? null
+          : 'https://image.tmdb.org/t/p/$size$backdropPath';
+
+  String? get runtimeLabel {
+    if (runtime == null || runtime == 0) return null;
+    final h = runtime! ~/ 60;
+    final m = runtime! % 60;
+    return h > 0 ? '${h}h ${m}m' : '${m}m';
+  }
+
   /// A short quality badge from the primary file, e.g. "4K HDR" / "1080p".
   String? get qualityBadge {
     if (resolution == null) return null;
