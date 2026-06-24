@@ -28,6 +28,15 @@ EXCLUDED_DIRS = {
     "$recycle.bin", "system volume information", "lost+found",
 }
 
+# Bonus-content subfolders (Kodi/Plex/Jellyfin convention). For the movies MVP
+# these aren't separate titles — they'll become "Extras" on the detail page in a
+# later phase — so skip them and keep featurettes out of the library.
+EXTRAS_DIRS = {
+    "featurettes", "extras", "behind the scenes", "deleted scenes", "interviews",
+    "scenes", "shorts", "trailers", "other", "specials", "sample", "samples",
+    "bonus", "making of", "storyboard art",
+}
+
 
 async def scan(limit: int | None = None) -> dict:
     settings = get_settings()
@@ -54,7 +63,9 @@ async def scan(limit: int | None = None) -> dict:
                 subdirs[:] = [
                     d
                     for d in subdirs
-                    if d.lower() not in EXCLUDED_DIRS and not d.startswith(".")
+                    if d.lower() not in EXCLUDED_DIRS
+                    and d.lower() not in EXTRAS_DIRS
+                    and not d.startswith(".")
                 ]
                 if reached_limit:
                     break
@@ -72,9 +83,22 @@ async def scan(limit: int | None = None) -> dict:
                         continue
 
                     try:
-                        info = guessit(name)
-                        title = str(info.get("title") or Path(name).stem)
-                        year = info.get("year")
+                        # Title source: prefer whichever of the parent folder or
+                        # the filename carries a year — that's the strong "this is
+                        # a real movie name" signal. Handles both "Title (Year)/
+                        # file.ext" libraries and scene-named files sitting loose
+                        # in a directory (where the folder is just the root).
+                        folder = os.path.basename(os.path.dirname(full))
+                        finfo = guessit(folder)
+                        ninfo = guessit(name)
+                        if finfo.get("year") and finfo.get("title"):
+                            title, year = finfo["title"], finfo["year"]
+                        elif ninfo.get("year") and ninfo.get("title"):
+                            title, year = ninfo["title"], ninfo["year"]
+                        else:
+                            title = finfo.get("title") or ninfo.get("title") or Path(name).stem
+                            year = finfo.get("year") or ninfo.get("year")
+                        title = str(title)
 
                         probe = await probe_file(full) or {}
                         meta = await get_movie_metadata(title, year)
