@@ -21,18 +21,43 @@ VIDEO_EXTENSIONS = {
     ".mkv", ".mp4", ".m4v", ".avi", ".mov", ".wmv", ".ts", ".m2ts", ".webm", ".flv",
 }
 
+# NAS/system folders to never descend into (Synology trash, thumbnail index,
+# snapshots, Syncthing). Matched case-insensitively; dot-folders also skipped.
+EXCLUDED_DIRS = {
+    "#recycle", "@eadir", "#snapshot", "#snapshots", ".stfolder", ".stversions",
+    "$recycle.bin", "system volume information", "lost+found",
+}
 
-async def scan() -> dict:
+
+async def scan(limit: int | None = None) -> dict:
     settings = get_settings()
     dirs = settings.media_dir_list
 
-    stats = {"folders": len(dirs), "found": 0, "added": 0, "matched": 0, "skipped": 0}
+    stats = {
+        "folders": len(dirs),
+        "found": 0,
+        "added": 0,
+        "matched": 0,
+        "skipped": 0,
+        "errors": 0,
+    }
     if not dirs:
         return stats
 
     async with SessionLocal() as session:
+        reached_limit = False
         for directory in dirs:
-            for root, _, files in os.walk(directory):
+            if reached_limit:
+                break
+            for root, subdirs, files in os.walk(directory):
+                # Prune system/trash folders in place so os.walk won't descend.
+                subdirs[:] = [
+                    d
+                    for d in subdirs
+                    if d.lower() not in EXCLUDED_DIRS and not d.startswith(".")
+                ]
+                if reached_limit:
+                    break
                 for name in files:
                     if Path(name).suffix.lower() not in VIDEO_EXTENSIONS:
                         continue
@@ -46,36 +71,46 @@ async def scan() -> dict:
                         stats["skipped"] += 1
                         continue
 
-                    info = guessit(name)
-                    title = str(info.get("title") or Path(name).stem)
-                    year = info.get("year")
+                    try:
+                        info = guessit(name)
+                        title = str(info.get("title") or Path(name).stem)
+                        year = info.get("year")
 
-                    probe = await probe_file(full) or {}
-                    meta = await get_movie_metadata(title, year)
+                        probe = await probe_file(full) or {}
+                        meta = await get_movie_metadata(title, year)
 
-                    movie = await _find_or_create_movie(session, title, year, meta)
+                        movie = await _find_or_create_movie(session, title, year, meta)
+                        session.add(
+                            MediaFile(
+                                movie_id=movie.id,
+                                path=full,
+                                size_bytes=probe.get("size_bytes"),
+                                container=probe.get("container"),
+                                video_codec=probe.get("video_codec"),
+                                audio_codec=probe.get("audio_codec"),
+                                width=probe.get("width"),
+                                height=probe.get("height"),
+                                duration=probe.get("duration"),
+                                bit_depth=probe.get("bit_depth"),
+                                hdr=probe.get("hdr", False),
+                                probed_at=datetime.now(timezone.utc),
+                            )
+                        )
+                        # Commit per file: live progress + crash resilience, and
+                        # one bad file can't abort the whole scan.
+                        await session.commit()
+                    except Exception:
+                        await session.rollback()
+                        stats["errors"] += 1
+                        continue
+
                     if meta:
                         stats["matched"] += 1
-
-                    session.add(
-                        MediaFile(
-                            movie_id=movie.id,
-                            path=full,
-                            size_bytes=probe.get("size_bytes"),
-                            container=probe.get("container"),
-                            video_codec=probe.get("video_codec"),
-                            audio_codec=probe.get("audio_codec"),
-                            width=probe.get("width"),
-                            height=probe.get("height"),
-                            duration=probe.get("duration"),
-                            bit_depth=probe.get("bit_depth"),
-                            hdr=probe.get("hdr", False),
-                            probed_at=datetime.now(timezone.utc),
-                        )
-                    )
                     stats["added"] += 1
 
-        await session.commit()
+                    if limit and stats["added"] >= limit:
+                        reached_limit = True
+                        break
 
     return stats
 

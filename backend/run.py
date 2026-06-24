@@ -25,6 +25,12 @@ def main() -> None:
         help="Scan the media library on startup (Phase 1 — not yet implemented).",
     )
     parser.add_argument("--reload", action="store_true", help="Auto-reload (dev).")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Scan at most N new files (smoke test).",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -33,7 +39,7 @@ def main() -> None:
         from app.scanner import scan
 
         print("[NASCinema] scanning library...")
-        stats = asyncio.run(scan())
+        stats = asyncio.run(scan(limit=args.limit))
         print(f"[NASCinema] scan complete: {stats}")
         return
 
