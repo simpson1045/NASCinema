@@ -31,9 +31,22 @@ def main() -> None:
         default=None,
         help="Scan at most N new files (smoke test).",
     )
+    parser.add_argument(
+        "--fingerprint",
+        action="store_true",
+        help="Backfill Chromaprint fingerprints for extras (Extras DB groundwork).",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
+
+    if args.fingerprint:
+        from app.scanner import fingerprint_extras
+
+        print("[NASCinema] fingerprinting extras (Chromaprint)...")
+        stats = asyncio.run(fingerprint_extras())
+        print(f"[NASCinema] fingerprint complete: {stats}")
+        return
 
     if args.scan:
         from app.scanner import scan

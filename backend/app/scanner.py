@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from .config import get_settings
 from .db import SessionLocal
+from .fingerprint import fingerprint_file
 from .metadata import get_movie_metadata
 from .models import MediaFile, Movie
 from .probe import probe_file
@@ -201,6 +202,8 @@ async def scan(limit: int | None = None) -> dict:
                             mf.kind = "extra"
                             mf.extra_type = _extra_type(name, extras_key)
                             mf.extra_title = _extra_title(name, movie.title, mf.extra_type)
+                            if settings.contribute_extras:
+                                mf.fingerprint = await fingerprint_file(full)
                         session.add(mf)
                         await session.commit()
                     except Exception:
@@ -247,3 +250,26 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
     session.add(movie)
     await session.flush()
     return movie
+
+
+async def fingerprint_extras() -> dict:
+    """Backfill Chromaprint fingerprints for extras that don't have one yet
+    (Extras DB groundwork)."""
+    stats = {"fingerprinted": 0, "failed": 0}
+    async with SessionLocal() as session:
+        rows = (
+            await session.scalars(
+                select(MediaFile).where(
+                    MediaFile.kind == "extra", MediaFile.fingerprint.is_(None)
+                )
+            )
+        ).all()
+        for mf in rows:
+            fp = await fingerprint_file(mf.path)
+            if fp:
+                mf.fingerprint = fp
+                stats["fingerprinted"] += 1
+            else:
+                stats["failed"] += 1
+            await session.commit()
+    return stats

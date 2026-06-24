@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     ffmpeg: str = ""
     ffprobe: str = ""
 
+    # Extras DB (crowdsourced bonus-feature naming — see EXTRAS_DB.md).
+    # Opt-in: fingerprint extras so they can later be matched/contributed.
+    contribute_extras: bool = False
+    fpcalc: str = ""  # Chromaprint binary; auto-discovered when blank
+
     @property
     def media_dir_list(self) -> list[str]:
         """Library folders, split on the OS path separator (';' on Windows)."""

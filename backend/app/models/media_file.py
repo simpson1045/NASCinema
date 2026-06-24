@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +43,9 @@ class MediaFile(Base):
     kind: Mapped[str] = mapped_column(String(16), default="feature", index=True)
     extra_type: Mapped[str | None] = mapped_column(String(32))
     extra_title: Mapped[str | None] = mapped_column(String(512))
+
+    # Chromaprint audio fingerprint (Extras DB groundwork; opt-in).
+    fingerprint: Mapped[str | None] = mapped_column(Text)
 
     # Probed with ffprobe at scan time.
     container: Mapped[str | None] = mapped_column(String(32))

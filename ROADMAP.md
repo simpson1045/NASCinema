@@ -173,6 +173,22 @@ The soul of the app — what makes it NASCinema and not a sterile grid.
 
 ---
 
+## 🌐 Flagship initiative — Extras DB (crowdsourced special-features database)
+
+The big swing: **"AcoustID/MusicBrainz for movie bonus features"** — a fingerprint-keyed,
+crowdsourced database that finally names disc extras, exposed via API. Nobody has built
+this; every ripper wants it. Full design in **[EXTRAS_DB.md](EXTRAS_DB.md)**.
+
+- [ ] **Groundwork (now)** — Chromaprint fingerprint each extra + opt-in `NASCINEMA_CONTRIBUTE_EXTRAS`; store locally so we bank data from day one 🟡 ⭐
+- [ ] Central service MVP — submit + lookup API, fingerprint clustering, consensus 🔴
+- [ ] Auto-naming — batch fingerprint lookup on scan; auto-apply high-confidence, suggest the rest 🟡
+- [ ] Community front-end — contributor accounts, moderation, public API 🔴
+
+> Sequenced **after** NASCinema's core grows the user base (the DB's fuel is users), but
+> collection starts now. The flywheel: more users → more mappings → better auto-naming.
+
+---
+
 ## Backlog / someday
 
 - [ ] Live TV / DVR (HDHomeRun)
