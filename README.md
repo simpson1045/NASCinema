@@ -9,7 +9,7 @@
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-transcode-success.svg)](https://ffmpeg.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Status: 🎬 in design / pre-alpha.** This README is the spec we're building toward, not a description of a finished app. The phased build plan lives in [ROADMAP.md](ROADMAP.md).
+**Status: 🎬 pre-v1.0 — in design / pre-alpha.** This README is the spec we're building toward, not a description of a finished app. The phased build plan lives in [ROADMAP.md](ROADMAP.md). NASCinema is **multi-user and fully config-driven from day one** — nothing is tied to one person's machine or storage (see [Design principles](#design-principles)).
 
 NASCinema is the video sibling of [NASRadio](https://github.com/simpson1045/NASRadio) — a self-hosted movie & TV server that streams from your NAS to your desktop, phone, and living-room TV. It's built to fix the exact things that make Jellyfin frustrating and Plex expensive: **subtitles that actually load, direct play that actually direct-plays, remote access that doesn't cost a subscription, and one app that looks the same everywhere.**
 
@@ -23,8 +23,26 @@ It deliberately reuses NASRadio's proven backbone — authenticated API, scoped 
 |---|---|
 | **Transcoding / playback** | Every file is probed at scan. **Remux-first** (copy streams, ~0 CPU) before ever transcoding. A per-playback **"why am I transcoding?" badge** — the thing Plex/JF hide. Pre-transcoded HLS cache on the NAS for instant remote. |
 | **Subtitles** | The desktop/mobile player (libmpv) renders **embedded MKV subs — PGS, ASS, SRT — natively with direct play, no burn-in.** Dumb clients get pre-extracted WebVTT sidecars; bitmap subs are **OCR'd to text once** and cached. Burn-in is the last resort, never the default. |
-| **Remote access (the Plex paywall)** | Rides **your own** reverse proxy (Nginx Proxy Manager + CloudFlare) → HTTPS remote with **no subscription, no relay, no phone-home**. Expiring scoped **share links** to a single title. Per-user bandwidth caps. |
+| **Remote access (the Plex paywall)** | Rides **your own** reverse proxy (e.g. Nginx Proxy Manager + CloudFlare) → HTTPS remote with **no subscription, no relay, no phone-home**. Expiring scoped **share links** to a single title. Per-user bandwidth caps. |
 | **UI / apps** | One Flutter codebase → Windows, Android, **Android/Fire TV 10-foot shell**, iOS. Living-room control via **phone-as-remote → PC renderer**. Blurred-backdrop detail pages, global resume bar, Cast. |
+
+---
+
+## Design principles
+
+Two rules sit above every feature in this repo:
+
+### 1. Multi-user & config-driven — nothing hardcoded
+NASCinema is built for **many users on one server**, not one person's setup. Therefore:
+- **No host, path, port, credential, API key, or device name is ever baked into the code.** Every one of them is configuration.
+- **Server-level settings** (media library paths, `DATABASE_URL`, integration keys, public URL) live in `.env` / an admin settings UI — set once per install.
+- **Per-user settings** (preferred language, subtitle style & defaults, bandwidth cap, renderer devices, Trakt account, content-rating limits, theme) live in **that user's account** and travel with them across devices.
+- A clean separation: *admin configures the server; each user configures their own experience.* If you ever feel tempted to type a literal hostname or path into a source file, it belongs in config instead.
+
+### 2. Versioning is earned, not automatic
+- We start **pre-v1.0** and stay there until NASCinema is genuinely remarkable. `v1.0.0` is a milestone, not a default.
+- **Version numbers are reserved for real, shipped features or critical bug fixes.** One-line fixes, refactors, doc tweaks, and chores **do not** bump the version.
+- Semantic-ish within 0.x: `0.MINOR.0` for a meaningful feature set, `0.x.PATCH` only for critical fixes. Everyday commits just land on `main` with no version change.
 
 ---
 
@@ -66,7 +84,7 @@ FastAPI Backend (Native Windows / Synology NAS)
     +-- Subtitle pipeline (VTT extract, PGS/VOBSUB OCR, OpenSubtitles)
     +-- TMDB / Fanart / Trakt / OpenSubtitles integrations
     +-- Radarr / Sonarr / Prowlarr / Transmission (acquisition, self-healing)
-    +-- \\northsidenas\... media (via SMB)
+    +-- \\<your-nas>\<your-share> media — configured per install, never hardcoded (SMB/NFS)
 ```
 
 Sidecar services (optional, NAS-hosted like NASRadio): **PGS/VOBSUB OCR worker** and a **batch transcode/trickplay worker**.
@@ -106,11 +124,13 @@ Sidecar services (optional, NAS-hosted like NASRadio): **PGS/VOBSUB OCR worker**
 ### Infrastructure
 | Component | Technology |
 |---|---|
-| Runtime | Native Windows (FastAPI/Uvicorn) |
-| Database | PostgreSQL 16 (native, localhost) |
-| NAS | Synology (movie/TV storage via SMB) |
-| Reverse proxy | Nginx Proxy Manager |
-| DNS | CloudFlare |
+| Runtime | Native Windows or Linux (FastAPI/Uvicorn) |
+| Database | PostgreSQL 16 |
+| Storage | Any SMB/NFS-accessible NAS (Synology, TrueNAS, Unraid, …) |
+| Reverse proxy | Any (e.g. Nginx Proxy Manager, Caddy, Traefik) |
+| DNS | Any (e.g. CloudFlare) |
+
+All infrastructure rows are **examples, not requirements** — every host, path, port, and key is set in config, never baked into the code.
 
 ---
 
@@ -134,13 +154,13 @@ Plus: OpenSubtitles auto-download, per-file sync offset (remembered), forced/def
 
 ## How you watch (the living room)
 
-Your best video player is the **Windows PC already wired to the TV**. The locked-down LG C2 (webOS) and Roku aren't sideload-friendly, so NASCinema flips the problem:
+Often the best video player you own is a **PC already wired to the TV**. Many smart-TV platforms (e.g. webOS, Roku) aren't sideload-friendly, so NASCinema flips the problem:
 
-> **Browse on your phone → tap "Play on DESKTOP-ELKO" → it plays on the big screen.**
-> Phone is the remote, PC is the renderer — Spotify-Connect style, over the same socket channel NASRadio already uses for device handoff.
+> **Browse on your phone → tap "Play on \<renderer\>" → it plays on the big screen.**
+> Phone is the remote, the TV-connected PC is the renderer — Spotify-Connect style, over the same socket channel NASRadio uses for device handoff.
 
-Best-in-class playback (direct play, native subs, HDR) with **zero sideloading**. Fallbacks for when the PC is off:
-- **C2 web app** — open `https://cinema.yourdomain` right in the TV browser (HLS + VTT sidecars).
+Renderers are **discovered, named, and saved per user** — no device is hardcoded. Best-in-class playback (direct play, native subs, HDR) with **zero sideloading**. Fallbacks for when the PC is off:
+- **TV-browser web app** — open your NASCinema URL right in the smart-TV browser (HLS + VTT sidecars).
 - **Roku channel** (later) — a thin HLS client.
 - **webOS native app** (much later) — packaged Flutter web build via Dev Mode.
 

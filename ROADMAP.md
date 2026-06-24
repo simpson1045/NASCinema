@@ -5,6 +5,10 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 **Legend:** 🔁 reuses NASRadio infra · 🎬 cinema-experience delighter · ⭐ high-impact / switch-off-Plex feature
 **Effort:** 🟢 small · 🟡 medium · 🔴 large
 
+> **Cross-cutting principles (apply to every box below):**
+> 1. **Multi-user & config-driven.** No host/path/port/key/device name in code — ever. Server settings → `.env`/admin UI; per-user settings → the user's account. Every feature is built for many users on one server.
+> 2. **Versioning is earned.** Start pre-v1.0; bump only for real features or critical fixes; `v1.0.0` ships only when NASCinema is truly remarkable. One-liners don't move the number.
+
 ---
 
 ## Phase 0 — Foundation ← *we are here*
@@ -14,10 +18,13 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 - [x] Decide stack — **FastAPI** (async, video-friendly) + PostgreSQL, porting NASRadio's auth/token/transcode-cache concepts
 - [x] Decide code-sharing — standalone now, extract a shared `nas-core` later (YAGNI)
 - [x] Write README + ROADMAP (this doc)
+- [x] Lock principles — multi-user & config-driven (nothing hardcoded), versioning is earned (start pre-v1.0)
 - [ ] Confirm FFmpeg/FFprobe on PATH (installed via winget ✅)
+- [ ] **Config model** — server settings via `.env`/admin UI, per-user settings in account; zero hardcoded paths/hosts/keys/devices ⭐
 - [ ] Repo scaffold: `backend/` (FastAPI app, `run.py`, `.env.example`) + `frontend/` (Flutter shell)
 - [ ] Flutter theme — encode the amber/violet token set
 - [ ] First admin user CLI (`manage_users.py`) + scrypt + itsdangerous tokens 🔁
+- [ ] **Per-user settings store** — language, subtitle prefs, bandwidth cap, renderer devices, theme, integration accounts 🟡
 
 ---
 
@@ -63,7 +70,7 @@ The flagship differentiator. (Full design in [README](README.md#subtitles-done-r
 
 ## Phase 3 — The living room ⭐
 
-- [ ] **Phone-as-remote → PC renderer** ("Play on DESKTOP-ELKO") over socket.io ⭐ 🔴 🔁
+- [ ] **Phone-as-remote → PC renderer** ("Play on \<renderer\>" — devices discovered & named per user, never hardcoded) over socket.io ⭐ 🔴 🔁
 - [ ] **10-foot "couch mode"** UI on desktop (reuse Fire-TV shell) 🟡 🔁
 - [ ] Device picker + handoff (pause here, resume there) 🟡 🔁
 - [ ] **Chromecast** receiver for video (reuse NASRadio receiver) 🟡 🔁
