@@ -24,8 +24,8 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 - [x] **Config model** — `pydantic-settings` (`NASCINEMA_` env), ffmpeg auto-discovery, `.env` with generated secret key; zero hardcoded paths/hosts/keys/devices
 - [x] **Backend scaffold** — FastAPI + Socket.IO, async SQLAlchemy 2.0 + Alembic (`0001` users), auth (scrypt + itsdangerous + scoped media tokens), `run.py`; **boots on ALPINE, `/api/health` → `db:true`** 🔁
 - [x] First admin user CLI (`manage_users.py` create/list/passwd) 🔁
-- [ ] Frontend scaffold — Flutter shell + amber/violet theme
-- [ ] Create the first admin account (run `manage_users.py create <you> --role admin` interactively)
+- [x] Create the first admin account (`simpson1045`, admin)
+- [ ] Frontend scaffold — Flutter shell + amber/violet theme ← *in progress*
 - [ ] **Per-user settings store** — language, subtitle prefs, bandwidth cap, renderer devices, theme, integration accounts 🟡
 
 ---
