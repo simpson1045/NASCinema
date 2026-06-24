@@ -14,6 +14,7 @@ class Movie {
     this.resolution,
     this.videoCodec,
     this.hdr = false,
+    this.blurayUrl,
   });
 
   final int id;
@@ -30,6 +31,7 @@ class Movie {
   final String? resolution;
   final String? videoCodec;
   final bool hdr;
+  final String? blurayUrl;
 
   factory Movie.fromJson(Map<String, dynamic> j) => Movie(
         id: j['id'] as int,
@@ -47,6 +49,7 @@ class Movie {
         resolution: j['resolution'] as String?,
         videoCodec: j['video_codec'] as String?,
         hdr: j['hdr'] == true,
+        blurayUrl: j['bluray_url'] as String?,
       );
 
   /// TMDB CDN poster URL, or null if unmatched.
@@ -58,6 +61,16 @@ class Movie {
       backdropPath == null
           ? null
           : 'https://image.tmdb.org/t/p/$size$backdropPath';
+
+  /// The pinned Blu-ray.com release, or a search for this title.
+  String get blurayLink {
+    if (blurayUrl != null && blurayUrl!.isNotEmpty) return blurayUrl!;
+    final q = Uri.encodeComponent('$title ${year ?? ''}'.trim());
+    return 'https://www.blu-ray.com/search/?quicksearch=1'
+        '&quicksearch_keyword=$q&section=bluraymovies';
+  }
+
+  bool get blurayPinned => blurayUrl != null && blurayUrl!.isNotEmpty;
 
   String? get runtimeLabel {
     if (runtime == null || runtime == 0) return null;

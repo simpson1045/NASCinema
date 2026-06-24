@@ -36,10 +36,12 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   List<Video> _videos = const [];
   bool _loading = true;
   String? _error;
+  String? _blurayUrl;
 
   @override
   void initState() {
     super.initState();
+    _blurayUrl = widget.movie.blurayUrl;
     _load();
   }
 
@@ -108,6 +110,114 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
+  Future<void> _openBluray() async {
+    final link = (_blurayUrl != null && _blurayUrl!.isNotEmpty)
+        ? _blurayUrl!
+        : widget.movie.blurayLink;
+    final uri = Uri.tryParse(link);
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _snack('Could not open Blu-ray.com');
+    }
+  }
+
+  Future<void> _pinRelease() async {
+    final ctrl = TextEditingController(text: _blurayUrl ?? '');
+    final url = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: NasColors.surface,
+        title: const Text('Pin Blu-ray.com release',
+            style: TextStyle(color: NasColors.text, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Paste the Blu-ray.com page URL for your exact pressing. Leave blank to clear.',
+                style: TextStyle(color: NasColors.muted, fontSize: 13)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ctrl,
+              style: const TextStyle(color: NasColors.text),
+              decoration: const InputDecoration(
+                  hintText: 'https://www.blu-ray.com/movies/...'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel',
+                  style: TextStyle(color: NasColors.muted))),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, ctrl.text),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (url == null) return;
+    try {
+      await _api.updateMovie(widget.movie.id, blurayUrl: url.trim());
+      setState(() => _blurayUrl = url.trim().isEmpty ? null : url.trim());
+      _snack(url.trim().isEmpty ? 'Release link cleared' : 'Release pinned');
+    } catch (e) {
+      _snack('Could not save: $e');
+    }
+  }
+
+  Widget _blurayBar() {
+    final pinned = _blurayUrl != null && _blurayUrl!.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+          color: NasColors.surface, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+                color: NasColors.violet.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.album_outlined,
+                color: NasColors.violet, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Special features on Blu-ray.com',
+                    style: TextStyle(
+                        color: NasColors.text,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500)),
+                Text(
+                    pinned
+                        ? 'Pinned release · look up names, then edit below'
+                        : 'Search & pin your exact pressing',
+                    style: const TextStyle(
+                        color: NasColors.muted, fontSize: 11.5)),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _openBluray,
+            icon: const Icon(Icons.open_in_new,
+                size: 16, color: NasColors.amber),
+            label: const Text('Open', style: TextStyle(color: NasColors.amber)),
+          ),
+          IconButton(
+            onPressed: _pinRelease,
+            icon: const Icon(Icons.link, color: NasColors.muted, size: 18),
+            tooltip: pinned ? 'Change release URL' : 'Pin release URL',
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final movie = widget.movie;
@@ -138,6 +248,8 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                           style: const TextStyle(
                               color: NasColors.text, fontSize: 14.5, height: 1.6)),
                     ],
+                    const SizedBox(height: 22),
+                    _blurayBar(),
                     const SizedBox(height: 26),
                     if (_loading)
                       const Padding(

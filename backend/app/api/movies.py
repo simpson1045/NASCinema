@@ -36,6 +36,7 @@ def _summary(m: Movie) -> dict:
         "tmdb_id": m.tmdb_id,
         "match_confidence": m.match_confidence,
         "locked": m.locked,
+        "bluray_url": m.bluray_url,
         "file_count": len(features),
         "resolution": (
             f"{primary.width}x{primary.height}"
@@ -107,6 +108,25 @@ async def movie_videos(
     if not movie.tmdb_id:
         return {"videos": []}
     return {"videos": await get_movie_videos(movie.tmdb_id)}
+
+
+class MovieUpdate(BaseModel):
+    bluray_url: str | None = None
+
+
+@router.patch("/movies/{movie_id}")
+async def update_movie(
+    movie_id: int,
+    body: MovieUpdate,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    movie = await session.scalar(select(Movie).where(Movie.id == movie_id))
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    if body.bluray_url is not None:
+        movie.bluray_url = body.bluray_url.strip() or None
+    await session.commit()
+    return {"id": movie.id, "bluray_url": movie.bluray_url}
 
 
 class ExtraUpdate(BaseModel):

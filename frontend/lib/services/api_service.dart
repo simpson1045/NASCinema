@@ -91,6 +91,19 @@ class ApiService {
         .toList();
   }
 
+  Future<void> updateMovie(int id, {String? blurayUrl}) async {
+    final r = await http
+        .patch(
+          _u('/api/movies/$id'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'bluray_url': blurayUrl ?? ''}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+  }
+
   Future<void> updateExtra(int id, {String? title, String? type}) async {
     final r = await http
         .patch(

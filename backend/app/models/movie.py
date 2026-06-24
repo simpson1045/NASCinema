@@ -30,6 +30,10 @@ class Movie(Base):
     backdrop_path: Mapped[str | None] = mapped_column(String(512))
     genres: Mapped[list | None] = mapped_column(JSON, default=list)
 
+    # A pinned Blu-ray.com release page (the exact pressing) — referenced when
+    # naming bonus features.
+    bluray_url: Mapped[str | None] = mapped_column(String(1024))
+
     # How confident the match was (for the low-confidence review queue).
     match_confidence: Mapped[float | None] = mapped_column(Float)
     # A manual match the user locked in — must survive rescans (the thing
