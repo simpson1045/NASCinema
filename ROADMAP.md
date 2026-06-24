@@ -34,23 +34,27 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 
 The end-to-end vertical slice: a movie on disk becomes a playable, good-looking entry on the TV.
 
-- [ ] **Scanner** — walk media dirs, parse filenames (guessit), detect movies 🟡
-- [ ] **FFprobe at scan** — store codec/profile/level/bit-depth/resolution/audio layout/sub tracks per file 🟡
-- [ ] **TMDB metadata** — match by title+year, pull overview/poster/backdrop/logo/cast/rating 🟡
+> 🎉 **v0.1.0 (2026-06-24)** — first browsable library is live: **354 movies** scanned from the NAS with TMDB artwork + ffprobe metadata, served as a Flutter web poster grid in the browser. Ingestion spine complete; playback is next.
+
+- [x] **Scanner** — walk media dirs, parse filenames (guessit), skip NAS junk, per-file commit
+- [x] **FFprobe at scan** — store container/codecs/resolution/bit-depth/HDR per file
+- [x] **TMDB metadata** — match by title+year, pull overview/poster/backdrop/rating/runtime/genres + match-confidence
 - [ ] **Manual match override that survives rescans** ⭐ (the thing JF nukes) 🟡 🔁
 - [ ] **Low-confidence review queue** for fuzzy matches 🟡 🔁
 - [ ] **Artwork picker** — choose poster/backdrop/logo from TMDB/Fanart 🟢 🔁
-- [ ] **PostgreSQL schema** — movies, files, users, watch_state, tokens
-- [ ] **Auth + scoped media tokens** — signed bearer for API, read-only token for stream/artwork 🔁
-- [ ] **Playback decision engine** — Direct Play → **Remux** (copy streams) → Transcode, in that order 🔴 ⭐
-- [ ] **"Why am I transcoding?" badge** — surface the reason to the user ⭐ 🟢
-- [ ] **HLS transcode + pre-transcode cache on the NAS** 🔴 🔁
-- [ ] **HTTP range / direct-play serving** for compatible files 🟡
-- [ ] **Flutter: library grid + movie detail** (blurred backdrop, meta, format badges) 🟡
+- [x] **PostgreSQL schema** — movies, media_files, users (watch_state/tokens still to come)
+- [x] **Flutter: library poster grid** — TMDB artwork, amber quality badges (4K/HDR/1080p), fallback tiles, pull-to-refresh
+- [x] **Browse API** — `GET /api/movies`, `GET /api/movies/{id}`, `POST /api/scan`
+- [x] **Web delivery** — backend serves the built Flutter web app at `/` (zero client tooling)
+- [x] **In-app server config** (address field, persisted, auto-fills page origin on web)
+- [ ] **Flutter: movie detail page** (blurred backdrop, overview, cast, file/quality info) 🟡 ← *next*
+- [ ] **Playback decision engine** — Direct Play → Remux → Transcode 🔴 ⭐
+- [ ] **"Why am I transcoding?" badge** ⭐ 🟢
+- [ ] **HTTP range / direct-play serving** + HLS transcode & cache 🔴
 - [ ] **Flutter: player** (media_kit/libmpv) with resume 🟡 🔁
 - [ ] **Watch progress / resume** + watched/unwatched state 🟢
-- [ ] **Remote access** verified through Nginx Proxy Manager + CloudFlare 🟢 🔁
-- [ ] **In-app server config** (login-screen gear, no recompile) 🟢 🔁
+- [ ] **Auth + scoped media tokens** wired into the endpoints 🔁
+- [ ] **Remote access** verified through a reverse proxy (HTTPS) 🟢 🔁
 
 ---
 
