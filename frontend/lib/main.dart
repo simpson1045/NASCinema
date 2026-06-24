@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'screens/library_screen.dart';
@@ -31,7 +32,10 @@ class ConnectScreen extends StatefulWidget {
 
 class _ConnectScreenState extends State<ConnectScreen> {
   final _config = ServerConfig();
-  final _urlController = TextEditingController(text: 'http://localhost:8400');
+  // On web the app is served by the backend, so default to that same origin.
+  final _urlController = TextEditingController(
+    text: kIsWeb ? Uri.base.origin : 'http://localhost:8400',
+  );
   bool _busy = false;
   String? _error;
 
