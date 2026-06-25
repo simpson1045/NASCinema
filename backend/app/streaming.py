@@ -264,6 +264,10 @@ def _build_cmd(sess: "Session", start_num: int) -> list[str]:
 
     playlist = "ff.m3u8" if sess.vod else "master.m3u8"
     args += [
+        # The MPEG-TS muxer otherwise leads with a ~1.4s startup delay, shifting
+        # every segment's clock; zero it so the timeline starts clean (keeps
+        # seeks on-mark and sidecar subtitles aligned later).
+        "-muxdelay", "0", "-muxpreload", "0",
         "-f", "hls", "-hls_time", str(SEG_SECONDS),
         "-hls_playlist_type", "event", "-hls_list_size", "0",
         "-hls_flags", "independent_segments+temp_file",
