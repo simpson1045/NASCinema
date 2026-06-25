@@ -38,7 +38,11 @@ Python 3.14, runs on **ALPINE**; `/api/health` → `db:true`):
 **Frontend** (Flutter; web is the only fully-wired client so far, windows/android scaffolded):
 - Theme, models, library poster grid, movie detail page, server-config screen, API client — **all client-agnostic, reused by the native player**.
 - Web player: hls.js glue + custom scrubber + controls + subtitle menu + sync bar.
-- **Important seam:** [player_view.dart](frontend/lib/screens/player/player_view.dart) conditionally imports `web` vs `stub`. [player_view_stub.dart](frontend/lib/screens/player/player_view_stub.dart) is the **empty placeholder where the native media_kit player goes.** The native renderer fills this; the browser player stays as the fallback leg.
+- **Important seam:** [player_view.dart](frontend/lib/screens/player/player_view.dart) conditionally exports `native` (default) vs `web` (`dart.library.js_interop`). [player_view_native.dart](frontend/lib/screens/player/player_view_native.dart) now **fills the seam with media_kit/libmpv** (was the empty stub); the browser player stays as the fallback leg.
+
+### New this session (2026-06-25) — code-complete + compiles, NOT yet hardware-verified
+- **Native ELKO renderer** ([player_view_native.dart](frontend/lib/screens/player/player_view_native.dart)) — all ~16 seam accessors on a libmpv `Player`: direct-play `/api/stream/{id}/direct`, native subtitle tracks, sub-offset via mpv `sub-delay`, keyboard parity, proper teardown. **Audio passthrough wired** (`audio-exclusive=yes` + `audio-spdif=ac3,dts,eac3,truehd,dts-hd,dts-hd-ma`). `flutter build windows` is **green on ALPINE** (libmpv + media_kit DLLs link); app launches without crashing. **Unproven on real hardware:** TrueHD/Atmos bitstream to the Denon, and **HDR to the C2** — media_kit renders into a Flutter texture (not direct-to-display), so HDR passthrough may need `vo=gpu-next`/a separate libmpv window. Validate on ELKO.
+- **Chromecast** — web sender, default media receiver. CAF SDK + glue in [web/index.html](frontend/web/index.html), [cast.dart](frontend/lib/services/cast.dart) (web/stub conditional export), cast button in [player_screen.dart](frontend/lib/screens/player_screen.dart). Rides the existing HLS+VTT fallback pipeline (Chromecast is fallback-class — no bitstream/PGS). **Untested functionally** — needs a real Chromecast + Chrome on the LAN (no APK; it's a *web* sender).
 
 ### On-vision vs fallback-only (so nothing gets re-polished by mistake)
 - **Spine, reused everywhere:** scanner, probe data, TMDB, schema, browse API, decision engine + "why" badge, OpenSubtitles download, the Flutter shell.
@@ -46,14 +50,21 @@ Python 3.14, runs on **ALPINE**; `/api/health` → `db:true`):
 
 ---
 
-## Next work: the native ELKO renderer (Phase 1 keystone)
+## Next work: get the native renderer ONTO ELKO and prove it (Phase 1 keystone)
 
-Fill the native leg of the player seam with **media_kit (libmpv)** on the
-desktop build, running on **ELKO** (the PC wired to the C2 + Denon):
-- Direct-play the original file via the existing `/api/stream/{id}/direct` endpoint (no transcode).
-- Configure libmpv for **lossless audio passthrough** (TrueHD/Atmos via WASAPI exclusive) and **HDR passthrough**.
-- **Native subtitle rendering** (PGS/ASS/SRT) — replaces the WebVTT path on this client; this is the flagship subtitle promise.
-- Reuse the existing scrubber/controls/sub-menu Flutter widgets; only the playback-engine wiring is new.
+The seam is filled and compiles; the remaining work is **hardware verification on
+ELKO** (the PC wired to the C2 + Denon):
+- **Build host = ALPINE.** `Y:` is ALPINE's `D:`, so the live tree is on ALPINE's
+  local disk (Windows 11 + Flutter + VS C++). Build via the MCP `run_command`
+  connector: `cd D:\Programming\NASCinema\frontend; flutter build windows --release`.
+  (`flutter build windows` **fails on the NAS share** — plugin symlinks; must be
+  local disk. See [[windows-build-needs-local-disk]].)
+- **Deploy to ELKO:** copy the `Release` build folder to ELKO's `C$` (reachable
+  from the connector); **launch it on ELKO** — ELKO has no remote shell in the
+  connector yet, only ALPINE does. Use `--release` (a Debug build needs the VS
+  Debug CRT ELKO won't have).
+- **Verify on the C2 + Denon:** direct-play (no transcode), TrueHD/Atmos bitstream,
+  **HDR passthrough** (the open question above), native PGS/ASS/SRT subs.
 - After that, the things with **no equivalent anywhere**: phone-as-remote → renderer handoff, and the **Extras DB** ([EXTRAS_DB.md](EXTRAS_DB.md)).
 
 **Honest framing for "how is this different from Plex/JF?":** today, via the
@@ -69,6 +80,7 @@ the **Extras DB**, and the **cinema-experience soul**. Almost all of it is still
 
 - **Machine topology:** ALPINE = server (backend/PG17/ffmpeg); FRAMEWORK = dev box; **ELKO = renderer** (TV-wired PC → C2 + Denon); NAS = storage only. Run backend commands on ALPINE.
 - **NAS access uses the LAN IP `192.168.0.248`, NOT the `NorthsideNAS` hostname** (it resolves to a Tailscale IP → SMB tunnels → flaps between fast/direct and ~0.7 MB/s relayed; this caused inconsistent playback). `NASCINEMA_CACHE_DIR=//192.168.0.248/movie_cache` is pinned. **Still on the hostname:** `media_dirs` + stored `mf.path` source paths — transcoding *uncached* content reads source over Tailscale; pin it (media_dirs → IP + `UPDATE media_file SET path=replace(path,'NorthsideNAS','192.168.0.248')`) if that's slow.
+- **Windows desktop build host is ALPINE, not the share.** `flutter build windows` can't create media_kit's plugin symlinks on the NAS share (`Y:` = `\\Desktop-alpine\d`); build from ALPINE's local `D:` via the connector (cold media_kit build > the connector's 120s cap → launch detached + poll). See [[windows-build-needs-local-disk]].
 - `socketio.ASGIApp` does **not** forward ASGI lifespan to the wrapped FastAPI app → startup work (`startup_cleanup`) lives in `run.py`, not the lifespan.
 - Windows needs `SelectorEventLoopPolicy` for psycopg.
 - Flutter web is built with `--pwa-strategy=none` (+ an unregister script in index.html) — the PWA service worker served stale caches on a constantly-rebuilt app.

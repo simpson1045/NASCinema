@@ -136,6 +136,60 @@
       }).catch(function () {});
     }
   </script>
+
+  <!--
+    Google Cast (Chromecast) — web sender, DEFAULT media receiver (no dev-console
+    registration). Chromecast is a fallback-class device: it can't bitstream
+    TrueHD/Atmos or render PGS, so it plays whatever URL the local player uses
+    (the HLS master, or the direct file) plus the active WebVTT sub. The glue
+    must be defined BEFORE cast_sender.js loads — it fires __onGCastApiAvailable.
+  -->
+  <script>
+    window.__nascinemaCast = { ready: false, state: 'NO_DEVICES_AVAILABLE' };
+    window.__onGCastApiAvailable = function (isAvailable) {
+      if (!isAvailable) return;
+      var ctx = cast.framework.CastContext.getInstance();
+      ctx.setOptions({
+        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+      });
+      window.__nascinemaCast.ready = true;
+      window.__nascinemaCast.state = ctx.getCastState();
+      ctx.addEventListener(
+        cast.framework.CastContextEventType.CAST_STATE_CHANGED,
+        function (e) { window.__nascinemaCast.state = e.castState; }
+      );
+    };
+    // state strings: NO_DEVICES_AVAILABLE | NOT_CONNECTED | CONNECTING | CONNECTED
+    window.nascinemaCastState = function () {
+      return window.__nascinemaCast.ready
+        ? window.__nascinemaCast.state : 'UNAVAILABLE';
+    };
+    // Pop the device picker, then load the media. subUrl '' = no subtitle.
+    window.nascinemaCastLoad = function (url, contentType, title, subUrl) {
+      var ctx = cast.framework.CastContext.getInstance();
+      ctx.requestSession().then(function () {
+        var session = ctx.getCurrentSession();
+        if (!session) return;
+        var info = new chrome.cast.media.MediaInfo(url, contentType);
+        info.metadata = new chrome.cast.media.GenericMediaMetadata();
+        info.metadata.title = title;
+        var request = new chrome.cast.media.LoadRequest(info);
+        if (subUrl) {
+          var track = new chrome.cast.media.Track(1, chrome.cast.media.TrackType.TEXT);
+          track.trackContentId = subUrl;
+          track.trackContentType = 'text/vtt';
+          track.subtype = chrome.cast.media.TextTrackType.SUBTITLES;
+          track.name = 'Subtitles';
+          track.language = 'en';
+          info.tracks = [track];
+          request.activeTrackIds = [1];
+        }
+        return session.loadMedia(request);
+      }).catch(function (e) { console.log('NASCinema cast failed:', e); });
+    };
+  </script>
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 </head>
 <body>
   <!--

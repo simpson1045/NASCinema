@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../services/cast.dart';
 import '../theme/app_theme.dart';
 import 'player/player_view.dart';
 import 'player/scrubber.dart';
@@ -29,6 +30,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String? _error;
   Widget? _player;
   bool _bannerVisible = true;
+
+  // Cast: the URL/type the local player resolved to (Chromecast plays the same
+  // stream), and whether a receiver is on the network this tick.
+  String _playUrl = '';
+  bool _isHls = false;
+  bool _castAvailable = false;
 
   double _position = 0;
   double _duration = 0;
@@ -69,8 +76,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setState(() {
         _mode = p.mode;
         _reason = p.reason;
+        _playUrl = '${widget.baseUrl}${p.url}';
+        _isHls = p.mode != 'direct';
         // Built once — buildPlayerView registers a view factory per call.
-        _player = buildPlayerView('${widget.baseUrl}${p.url}', p.mode != 'direct');
+        _player = buildPlayerView(_playUrl, _isHls);
       });
       // Poll the video element for position/buffer, and the server for which
       // spans are converted, to drive the scrubber.
@@ -90,6 +99,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _buffered = playerBuffered();
           _volume = playerVolume();
           _muted = playerMuted();
+          _castAvailable = castDeviceAvailable();
         });
       });
       _cachePoll =
@@ -234,6 +244,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 color: _activeSub != null ? NasColors.amber : Colors.white,
                 size: 22),
           ),
+          if (_castAvailable)
+            IconButton(
+              onPressed: _castNow,
+              tooltip: 'Cast to TV',
+              icon: Icon(
+                  castConnected() ? Icons.cast_connected : Icons.cast,
+                  color: castConnected() ? NasColors.amber : Colors.white,
+                  size: 22),
+            ),
           IconButton(
             onPressed: () {
               playerToggleMute();
@@ -277,6 +296,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Hand the current stream + active subtitle to a Chromecast. The receiver
+  /// plays the same URL the local player uses (HLS master or the direct file);
+  /// the WebVTT track rides along as a sidecar.
+  void _castNow() {
+    var sub = '';
+    if (_activeSub != null) {
+      final s = _subs.firstWhere((x) => x['id'] == _activeSub,
+          orElse: () => const {});
+      final u = s['url'];
+      if (u != null) sub = '${widget.baseUrl}$u';
+    }
+    castLoadMedia(
+      _playUrl,
+      _isHls ? 'application/vnd.apple.mpegurl' : 'video/mp4',
+      widget.title,
+      sub,
     );
   }
 
