@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # Integrations
     tmdb_api_key: str = ""
+    opensubtitles_api_key: str = ""
 
     # FFmpeg overrides (auto-discovered when blank)
     ffmpeg: str = ""
