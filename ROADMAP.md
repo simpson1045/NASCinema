@@ -163,10 +163,10 @@ The soul of the app — what makes it NASCinema and not a sterile grid.
 ## Phase 9 — Advanced playback
 
 - [ ] **Skip Intro / Recap / Credits** via fingerprinting ⭐ 🟡 🔁 (Essentia)
-- [ ] **HDR → SDR tone-mapping** for dumb clients 🟡
+- [ ] **HDR → SDR tone-mapping** for dumb clients — library is HDR10 (PQ/BT.2020); neither path tone-maps yet, so HDR looks washed-out. ffmpeg here has **libplacebo** (Vulkan, top-quality GPU tonemap) — pair it with the GPU encode 🟡 ⭐
 - [ ] **Multi-version picker** — same title in 4K HDR + 1080p 🟡
 - [ ] **Offline downloads** on mobile 🟡
-- [ ] Hardware-accel transcode (NVENC/QSV/VAAPI) detection + use 🟡
+- [ ] **GPU transcode (NVENC/NVDEC)** — config-driven (`auto`/`nvenc`/`cpu`) with CPU fallback. Measured on ALPINE's RTX 3080: **10.2× realtime vs x264's 1.54× (~6.6× faster)**; needs `format=nv12` (h264_nvenc is 8-bit) + libplacebo tonemap for HDR 🟡 ⭐
 
 ### Player experience
 - [x] **Unmuted on tap** — the detail-screen Play tap's transient user activation carries to the video's play(), so it starts with sound (no muted autoplay, no overlay)
