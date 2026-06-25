@@ -9,6 +9,7 @@ import '../models/movie_file.dart';
 import '../models/video.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import 'player_screen.dart';
 
 const _extraTypes = <String>[
   'Featurette', 'Trailer', 'Deleted Scene', 'Behind the Scenes', 'Interview',
@@ -108,6 +109,20 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       _snack('Could not open the video');
     }
+  }
+
+  void _play() {
+    if (_files.isEmpty) {
+      _snack('Still loading the file…');
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => PlayerScreen(
+        fileId: _files.first.id,
+        baseUrl: widget.baseUrl,
+        title: widget.movie.title,
+      ),
+    ));
   }
 
   Future<void> _openBluray() async {
@@ -233,9 +248,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    _ActionsRow(
-                        onPlay: () => _snack('Playback lands in the next milestone 🍿'),
-                        movie: movie),
+                    _ActionsRow(onPlay: _play, movie: movie),
                     if (movie.genres.isNotEmpty) ...[
                       const SizedBox(height: 18),
                       _Genres(genres: movie.genres),

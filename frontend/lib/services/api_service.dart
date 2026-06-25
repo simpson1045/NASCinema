@@ -91,6 +91,21 @@ class ApiService {
         .toList();
   }
 
+  Future<({String mode, String reason, String url})> getPlay(int fileId) async {
+    final r = await http
+        .get(_u('/api/play/$fileId'))
+        .timeout(const Duration(seconds: 45));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    final d = jsonDecode(r.body) as Map<String, dynamic>;
+    return (
+      mode: (d['mode'] ?? 'transcode').toString(),
+      reason: (d['reason'] ?? '').toString(),
+      url: (d['url'] ?? '').toString(),
+    );
+  }
+
   Future<void> updateMovie(int id, {String? blurayUrl}) async {
     final r = await http
         .patch(
