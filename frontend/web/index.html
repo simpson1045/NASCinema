@@ -76,6 +76,7 @@
           video.textTracks[i].mode =
             video.textTracks[i].label === 'NASCinema' ? 'showing' : 'disabled';
         }
+        window.nascinemaApplyOffset(video);
       };
       track.addEventListener('load', enable);
       setTimeout(enable, 200);
@@ -87,6 +88,53 @@
       var ts = video.querySelectorAll('track[data-nasc]');
       for (var j = 0; j < ts.length; j++) { ts[j].parentNode.removeChild(ts[j]); }
     };
+
+    // Per-file subtitle sync offset, applied live by shifting cue times.
+    window._nascSubOffset = 0;
+    window.nascinemaApplyOffset = function (video) {
+      for (var i = 0; i < video.textTracks.length; i++) {
+        var tt = video.textTracks[i];
+        if (tt.label !== 'NASCinema' || !tt.cues) continue;
+        for (var j = 0; j < tt.cues.length; j++) {
+          var c = tt.cues[j];
+          if (c._origStart === undefined) {
+            c._origStart = c.startTime;
+            c._origEnd = c.endTime;
+          }
+          var s = c._origStart + window._nascSubOffset;
+          c.startTime = s < 0 ? 0 : s;
+          c.endTime = c._origEnd + window._nascSubOffset;
+        }
+      }
+    };
+    window.nascinemaSetSubOffset = function (video, seconds) {
+      window._nascSubOffset = seconds;
+      window.nascinemaApplyOffset(video);
+    };
+  </script>
+  <style>
+    /* Subtitle appearance: clean type, subtle navy container, readable shadow. */
+    video::cue {
+      background-color: transparent;
+      color: #ffffff;
+      font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+      font-weight: 600;
+      line-height: 1.35;
+      text-shadow:
+        -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
+        0 2px 6px rgba(0, 0, 0, 0.9);
+    }
+  </style>
+  <script>
+    // Self-hosted app, rebuilt constantly: Flutter's PWA service worker just
+    // serves stale caches (slow/stuck loads after each rebuild). Builds use
+    // --pwa-strategy=none so none is registered; this unregisters any already
+    // stuck in the browser so the user doesn't have to clear it by hand.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (rs) {
+        rs.forEach(function (r) { r.unregister(); });
+      }).catch(function () {});
+    }
   </script>
 </head>
 <body>

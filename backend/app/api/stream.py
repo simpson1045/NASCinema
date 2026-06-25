@@ -76,14 +76,18 @@ async def stream_master(
     if d["mode"] == "direct":
         raise HTTPException(status_code=400, detail="This file is direct-play")
     s = await asyncio.to_thread(get_or_start, file_id, mf.path, d, mf.duration)
-    for _ in range(60):  # wait up to ~30s for the playlist to appear
-        if s.playlist.exists() and s.playlist.stat().st_size > 0:
+    # VOD pre-writes the playlist synchronously, so the read succeeds on the
+    # first try — no poll. Only copy/remux (ffmpeg writes it) needs to wait.
+    data = await asyncio.to_thread(_read_ready_segment, s.playlist)
+    for _ in range(60):
+        if data is not None:
             break
         await asyncio.sleep(0.5)
-    if not s.playlist.exists():
+        data = await asyncio.to_thread(_read_ready_segment, s.playlist)
+    if data is None:
         raise HTTPException(status_code=503, detail="Transcode did not start")
-    return FileResponse(
-        str(s.playlist),
+    return Response(
+        content=data,
         media_type="application/vnd.apple.mpegurl",
         headers={"Cache-Control": "no-cache"},
     )

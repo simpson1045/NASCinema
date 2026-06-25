@@ -40,6 +40,13 @@ async def _file_and_movie(file_id: int, session: AsyncSession):
     return mf, movie
 
 
+def _read_offset(file_id: int) -> float:
+    try:
+        return float((_subs_dir(file_id) / "offset").read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+
+
 def _entry(file_id: int, path: Path) -> dict:
     lang = path.stem.split("-")[0]
     return {
@@ -56,7 +63,20 @@ async def list_subtitles(
 ) -> dict:
     await _file_and_movie(file_id, session)
     subs = [_entry(file_id, p) for p in sorted(_subs_dir(file_id).glob("*.vtt"))]
-    return {"file_id": file_id, "subtitles": subs}
+    return {"file_id": file_id, "subtitles": subs, "offset": _read_offset(file_id)}
+
+
+class OffsetReq(BaseModel):
+    seconds: float
+
+
+@router.put("/{file_id}/offset")
+async def set_offset(
+    file_id: int, req: OffsetReq, session: AsyncSession = Depends(get_session)
+) -> dict:
+    await _file_and_movie(file_id, session)
+    (_subs_dir(file_id) / "offset").write_text(str(req.seconds))
+    return {"offset": req.seconds}
 
 
 @router.get("/{file_id}/search")

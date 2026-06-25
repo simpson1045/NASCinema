@@ -28,3 +28,4 @@ void installPlayerKeys() {}
 void removePlayerKeys() {}
 void playerSetSubtitle(String url) {}
 void playerClearSubtitle() {}
+void playerSetSubtitleOffset(double seconds) {}

@@ -25,14 +25,6 @@ from .ffmpeg import ffmpeg_path, ffprobe_path
 from .streaming import startup_cleanup
 
 
-@asynccontextmanager
-async def _lifespan(app: FastAPI):
-    # Reap transcodes orphaned by a prior run + trim the cache; segments are
-    # kept (the transcode cache is persistent).
-    startup_cleanup()
-    yield
-
-
 async def _db_ok() -> bool:
     try:
         async with engine.connect() as conn:
@@ -40,6 +32,15 @@ async def _db_ok() -> bool:
         return True
     except Exception:
         return False
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Reap transcodes orphaned by a prior run + trim the cache. NOTE: under the
+    # socketio.ASGIApp wrapper this lifespan does not actually fire — run.py does
+    # the same cleanup at startup. Kept for direct-ASGI / future use.
+    startup_cleanup()
+    yield
 
 
 def create_fastapi() -> FastAPI:

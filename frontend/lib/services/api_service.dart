@@ -126,14 +126,31 @@ class ApiService {
     );
   }
 
-  /// Downloaded subtitle tracks available for a file.
-  Future<List<Map<String, dynamic>>> getSubtitles(int fileId) async {
+  /// Downloaded subtitle tracks for a file, plus the saved sync offset.
+  Future<({List<Map<String, dynamic>> subtitles, double offset})> getSubtitles(
+      int fileId) async {
     final r = await http
         .get(_u('/api/subtitles/$fileId'))
         .timeout(const Duration(seconds: 15));
-    if (r.statusCode != 200) return [];
+    if (r.statusCode != 200) {
+      return (subtitles: <Map<String, dynamic>>[], offset: 0.0);
+    }
     final d = jsonDecode(r.body) as Map<String, dynamic>;
-    return ((d['subtitles'] ?? []) as List).cast<Map<String, dynamic>>();
+    return (
+      subtitles: ((d['subtitles'] ?? []) as List).cast<Map<String, dynamic>>(),
+      offset: (d['offset'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  /// Persist the per-file subtitle sync offset (seconds).
+  Future<void> setSubtitleOffset(int fileId, double seconds) async {
+    await http
+        .put(
+          _u('/api/subtitles/$fileId/offset'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'seconds': seconds}),
+        )
+        .timeout(const Duration(seconds: 10));
   }
 
   /// Search OpenSubtitles for this file (exact hash, then title/year).

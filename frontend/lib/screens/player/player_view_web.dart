@@ -13,6 +13,9 @@ external void _setSub(web.HTMLVideoElement video, String url);
 @JS('nascinemaClearSub')
 external void _clearSub(web.HTMLVideoElement video);
 
+@JS('nascinemaSetSubOffset')
+external void _setSubOffset(web.HTMLVideoElement video, double seconds);
+
 int _counter = 0;
 web.HTMLVideoElement? _v;
 
@@ -179,4 +182,9 @@ void playerSetSubtitle(String url) {
 void playerClearSubtitle() {
   final v = _v;
   if (v != null) _clearSub(v);
+}
+
+void playerSetSubtitleOffset(double seconds) {
+  final v = _v;
+  if (v != null) _setSubOffset(v, seconds);
 }

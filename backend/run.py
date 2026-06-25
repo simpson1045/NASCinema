@@ -64,8 +64,19 @@ def main() -> None:
     elif sys.platform == "win32":
         config = uvicorn.Config(target, host=settings.host, port=settings.port, loop="none")
         server = uvicorn.Server(config)
+
+        async def _serve() -> None:
+            # socketio's ASGIApp doesn't forward ASGI lifespan to the wrapped
+            # FastAPI app, so the FastAPI lifespan never runs under this
+            # entrypoint — run startup work here: reap transcodes orphaned by a
+            # restart + trim the cache.
+            from app.streaming import startup_cleanup
+
+            startup_cleanup()
+            await server.serve()
+
         with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
-            runner.run(server.serve())
+            runner.run(_serve())
     else:
         uvicorn.run(target, host=settings.host, port=settings.port)
 

@@ -39,8 +39,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   List<List<double>> _cached = const [];
   List<Map<String, dynamic>> _subs = [];
   String? _activeSub;
+  double _subOffset = 0;
+  bool _syncMode = false;
+  Timer? _offsetSave;
   Timer? _poll;
   Timer? _cachePoll;
+  Timer? _bannerTimer;
 
   @override
   void initState() {
@@ -52,6 +56,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _poll?.cancel();
     _cachePoll?.cancel();
+    _offsetSave?.cancel();
+    _bannerTimer?.cancel();
     removePlayerKeys();
     super.dispose();
   }
@@ -69,6 +75,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Poll the video element for position/buffer, and the server for which
       // spans are converted, to drive the scrubber.
       installPlayerKeys();
+      // Auto-dismiss the "why am I transcoding" banner; it's informative, not a
+      // nag — the user can still close it sooner with the x.
+      _bannerTimer = Timer(const Duration(seconds: 6), () {
+        if (mounted) setState(() => _bannerVisible = false);
+      });
       _poll = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (!mounted) return;
         final d = playerDuration();
@@ -93,11 +104,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _loadSubs() async {
     try {
-      final subs = await ApiService(widget.baseUrl).getSubtitles(widget.fileId);
-      if (mounted) setState(() => _subs = subs);
+      final r = await ApiService(widget.baseUrl).getSubtitles(widget.fileId);
+      if (!mounted) return;
+      setState(() {
+        _subs = r.subtitles;
+        _subOffset = r.offset;
+      });
+      if (r.offset != 0) playerSetSubtitleOffset(r.offset);
     } catch (_) {
       // best-effort
     }
+  }
+
+  void _nudgeSync(double delta) {
+    setState(() =>
+        _subOffset = double.parse((_subOffset + delta).toStringAsFixed(1)));
+    playerSetSubtitleOffset(_subOffset);
+    _offsetSave?.cancel();
+    _offsetSave = Timer(const Duration(milliseconds: 600), () {
+      ApiService(widget.baseUrl)
+          .setSubtitleOffset(widget.fileId, _subOffset)
+          .catchError((_) {});
+    });
   }
 
   Future<void> _refreshCached() async {
@@ -130,6 +158,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         child: Column(
           children: [
             _topBar(),
+            if (_syncMode) _syncBar(),
             Expanded(
               child: _player != null
                   ? _player!
@@ -253,6 +282,62 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _activeSub = null);
   }
 
+  Widget _syncBar() {
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+      child: Row(
+        children: [
+          const Text('Subtitle sync',
+              style: TextStyle(color: NasColors.muted, fontSize: 12)),
+          const SizedBox(width: 10),
+          _syncBtn('-0.5', () => _nudgeSync(-0.5)),
+          _syncBtn('-0.1', () => _nudgeSync(-0.1)),
+          Container(
+            constraints: const BoxConstraints(minWidth: 56),
+            alignment: Alignment.center,
+            child: Text(
+                '${_subOffset >= 0 ? '+' : ''}${_subOffset.toStringAsFixed(1)}s',
+                style: const TextStyle(
+                    color: NasColors.amber,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+          ),
+          _syncBtn('+0.1', () => _nudgeSync(0.1)),
+          _syncBtn('+0.5', () => _nudgeSync(0.5)),
+          const Spacer(),
+          if (_subOffset != 0)
+            TextButton(
+              onPressed: () => _nudgeSync(-_subOffset),
+              child: const Text('Reset',
+                  style: TextStyle(color: NasColors.muted)),
+            ),
+          TextButton(
+            onPressed: () => setState(() => _syncMode = false),
+            child:
+                const Text('Done', style: TextStyle(color: NasColors.amber)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _syncBtn(String label, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          side: const BorderSide(color: NasColors.surfaceRaised),
+          foregroundColor: NasColors.text,
+        ),
+        child: Text(label),
+      ),
+    );
+  }
+
   void _openSubsMenu() {
     showModalBottomSheet(
       context: context,
@@ -280,6 +365,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             }
           });
           _selectSub(s);
+          Navigator.pop(context);
+        },
+        onAdjustTiming: () {
+          setState(() => _syncMode = true);
           Navigator.pop(context);
         },
       ),
@@ -367,6 +456,7 @@ class _SubsSheet extends StatefulWidget {
     required this.onOff,
     required this.onSelect,
     required this.onDownloaded,
+    required this.onAdjustTiming,
   });
 
   final String baseUrl;
@@ -376,6 +466,7 @@ class _SubsSheet extends StatefulWidget {
   final VoidCallback onOff;
   final void Function(Map<String, dynamic>) onSelect;
   final void Function(Map<String, dynamic>) onDownloaded;
+  final VoidCallback onAdjustTiming;
 
   @override
   State<_SubsSheet> createState() => _SubsSheetState();
@@ -487,6 +578,13 @@ class _SubsSheetState extends State<_SubsSheet> {
                   onTap: () => widget.onSelect(s),
                 ),
               const Divider(height: 1, color: NasColors.surfaceRaised),
+              ListTile(
+                leading:
+                    const Icon(Icons.av_timer_rounded, color: NasColors.text),
+                title: const Text('Adjust timing…',
+                    style: TextStyle(color: NasColors.text)),
+                onTap: widget.onAdjustTiming,
+              ),
               ListTile(
                 leading:
                     const Icon(Icons.download_rounded, color: NasColors.amber),

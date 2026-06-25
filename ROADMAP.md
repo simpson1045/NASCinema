@@ -74,8 +74,9 @@ The flagship differentiator. (Full design in [README](README.md#subtitles-done-r
 - [ ] **ASS styling preserved** (libass / JASSUB on web clients) 🟡
 - [ ] **Bitmap sub (PGS/VOBSUB) → OCR to SRT** background worker, cached forever ⭐ 🔴
 - [ ] **Burn-in path** as last resort, with the "why" badge 🟡
-- [ ] **Per-file sync offset** (+/- ms), remembered 🟢 ← Phase 2 (next)
-- [ ] **PGS overlay** — extract .sup, render over the video in-browser (libpgs); switchable, no re-transcode ← Phase 3 (the Blu-ray bitmap subs) ⭐
+- [x] **Per-file sync offset** (Phase 2 ✅) — live nudge bar (±0.1/±0.5s) while watching, shifts cues client-side, remembered per file
+- [ ] **Subtitle appearance customizer** (web client) — user-controlled: box on/off, font, size, color, outline, position; persisted. Browser-only; the native app will style subs via media_kit. (Default for now: no box, white text + outline/shadow. A true single-panel box needs custom rendering, which the PGS overlay below sets up.) ⭐ ← next
+- [ ] **PGS overlay** — extract .sup, render over the video in-browser (libpgs); switchable, no re-transcode ← Phase 3 (the Blu-ray bitmap subs); also unlocks a real custom-rendered sub box ⭐
 - [ ] Forced / default / language track selection 🟢
 - [ ] **In-player audio + subtitle track switching** 🟡
 - [ ] **Whisper auto-generated subtitles** for content with none — speech-to-text + alignment (Whisper, not Essentia — Essentia is audio-features, not speech) ⭐ 🔴
