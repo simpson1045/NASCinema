@@ -6,6 +6,7 @@ Watch Together will live. For now it just accepts connections.
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import socketio
@@ -20,6 +21,13 @@ from .api.stream import router as stream_router
 from .config import get_settings
 from .db import engine
 from .ffmpeg import ffmpeg_path, ffprobe_path
+from .streaming import reset_cache
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    reset_cache()  # start every run with a clean transcode cache
+    yield
 
 
 async def _db_ok() -> bool:
@@ -33,7 +41,7 @@ async def _db_ok() -> bool:
 
 def create_fastapi() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="NASCinema", version=__version__)
+    app = FastAPI(title="NASCinema", version=__version__, lifespan=_lifespan)
 
     app.add_middleware(
         CORSMiddleware,

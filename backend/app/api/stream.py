@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..models import MediaFile
 from ..playback import decide
-from ..streaming import get_or_start, session_dir
+from ..streaming import ensure_segment, get_or_start
 
 router = APIRouter(prefix="/api", tags=["playback"])
 
@@ -78,15 +78,22 @@ async def stream_master(
 
 @router.get("/stream/{file_id}/{segment}")
 async def stream_segment(file_id: int, segment: str):
-    if not segment.endswith(".ts") or "/" in segment or "\\" in segment:
+    if (
+        not segment.startswith("seg_")
+        or not segment.endswith(".ts")
+        or "/" in segment
+        or "\\" in segment
+    ):
         raise HTTPException(status_code=400, detail="Bad segment")
-    d = session_dir(file_id)
-    if d is None:
+    try:
+        seg_index = int(segment[4:-3])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Bad segment")
+    # Restarts the transcode at this point if it's a forward seek past the head.
+    path = ensure_segment(file_id, seg_index)
+    if path is None:
         raise HTTPException(status_code=404, detail="No active session")
-    path = d / segment
-    # Wait for ffmpeg to reach this segment (sequential transcode stays ahead of
-    # playback; a far-forward seek may time out — smart seek is a follow-up).
-    for _ in range(50):
+    for _ in range(60):
         if path.exists() and path.stat().st_size > 0:
             return FileResponse(str(path), media_type="video/mp2t")
         await asyncio.sleep(0.5)

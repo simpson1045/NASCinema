@@ -54,7 +54,7 @@ The end-to-end vertical slice: a movie on disk becomes a playable, good-looking 
 - [x] **"Why am I transcoding?" badge** — shown live on the player ⭐
 - [x] **HLS transcode/remux + range serve** — ffmpeg→HLS, uniform-segment VOD playlist (real runtime), self-hosted hls.js web player
 - [ ] **Native player** (media_kit/libmpv) — direct-play 4K + resume 🟡 🔁
-- [ ] **Smart seek** — restart transcode at the seek point (forward seek currently waits) 🟡
+- [x] **Smart seek** — a seek past the transcode head restarts ffmpeg at that point (`-ss` + `-start_number`); ~14s to jump anywhere vs minutes of sequential grind ⭐
 - [ ] **Watch progress / resume** + watched/unwatched state 🟢
 - [ ] **Auth + scoped media tokens** wired into the endpoints 🔁
 - [ ] **Remote access** verified through a reverse proxy (HTTPS) 🟢 🔁
@@ -166,7 +166,7 @@ The soul of the app — what makes it NASCinema and not a sterile grid.
 - [ ] Hardware-accel transcode (NVENC/QSV/VAAPI) detection + use 🟡
 
 ### Player experience
-- [x] **Unmute prompt** — muted autoplay + a tap-to-unmute banner (browser autoplay constraint)
+- [x] **Unmuted on tap** — the detail-screen Play tap's transient user activation carries to the video's play(), so it starts with sound (no muted autoplay, no overlay)
 - [ ] **Custom player controls** — Flutter overlay replacing native HTML5 → unlocks everything below 🟡
 - [ ] **Trickplay thumbnails** — frame previews on the scrubber (the video-native "waveform"); optional subtle audio waveform for family flavor 🟡 🔁
 - [ ] **Actor popups** — tap a cast member mid-playback for info (TMDB cast) 🟡
