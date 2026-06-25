@@ -37,6 +37,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _muted = false;
   List<double> _buffered = const [];
   List<List<double>> _cached = const [];
+  List<Map<String, dynamic>> _subs = [];
+  String? _activeSub;
   Timer? _poll;
   Timer? _cachePoll;
 
@@ -82,9 +84,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _cachePoll =
           Timer.periodic(const Duration(seconds: 2), (_) => _refreshCached());
       _refreshCached();
+      _loadSubs();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _loadSubs() async {
+    try {
+      final subs = await ApiService(widget.baseUrl).getSubtitles(widget.fileId);
+      if (mounted) setState(() => _subs = subs);
+    } catch (_) {
+      // best-effort
     }
   }
 
@@ -176,10 +188,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
               style: const TextStyle(color: NasColors.muted, fontSize: 12)),
           const SizedBox(width: 4),
           IconButton(
-            onPressed: _subsComingSoon,
-            tooltip: 'Subtitles (coming soon)',
-            icon: const Icon(Icons.closed_caption_outlined,
-                color: Colors.white, size: 22),
+            onPressed: _openSubsMenu,
+            tooltip: 'Subtitles',
+            icon: Icon(
+                _activeSub != null
+                    ? Icons.closed_caption
+                    : Icons.closed_caption_outlined,
+                color: _activeSub != null ? NasColors.amber : Colors.white,
+                size: 22),
           ),
           IconButton(
             onPressed: () {
@@ -227,11 +243,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  void _subsComingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Subtitles coming soon'),
-        duration: Duration(seconds: 2),
+  void _selectSub(Map<String, dynamic> sub) {
+    playerSetSubtitle('${widget.baseUrl}${sub['url']}');
+    setState(() => _activeSub = sub['id'] as String?);
+  }
+
+  void _subsOff() {
+    playerClearSubtitle();
+    setState(() => _activeSub = null);
+  }
+
+  void _openSubsMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: NasColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+      ),
+      builder: (_) => _SubsSheet(
+        baseUrl: widget.baseUrl,
+        fileId: widget.fileId,
+        subs: _subs,
+        activeId: _activeSub,
+        onOff: () {
+          _subsOff();
+          Navigator.pop(context);
+        },
+        onSelect: (s) {
+          _selectSub(s);
+          Navigator.pop(context);
+        },
+        onDownloaded: (s) {
+          setState(() {
+            if (!_subs.any((x) => x['id'] == s['id'])) {
+              _subs = [..._subs, s];
+            }
+          });
+          _selectSub(s);
+          Navigator.pop(context);
+        },
       ),
     );
   }
@@ -304,6 +354,209 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SubsSheet extends StatefulWidget {
+  const _SubsSheet({
+    required this.baseUrl,
+    required this.fileId,
+    required this.subs,
+    required this.activeId,
+    required this.onOff,
+    required this.onSelect,
+    required this.onDownloaded,
+  });
+
+  final String baseUrl;
+  final int fileId;
+  final List<Map<String, dynamic>> subs;
+  final String? activeId;
+  final VoidCallback onOff;
+  final void Function(Map<String, dynamic>) onSelect;
+  final void Function(Map<String, dynamic>) onDownloaded;
+
+  @override
+  State<_SubsSheet> createState() => _SubsSheetState();
+}
+
+class _SubsSheetState extends State<_SubsSheet> {
+  bool _searchMode = false;
+  bool _busy = false;
+  String? _error;
+  List<Map<String, dynamic>> _results = [];
+  int? _downloadingOsId;
+
+  Future<void> _runSearch() async {
+    setState(() {
+      _searchMode = true;
+      _busy = true;
+      _error = null;
+      _results = [];
+    });
+    try {
+      final r =
+          await ApiService(widget.baseUrl).searchSubtitles(widget.fileId, 'en');
+      if (mounted) {
+        setState(() {
+          _results = r;
+          _busy = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Search failed — check the OpenSubtitles key';
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _download(Map<String, dynamic> res) async {
+    setState(() => _downloadingOsId = res['os_file_id'] as int?);
+    try {
+      final sub = await ApiService(widget.baseUrl).downloadSubtitle(
+        widget.fileId,
+        res['os_file_id'] as int,
+        (res['language'] ?? 'und').toString(),
+      );
+      widget.onDownloaded(sub);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _downloadingOsId = null;
+          _error = 'Download failed';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6),
+        child: _searchMode ? _buildSearch() : _buildList(),
+      ),
+    );
+  }
+
+  Widget _heading(String title, {Widget? leading}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+      child: Row(children: [
+        if (leading != null) leading else const SizedBox(width: 8),
+        Text(title,
+            style: const TextStyle(
+                color: NasColors.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
+  Widget _buildList() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _heading('Subtitles'),
+        Flexible(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.subtitles_off_outlined,
+                    color: NasColors.muted),
+                title: const Text('Off', style: TextStyle(color: NasColors.text)),
+                trailing: widget.activeId == null
+                    ? const Icon(Icons.check, color: NasColors.amber)
+                    : null,
+                onTap: widget.onOff,
+              ),
+              for (final s in widget.subs)
+                ListTile(
+                  leading: const Icon(Icons.subtitles, color: NasColors.muted),
+                  title: Text((s['label'] ?? 'Subtitle').toString(),
+                      style: const TextStyle(color: NasColors.text)),
+                  trailing: widget.activeId == s['id']
+                      ? const Icon(Icons.check, color: NasColors.amber)
+                      : null,
+                  onTap: () => widget.onSelect(s),
+                ),
+              const Divider(height: 1, color: NasColors.surfaceRaised),
+              ListTile(
+                leading:
+                    const Icon(Icons.download_rounded, color: NasColors.amber),
+                title: const Text('Download subtitles…',
+                    style: TextStyle(color: NasColors.amber)),
+                onTap: _runSearch,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearch() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _heading('Download · English',
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: NasColors.text),
+              onPressed: () => setState(() => _searchMode = false),
+            )),
+        if (_busy)
+          const Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(color: NasColors.amber)),
+        if (_error != null)
+          Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(_error!,
+                  style: const TextStyle(color: NasColors.bad))),
+        if (!_busy && _error == null && _results.isEmpty)
+          const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('No subtitles found',
+                  style: TextStyle(color: NasColors.muted))),
+        if (!_busy && _error == null && _results.isNotEmpty)
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _results.length,
+              itemBuilder: (_, i) {
+                final r = _results[i];
+                final hi = r['hearing_impaired'] == true;
+                final downloading = _downloadingOsId == r['os_file_id'];
+                return ListTile(
+                  title: Text((r['release'] ?? 'Subtitle').toString(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: NasColors.text, fontSize: 13)),
+                  subtitle: Text(
+                      '${(r['language'] ?? '').toString().toUpperCase()} · ${r['downloads'] ?? 0} downloads${hi ? ' · HI' : ''}',
+                      style: const TextStyle(
+                          color: NasColors.muted, fontSize: 11)),
+                  trailing: downloading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: NasColors.amber))
+                      : const Icon(Icons.download_rounded,
+                          color: NasColors.muted, size: 20),
+                  onTap: downloading ? null : () => _download(r),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }

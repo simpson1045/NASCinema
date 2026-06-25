@@ -26,3 +26,5 @@ bool playerIsFullscreen() => false;
 void playerToggleFullscreen() {}
 void installPlayerKeys() {}
 void removePlayerKeys() {}
+void playerSetSubtitle(String url) {}
+void playerClearSubtitle() {}

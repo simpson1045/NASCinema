@@ -126,6 +126,45 @@ class ApiService {
     );
   }
 
+  /// Downloaded subtitle tracks available for a file.
+  Future<List<Map<String, dynamic>>> getSubtitles(int fileId) async {
+    final r = await http
+        .get(_u('/api/subtitles/$fileId'))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode != 200) return [];
+    final d = jsonDecode(r.body) as Map<String, dynamic>;
+    return ((d['subtitles'] ?? []) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Search OpenSubtitles for this file (exact hash, then title/year).
+  Future<List<Map<String, dynamic>>> searchSubtitles(
+      int fileId, String lang) async {
+    final r = await http
+        .get(_u('/api/subtitles/$fileId/search?lang=$lang'))
+        .timeout(const Duration(seconds: 40));
+    if (r.statusCode != 200) {
+      throw Exception('Search failed (HTTP ${r.statusCode})');
+    }
+    final d = jsonDecode(r.body) as Map<String, dynamic>;
+    return ((d['results'] ?? []) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Download a chosen subtitle; returns {id, label, lang, url}.
+  Future<Map<String, dynamic>> downloadSubtitle(
+      int fileId, int osFileId, String language) async {
+    final r = await http
+        .post(
+          _u('/api/subtitles/$fileId/download'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'os_file_id': osFileId, 'language': language}),
+        )
+        .timeout(const Duration(seconds: 40));
+    if (r.statusCode != 200) {
+      throw Exception('Download failed (HTTP ${r.statusCode})');
+    }
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
   Future<void> updateMovie(int id, {String? blurayUrl}) async {
     final r = await http
         .patch(

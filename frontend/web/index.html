@@ -59,6 +59,34 @@
         video.src = url;
       }
     };
+
+    // Attach a WebVTT subtitle track and show it. The `default` attribute is
+    // unreliable for dynamically-added tracks, so force mode after it loads.
+    window.nascinemaSetSub = function (video, url) {
+      window.nascinemaClearSub(video);
+      var track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = 'NASCinema';
+      track.srclang = 'und';
+      track.src = url;
+      track.setAttribute('data-nasc', '1');
+      video.appendChild(track);
+      var enable = function () {
+        for (var i = 0; i < video.textTracks.length; i++) {
+          video.textTracks[i].mode =
+            video.textTracks[i].label === 'NASCinema' ? 'showing' : 'disabled';
+        }
+      };
+      track.addEventListener('load', enable);
+      setTimeout(enable, 200);
+    };
+    window.nascinemaClearSub = function (video) {
+      for (var i = 0; i < video.textTracks.length; i++) {
+        video.textTracks[i].mode = 'disabled';
+      }
+      var ts = video.querySelectorAll('track[data-nasc]');
+      for (var j = 0; j < ts.length; j++) { ts[j].parentNode.removeChild(ts[j]); }
+    };
   </script>
 </head>
 <body>

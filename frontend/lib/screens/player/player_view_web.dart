@@ -7,6 +7,12 @@ import 'package:web/web.dart' as web;
 @JS('nascinemaAttachHls')
 external void _attachHls(web.HTMLVideoElement video, String url);
 
+@JS('nascinemaSetSub')
+external void _setSub(web.HTMLVideoElement video, String url);
+
+@JS('nascinemaClearSub')
+external void _clearSub(web.HTMLVideoElement video);
+
 int _counter = 0;
 web.HTMLVideoElement? _v;
 
@@ -163,4 +169,14 @@ void removePlayerKeys() {
     web.window.removeEventListener('keydown', h);
     _keyHandler = null;
   }
+}
+
+void playerSetSubtitle(String url) {
+  final v = _v;
+  if (v != null) _setSub(v, url);
+}
+
+void playerClearSubtitle() {
+  final v = _v;
+  if (v != null) _clearSub(v);
 }

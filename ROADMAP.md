@@ -70,12 +70,12 @@ The flagship differentiator. (Full design in [README](README.md#subtitles-done-r
 
 - [ ] Subtitle track inventory from the scan-time probe 🟢
 - [ ] **Native render of embedded MKV subs** (PGS/ASS/SRT) via libmpv — no burn-in ⭐ 🟡
-- [ ] **Text sub → WebVTT sidecar** extraction, cached 🟢
+- [x] **OpenSubtitles → WebVTT** (Phase 1 ✅) — search by file-hash then title/year, download, SRT→WebVTT, cached, rendered natively (no burn-in); in-player menu with track select + Off
 - [ ] **ASS styling preserved** (libass / JASSUB on web clients) 🟡
 - [ ] **Bitmap sub (PGS/VOBSUB) → OCR to SRT** background worker, cached forever ⭐ 🔴
 - [ ] **Burn-in path** as last resort, with the "why" badge 🟡
-- [ ] **OpenSubtitles** search + auto-download (hash-matched) 🟡
-- [ ] **Per-file sync offset** (+/- ms), remembered 🟢
+- [ ] **Per-file sync offset** (+/- ms), remembered 🟢 ← Phase 2 (next)
+- [ ] **PGS overlay** — extract .sup, render over the video in-browser (libpgs); switchable, no re-transcode ← Phase 3 (the Blu-ray bitmap subs) ⭐
 - [ ] Forced / default / language track selection 🟢
 - [ ] **In-player audio + subtitle track switching** 🟡
 - [ ] **Whisper auto-generated subtitles** for content with none — speech-to-text + alignment (Whisper, not Essentia — Essentia is audio-features, not speech) ⭐ 🔴
