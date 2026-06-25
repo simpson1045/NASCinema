@@ -257,6 +257,11 @@ def _build_cmd(sess: "Session", start_num: int) -> list[str]:
     else:
         args += ["-c:a", "aac", "-ac", "2", "-b:a", "192k"]
 
+    # A seek restart resets timestamps to 0; without this the segments would be
+    # labelled ~600s off their real place and the player can't splice them in.
+    if start_num > 0:
+        args += ["-output_ts_offset", str(start_num * SEG_SECONDS)]
+
     playlist = "ff.m3u8" if sess.vod else "master.m3u8"
     args += [
         "-f", "hls", "-hls_time", str(SEG_SECONDS),
