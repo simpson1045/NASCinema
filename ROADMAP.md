@@ -35,6 +35,8 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 The end-to-end vertical slice: a movie on disk becomes a playable, good-looking entry on the TV.
 
 > 🎉 **v0.1.0 (2026-06-24)** — first browsable library is live: **354 movies** scanned from the NAS with TMDB artwork + ffprobe metadata, served as a Flutter web poster grid in the browser. Ingestion spine complete; playback is next.
+>
+> 🎬 **v0.2.0 (2026-06-24)** — **it streams.** Decision engine (Direct Play / Remux / Transcode) with a live "why am I transcoding?" banner; ffmpeg→HLS transcode with a full-runtime VOD playlist; self-hosted hls.js web player. 4K HEVC/HDR/TrueHD plays in the browser.
 
 - [x] **Scanner** — walk media dirs, parse filenames (guessit), skip NAS junk, per-file commit
 - [x] **FFprobe at scan** — store container/codecs/resolution/bit-depth/HDR per file
@@ -47,11 +49,12 @@ The end-to-end vertical slice: a movie on disk becomes a playable, good-looking 
 - [x] **Browse API** — `GET /api/movies`, `GET /api/movies/{id}`, `POST /api/scan`
 - [x] **Web delivery** — backend serves the built Flutter web app at `/` (zero client tooling)
 - [x] **In-app server config** (address field, persisted, auto-fills page origin on web)
-- [ ] **Flutter: movie detail page** (blurred backdrop, overview, cast, file/quality info) 🟡 ← *next*
-- [ ] **Playback decision engine** — Direct Play → Remux → Transcode 🔴 ⭐
-- [ ] **"Why am I transcoding?" badge** ⭐ 🟢
-- [ ] **HTTP range / direct-play serving** + HLS transcode & cache 🔴
-- [ ] **Flutter: player** (media_kit/libmpv) with resume 🟡 🔁
+- [x] **Flutter: movie detail page** — ambient backdrop, overview, genres, quality chips, file/quality + bonus-features sections, Blu-ray.com link
+- [x] **Playback decision engine** — Direct Play → Remux → Transcode with a per-stream reason ⭐
+- [x] **"Why am I transcoding?" badge** — shown live on the player ⭐
+- [x] **HLS transcode/remux + range serve** — ffmpeg→HLS, uniform-segment VOD playlist (real runtime), self-hosted hls.js web player
+- [ ] **Native player** (media_kit/libmpv) — direct-play 4K + resume 🟡 🔁
+- [ ] **Smart seek** — restart transcode at the seek point (forward seek currently waits) 🟡
 - [ ] **Watch progress / resume** + watched/unwatched state 🟢
 - [ ] **Auth + scoped media tokens** wired into the endpoints 🔁
 - [ ] **Remote access** verified through a reverse proxy (HTTPS) 🟢 🔁

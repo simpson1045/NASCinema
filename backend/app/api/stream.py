@@ -62,8 +62,8 @@ async def stream_master(
     mf, d = await _file_and_decision(file_id, session)
     if d["mode"] == "direct":
         raise HTTPException(status_code=400, detail="This file is direct-play")
-    s = get_or_start(file_id, mf.path, d)
-    for _ in range(60):  # wait up to ~30s for ffmpeg to write the first segment
+    s = get_or_start(file_id, mf.path, d, mf.duration)
+    for _ in range(60):  # wait up to ~30s for the playlist to appear
         if s.playlist.exists() and s.playlist.stat().st_size > 0:
             break
         await asyncio.sleep(0.5)
@@ -84,6 +84,10 @@ async def stream_segment(file_id: int, segment: str):
     if d is None:
         raise HTTPException(status_code=404, detail="No active session")
     path = d / segment
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Segment not found")
-    return FileResponse(str(path), media_type="video/mp2t")
+    # Wait for ffmpeg to reach this segment (sequential transcode stays ahead of
+    # playback; a far-forward seek may time out — smart seek is a follow-up).
+    for _ in range(50):
+        if path.exists() and path.stat().st_size > 0:
+            return FileResponse(str(path), media_type="video/mp2t")
+        await asyncio.sleep(0.5)
+    raise HTTPException(status_code=404, detail="Segment not ready")
