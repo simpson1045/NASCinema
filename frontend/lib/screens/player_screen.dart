@@ -175,7 +175,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           child: CircularProgressIndicator(
                               color: NasColors.amber)),
             ),
-            if (_mode != null && _bannerVisible) _whyBanner(),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              child: (_mode != null && _bannerVisible)
+                  ? KeyedSubtree(
+                      key: const ValueKey('why'), child: _whyBanner())
+                  : const SizedBox.shrink(),
+            ),
             if (_player != null) _controlBar(),
           ],
         ),
