@@ -21,12 +21,14 @@ from .api.stream import router as stream_router
 from .config import get_settings
 from .db import engine
 from .ffmpeg import ffmpeg_path, ffprobe_path
-from .streaming import reset_cache
+from .streaming import startup_cleanup
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    reset_cache()  # start every run with a clean transcode cache
+    # Reap transcodes orphaned by a prior run + trim the cache; segments are
+    # kept (the transcode cache is persistent).
+    startup_cleanup()
     yield
 
 

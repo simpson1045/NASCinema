@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # Media
     media_dirs: str = ""
     data_dir: Path = Path(".nascinema")
+    # Persistent HLS transcode cache cap (GiB); LRU eviction. 0 = unlimited.
+    transcode_cache_gb: float = 20.0
 
     # Integrations
     tmdb_api_key: str = ""

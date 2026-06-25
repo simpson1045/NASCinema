@@ -53,8 +53,11 @@ The end-to-end vertical slice: a movie on disk becomes a playable, good-looking 
 - [x] **Playback decision engine** — Direct Play → Remux → Transcode with a per-stream reason ⭐
 - [x] **"Why am I transcoding?" badge** — shown live on the player ⭐
 - [x] **HLS transcode/remux + range serve** — ffmpeg→HLS, uniform-segment VOD playlist (real runtime), self-hosted hls.js web player
-- [ ] **Native player** (media_kit/libmpv) — direct-play 4K + resume 🟡 🔁
+- [ ] **Native player** (media_kit/libmpv) — bundles ffmpeg's decoders + uses the GPU's hardware decode → direct-play 4K HEVC/HDR/TrueHD, no server transcode ⭐ 🔁
+- [ ] **In-browser direct play where the hardware allows** — detect WebCodecs HEVC/HDR support (hardware-backed) and skip the server transcode on capable browsers; WASM software decode as a ≤1080p fallback 🟡
 - [x] **Smart seek** — a seek past the transcode head restarts ffmpeg at that point (`-ss` + `-start_number`); ~14s to jump anywhere vs minutes of sequential grind ⭐
+- [x] **Persistent transcode cache** — segments kept across sessions (LRU eviction at a configurable GiB cap); reopen resumes at the first gap, seek-back is served from disk. Orphaned transcodes reaped on startup via recorded PIDs; ffmpeg runs below-normal priority so one stream never starves the server ⭐
+- [ ] **Background pre-transcode** ("Optimize") — opt-in, per-title or whole-library, with a disk + time estimate up front; largely moot once direct-play clients land 🟡
 - [ ] **Watch progress / resume** + watched/unwatched state 🟢
 - [ ] **Auth + scoped media tokens** wired into the endpoints 🔁
 - [ ] **Remote access** verified through a reverse proxy (HTTPS) 🟢 🔁
