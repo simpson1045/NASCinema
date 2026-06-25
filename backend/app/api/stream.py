@@ -21,14 +21,14 @@ router = APIRouter(prefix="/api", tags=["playback"])
 
 def _read_ready_segment(path: Path) -> bytes | None:
     """Read a finished segment in one shot, or None if it isn't ready yet.
-    A single read beats FileResponse's 64 KB chunked streaming over SMB by ~10x,
-    and `temp_file` muxing means the file only appears once it's complete."""
+    One read (no preceding stat) — `temp_file` muxing means the file only appears
+    once complete, so a successful read implies readiness. A single bulk read
+    also beats FileResponse's 64 KB chunked streaming over SMB by ~10x."""
     try:
-        if path.stat().st_size > 0:
-            return path.read_bytes()
+        data = path.read_bytes()
+        return data or None
     except OSError:
-        pass
-    return None
+        return None
 
 
 async def _file_and_decision(file_id: int, session: AsyncSession):

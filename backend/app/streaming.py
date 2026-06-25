@@ -83,8 +83,9 @@ def _seg(out_dir: Path, n: int) -> Path:
 
 
 def _exists(p: Path) -> bool:
+    # One stat, not exists()+stat() (two SMB round-trips) — matters over a NAS.
     try:
-        return p.exists() and p.stat().st_size > 0
+        return p.stat().st_size > 0
     except OSError:
         return False
 
