@@ -8,36 +8,23 @@ import 'package:web/web.dart' as web;
 external void _attachHls(web.HTMLVideoElement video, String url);
 
 int _counter = 0;
-web.HTMLVideoElement? _currentVideo;
 
-/// Unmute (or mute) the active player. Browsers only autoplay muted, so we
-/// start muted and let the user unmute from the banner.
-void setPlayerMuted(bool muted) {
-  final v = _currentVideo;
-  if (v != null) {
-    v.muted = muted;
-    if (!muted) v.volume = 1;
-  }
-}
-
-/// Web player: an HTML <video> element. HLS streams are attached via hls.js
-/// (the helper in web/index.html); direct files set src directly.
+/// Web player: an HTML <video>. Playback starts via play() once the source is
+/// ready, riding the transient user activation from the detail-screen Play tap,
+/// so it runs unmuted with no overlay button.
 Widget buildPlayerView(String url, bool isHls) {
   final viewType = 'nascinema-video-${_counter++}';
   ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
-    final video = web.HTMLVideoElement()
-      ..controls = true
-      ..autoplay = true
-      ..muted = true;
+    final video = web.HTMLVideoElement()..controls = true;
     video.style
-      ..width = '100%'
-      ..height = '100%'
-      ..backgroundColor = 'black';
-    _currentVideo = video;
+      ..setProperty('width', '100%')
+      ..setProperty('height', '100%')
+      ..setProperty('background', 'black');
     if (isHls) {
       _attachHls(video, url);
     } else {
       video.src = url;
+      video.play();
     }
     return video;
   });

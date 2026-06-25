@@ -36,7 +36,9 @@
   <script src="hls.min.js"></script>
   <script>
     window.nascinemaAttachHls = function (video, url) {
-      video.muted = true; // browsers only autoplay muted; user can unmute
+      // The Play tap on the detail screen grants the document transient user
+      // activation (~5s). Our VOD playlist loads instantly, so this play() lands
+      // inside that window and runs UNMUTED — no autoplay attr, no mute.
       var tryPlay = function () {
         var p = video.play();
         if (p) p.catch(function (e) { console.log('NASCinema play() blocked:', e); });

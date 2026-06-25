@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// No-op on native (media_kit will own muting there).
-void setPlayerMuted(bool muted) {}
-
 /// Native fallback. Desktop/mobile will use media_kit (libmpv) for real
 /// direct-play; until then, this is a placeholder.
 Widget buildPlayerView(String url, bool isHls) {
