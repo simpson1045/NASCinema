@@ -18,3 +18,11 @@ bool playerPaused() => true;
 void playerSeek(double seconds) {}
 void playerTogglePlay() {}
 List<double> playerBuffered() => const [];
+double playerVolume() => 1;
+bool playerMuted() => false;
+void playerSetVolume(double v) {}
+void playerToggleMute() {}
+bool playerIsFullscreen() => false;
+void playerToggleFullscreen() {}
+void installPlayerKeys() {}
+void removePlayerKeys() {}

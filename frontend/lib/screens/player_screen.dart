@@ -33,6 +33,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double _position = 0;
   double _duration = 0;
   bool _paused = true;
+  double _volume = 1;
+  bool _muted = false;
   List<double> _buffered = const [];
   List<List<double>> _cached = const [];
   Timer? _poll;
@@ -48,6 +50,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _poll?.cancel();
     _cachePoll?.cancel();
+    removePlayerKeys();
     super.dispose();
   }
 
@@ -63,6 +66,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       // Poll the video element for position/buffer, and the server for which
       // spans are converted, to drive the scrubber.
+      installPlayerKeys();
       _poll = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (!mounted) return;
         final d = playerDuration();
@@ -71,6 +75,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (d > 0) _duration = d;
           _paused = playerPaused();
           _buffered = playerBuffered();
+          _volume = playerVolume();
+          _muted = playerMuted();
         });
       });
       _cachePoll =
@@ -168,7 +174,64 @@ class _PlayerScreenState extends State<PlayerScreen> {
           const SizedBox(width: 10),
           Text(_fmt(_duration),
               style: const TextStyle(color: NasColors.muted, fontSize: 12)),
+          const SizedBox(width: 4),
+          IconButton(
+            onPressed: _subsComingSoon,
+            tooltip: 'Subtitles (coming soon)',
+            icon: const Icon(Icons.closed_caption_outlined,
+                color: Colors.white, size: 22),
+          ),
+          IconButton(
+            onPressed: () {
+              playerToggleMute();
+              setState(() => _muted = playerMuted());
+            },
+            icon: Icon(
+                (_muted || _volume == 0)
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_up_rounded,
+                color: Colors.white,
+                size: 22),
+          ),
+          SizedBox(
+            width: 84,
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: NasColors.amber,
+                inactiveTrackColor: NasColors.surfaceRaised,
+                thumbColor: NasColors.amber,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                value: (_muted ? 0.0 : _volume).clamp(0.0, 1.0).toDouble(),
+                onChanged: (v) {
+                  playerSetVolume(v);
+                  setState(() {
+                    _volume = v;
+                    _muted = v == 0;
+                  });
+                },
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: playerToggleFullscreen,
+            tooltip: 'Fullscreen (F)',
+            icon: const Icon(Icons.fullscreen_rounded,
+                color: Colors.white, size: 24),
+          ),
         ],
+      ),
+    );
+  }
+
+  void _subsComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Subtitles coming soon'),
+        duration: Duration(seconds: 2),
       ),
     );
   }

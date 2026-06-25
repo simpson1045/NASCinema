@@ -73,3 +73,94 @@ List<double> playerBuffered() {
   }
   return out;
 }
+
+double playerVolume() => _v?.volume ?? 1;
+
+bool playerMuted() => _v?.muted ?? false;
+
+void playerSetVolume(double v) {
+  final el = _v;
+  if (el != null) {
+    el.volume = v.clamp(0.0, 1.0).toDouble();
+    if (v > 0) el.muted = false;
+  }
+}
+
+void playerToggleMute() {
+  final el = _v;
+  if (el != null) el.muted = !el.muted;
+}
+
+bool playerIsFullscreen() => web.document.fullscreenElement != null;
+
+/// Fullscreen the whole page (not just the <video>) so our Flutter control bar
+/// stays visible in fullscreen.
+void playerToggleFullscreen() {
+  if (web.document.fullscreenElement == null) {
+    web.document.documentElement?.requestFullscreen();
+  } else {
+    web.document.exitFullscreen();
+  }
+}
+
+JSFunction? _keyHandler;
+
+/// Install window-level keyboard shortcuts. Window-level (not on the <video>)
+/// so they work regardless of what has focus.
+void installPlayerKeys() {
+  removePlayerKeys();
+  final h = ((web.Event e) {
+    final el = _v;
+    if (el == null) return;
+    final key = (e as web.KeyboardEvent).key;
+    switch (key) {
+      case ' ':
+      case 'k':
+        e.preventDefault();
+        if (el.paused) {
+          el.play();
+        } else {
+          el.pause();
+        }
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        final t = el.currentTime - 10;
+        el.currentTime = t < 0 ? 0 : t;
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        el.currentTime = el.currentTime + 10;
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        el.volume = (el.volume + 0.1).clamp(0.0, 1.0).toDouble();
+        el.muted = false;
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        el.volume = (el.volume - 0.1).clamp(0.0, 1.0).toDouble();
+        break;
+      case 'f':
+      case 'F':
+        e.preventDefault();
+        playerToggleFullscreen();
+        break;
+      case 'm':
+      case 'M':
+        e.preventDefault();
+        el.muted = !el.muted;
+        break;
+    }
+  }).toJS;
+  _keyHandler = h;
+  web.window.addEventListener('keydown', h);
+}
+
+void removePlayerKeys() {
+  final h = _keyHandler;
+  if (h != null) {
+    web.window.removeEventListener('keydown', h);
+    _keyHandler = null;
+  }
+}
