@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Video transcode backend: auto (GPU if a working NVENC is found, else CPU),
     # nvenc (force GPU), or cpu (force x264).
     transcode_hwaccel: str = "auto"
+    # Where transcoded HLS segments live. Blank = <data_dir>/hls (local to the
+    # app host). Point at a NAS share (UNC) to keep the cache off the host.
+    cache_dir: str = ""
 
     # Integrations
     tmdb_api_key: str = ""

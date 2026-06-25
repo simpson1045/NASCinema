@@ -25,6 +25,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from functools import lru_cache as _lru_cache
 from pathlib import Path
 
@@ -51,6 +52,7 @@ class Session:
         self.proc: subprocess.Popen | None = None
         self.start_num = 0
         self.last_access = time.time()
+        self.last_served: int | None = None  # for seek logging (detect jumps)
 
     @property
     def alive(self) -> bool:
@@ -61,8 +63,17 @@ class Session:
         return self.dir / "master.m3u8"
 
 
+def _data_dir() -> Path:
+    """Local scratch (pid file, seek log) — stays on the app host even when the
+    segment cache is pointed at a NAS."""
+    d = Path(get_settings().data_dir).resolve()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _cache_root() -> Path:
-    root = (Path(get_settings().data_dir) / "hls").resolve()
+    cd = get_settings().cache_dir.strip()
+    root = Path(cd) if cd else (Path(get_settings().data_dir) / "hls").resolve()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -90,7 +101,7 @@ def _first_gap(out_dir: Path, start: int) -> int:
 # --- orphan reaping -------------------------------------------------------
 
 def _pid_file() -> Path:
-    return _cache_root() / "active.pids"
+    return _data_dir() / "active.pids"
 
 
 def _record_pid(pid: int) -> None:
@@ -333,23 +344,75 @@ def get_or_start(file_id, src_path, decision, duration) -> "Session":
         return sess
 
 
-def ensure_segment(file_id: int, seg_index: int) -> Path | None:
-    """Return a segment's path, restarting the transcode at the seek point when
-    it's outside the active frontier. The caller waits for the file to appear."""
+def ensure_segment(file_id: int, seg_index: int) -> tuple[Path | None, bool]:
+    """Return (path, restarted): the segment's path (the caller waits for it) and
+    whether a transcode restart — a seek into fresh territory — was triggered."""
     sess = _sessions.get(file_id)
     if sess is None:
-        return None
+        return None, False
     sess.last_access = time.time()
     path = _seg(sess.dir, seg_index)
     if _exists(path):
-        return path  # cached (or just produced) — instant
+        return path, False  # cached (or just produced) — instant
     if not sess.vod:
-        return path  # copy/remux: sequential, the caller just waits
+        return path, False  # copy/remux: sequential, the caller just waits
 
     frontier = _first_gap(sess.dir, sess.start_num)  # first not-yet-made segment
     reachable = sess.alive and sess.start_num <= seg_index <= frontier + WAIT_AHEAD
+    restarted = False
     if not reachable:
         with _lock:
             if not _exists(path):
                 _spawn(sess, seg_index)
-    return path
+                restarted = True
+    return path, restarted
+
+
+def cached_ranges(file_id: int) -> list[list[float]]:
+    """Contiguous converted spans [start_sec, end_sec], for painting the scrubber.
+    Reads the disk, so it works even when no session is active."""
+    out_dir = _cache_root() / str(file_id)
+    if not out_dir.exists():
+        return []
+    nums = sorted(
+        int(p.stem.split("_")[1]) for p in out_dir.glob("seg_*.ts") if _exists(p)
+    )
+    ranges: list[list[float]] = []
+    if not nums:
+        return ranges
+    run_start = prev = nums[0]
+    for n in nums[1:]:
+        if n == prev + 1:
+            prev = n
+        else:
+            ranges.append([run_start * SEG_SECONDS, (prev + 1) * SEG_SECONDS])
+            run_start = prev = n
+    ranges.append([run_start * SEG_SECONDS, (prev + 1) * SEG_SECONDS])
+    return ranges
+
+
+def log_access(file_id: int, seg_index: int, restarted: bool, elapsed_s: float) -> None:
+    """Append one line to seeks.log per jump (sequential playback is skipped)."""
+    sess = _sessions.get(file_id)
+    if sess is None:
+        return
+    prev = sess.last_served
+    sess.last_served = seg_index
+    if not (prev is None or abs(seg_index - prev) > 1 or restarted):
+        return  # ordinary next-in-sequence playback
+    pos = seg_index * SEG_SECONDS
+    outcome = (
+        "MISS -> had to convert this spot"
+        if restarted
+        else "HIT  -> already converted (cached)"
+    )
+    line = (
+        f"{datetime.now():%Y-%m-%d %H:%M:%S} | file {file_id} | "
+        f"jump to {pos // 60:02d}:{pos % 60:02d} (seg {seg_index}) | "
+        f"{outcome} | served in {elapsed_s:0.1f}s\n"
+    )
+    try:
+        with open(_data_dir() / "seeks.log", "a", encoding="utf-8") as f:
+            f.write(line)
+    except OSError:
+        pass

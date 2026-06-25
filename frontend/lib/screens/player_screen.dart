@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import 'player/player_view.dart';
+import 'player/scrubber.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -27,10 +30,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget? _player;
   bool _bannerVisible = true;
 
+  double _position = 0;
+  double _duration = 0;
+  bool _paused = true;
+  List<double> _buffered = const [];
+  List<List<double>> _cached = const [];
+  Timer? _poll;
+  Timer? _cachePoll;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _cachePoll?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -43,9 +61,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Built once — buildPlayerView registers a view factory per call.
         _player = buildPlayerView('${widget.baseUrl}${p.url}', p.mode != 'direct');
       });
+      // Poll the video element for position/buffer, and the server for which
+      // spans are converted, to drive the scrubber.
+      _poll = Timer.periodic(const Duration(milliseconds: 250), (_) {
+        if (!mounted) return;
+        final d = playerDuration();
+        setState(() {
+          _position = playerCurrentTime();
+          if (d > 0) _duration = d;
+          _paused = playerPaused();
+          _buffered = playerBuffered();
+        });
+      });
+      _cachePoll =
+          Timer.periodic(const Duration(seconds: 2), (_) => _refreshCached());
+      _refreshCached();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _refreshCached() async {
+    try {
+      final c = await ApiService(widget.baseUrl).getCached(widget.fileId);
+      if (!mounted) return;
+      setState(() {
+        _cached = c.ranges;
+        if (_duration <= 0 && c.duration > 0) _duration = c.duration;
+      });
+    } catch (_) {
+      // best-effort; the scrubber just won't show converted spans this tick
     }
   }
 
@@ -83,10 +129,59 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               color: NasColors.amber)),
             ),
             if (_mode != null && _bannerVisible) _whyBanner(),
+            if (_player != null) _controlBar(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _controlBar() {
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.fromLTRB(6, 2, 14, 8),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () {
+              playerTogglePlay();
+              setState(() => _paused = playerPaused());
+            },
+            icon: Icon(_paused ? Icons.play_arrow : Icons.pause,
+                color: Colors.white, size: 28),
+          ),
+          Text(_fmt(_position),
+              style: const TextStyle(color: NasColors.muted, fontSize: 12)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Scrubber(
+              duration: _duration,
+              position: _position,
+              buffered: _buffered,
+              cached: _cached,
+              onSeek: (s) {
+                playerSeek(s);
+                setState(() => _position = s);
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(_fmt(_duration),
+              style: const TextStyle(color: NasColors.muted, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  String _fmt(double s) {
+    if (s.isNaN || s.isInfinite || s < 0) s = 0;
+    final t = s.round();
+    final h = t ~/ 3600;
+    final m = (t % 3600) ~/ 60;
+    final sec = t % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = sec.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
   }
 
   Widget _topBar() {

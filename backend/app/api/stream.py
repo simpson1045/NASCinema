@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..models import MediaFile
 from ..playback import decide
-from ..streaming import ensure_segment, get_or_start
+from ..streaming import cached_ranges, ensure_segment, get_or_start, log_access
 
 router = APIRouter(prefix="/api", tags=["playback"])
 
@@ -76,6 +77,21 @@ async def stream_master(
     )
 
 
+@router.get("/stream/{file_id}/cached")
+async def stream_cached(
+    file_id: int, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Which spans of the film are already converted — for painting the scrubber."""
+    mf = await session.scalar(select(MediaFile).where(MediaFile.id == file_id))
+    if not mf:
+        raise HTTPException(status_code=404, detail="File not found")
+    return {
+        "file_id": file_id,
+        "duration": mf.duration,
+        "ranges": cached_ranges(file_id),
+    }
+
+
 @router.get("/stream/{file_id}/{segment}")
 async def stream_segment(file_id: int, segment: str):
     if (
@@ -90,11 +106,13 @@ async def stream_segment(file_id: int, segment: str):
     except ValueError:
         raise HTTPException(status_code=400, detail="Bad segment")
     # Restarts the transcode at this point if it's a forward seek past the head.
-    path = ensure_segment(file_id, seg_index)
+    t0 = time.monotonic()
+    path, restarted = ensure_segment(file_id, seg_index)
     if path is None:
         raise HTTPException(status_code=404, detail="No active session")
     for _ in range(60):
         if path.exists() and path.stat().st_size > 0:
+            log_access(file_id, seg_index, restarted, time.monotonic() - t0)
             return FileResponse(str(path), media_type="video/mp2t")
         await asyncio.sleep(0.5)
     raise HTTPException(status_code=404, detail="Segment not ready")

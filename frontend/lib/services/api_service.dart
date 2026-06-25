@@ -106,6 +106,26 @@ class ApiService {
     );
   }
 
+  /// Converted spans (seconds) for the scrubber, plus the film's duration.
+  Future<({double duration, List<List<double>> ranges})> getCached(
+      int fileId) async {
+    final r = await http
+        .get(_u('/api/stream/$fileId/cached'))
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    final d = jsonDecode(r.body) as Map<String, dynamic>;
+    final ranges = ((d['ranges'] ?? []) as List)
+        .map((e) =>
+            (e as List).map((n) => (n as num).toDouble()).toList())
+        .toList();
+    return (
+      duration: (d['duration'] as num?)?.toDouble() ?? 0,
+      ranges: ranges,
+    );
+  }
+
   Future<void> updateMovie(int id, {String? blurayUrl}) async {
     final r = await http
         .patch(

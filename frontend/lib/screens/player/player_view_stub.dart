@@ -10,3 +10,11 @@ Widget buildPlayerView(String url, bool isHls) {
     ),
   );
 }
+
+// Accessors mirrored from the web player; no-ops until media_kit lands.
+double playerCurrentTime() => 0;
+double playerDuration() => 0;
+bool playerPaused() => true;
+void playerSeek(double seconds) {}
+void playerTogglePlay() {}
+List<double> playerBuffered() => const [];
