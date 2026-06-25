@@ -26,6 +26,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String? _error;
   Widget? _player;
   bool _bannerVisible = true;
+  bool _muted = true;
 
   @override
   void initState() {
@@ -47,6 +48,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!mounted) return;
       setState(() => _error = e.toString());
     }
+  }
+
+  void _unmute() {
+    setPlayerMuted(false);
+    setState(() => _muted = false);
   }
 
   Color get _modeColor => switch (_mode) {
@@ -82,8 +88,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           child: CircularProgressIndicator(
                               color: NasColors.amber)),
             ),
+            if (_player != null && _muted) _unmuteBanner(),
             if (_mode != null && _bannerVisible) _whyBanner(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _unmuteBanner() {
+    return Material(
+      color: NasColors.amber,
+      child: InkWell(
+        onTap: _unmute,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.volume_off_rounded, color: NasColors.bg, size: 20),
+              SizedBox(width: 10),
+              Text('Audio is muted — tap to unmute',
+                  style: TextStyle(
+                      color: NasColors.bg,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
         ),
       ),
     );

@@ -74,6 +74,8 @@ The flagship differentiator. (Full design in [README](README.md#subtitles-done-r
 - [ ] **OpenSubtitles** search + auto-download (hash-matched) 🟡
 - [ ] **Per-file sync offset** (+/- ms), remembered 🟢
 - [ ] Forced / default / language track selection 🟢
+- [ ] **In-player audio + subtitle track switching** 🟡
+- [ ] **Whisper auto-generated subtitles** for content with none — speech-to-text + alignment (Whisper, not Essentia — Essentia is audio-features, not speech) ⭐ 🔴
 
 ---
 
@@ -162,6 +164,15 @@ The soul of the app — what makes it NASCinema and not a sterile grid.
 - [ ] **Multi-version picker** — same title in 4K HDR + 1080p 🟡
 - [ ] **Offline downloads** on mobile 🟡
 - [ ] Hardware-accel transcode (NVENC/QSV/VAAPI) detection + use 🟡
+
+### Player experience
+- [x] **Unmute prompt** — muted autoplay + a tap-to-unmute banner (browser autoplay constraint)
+- [ ] **Custom player controls** — Flutter overlay replacing native HTML5 → unlocks everything below 🟡
+- [ ] **Trickplay thumbnails** — frame previews on the scrubber (the video-native "waveform"); optional subtle audio waveform for family flavor 🟡 🔁
+- [ ] **Actor popups** — tap a cast member mid-playback for info (TMDB cast) 🟡
+- [ ] **"Did You Know" facts** — trivia cards during playback (TMDB/IMDb) 🟢
+- [ ] **Paused clearlogo** — movie logo in the corner when paused, Jellyfin-style (Fanart.tv/TMDB) 🟢
+- [ ] **Stats for nerds** — "More Info" overlay: codecs, bitrate, transcode/decode path, buffer health 🟢
 
 ---
 
