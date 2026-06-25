@@ -31,7 +31,9 @@ def _read_ready_segment(path: Path) -> bytes | None:
         return None
 
 
-async def _file_and_decision(file_id: int, session: AsyncSession):
+async def _file_and_decision(
+    file_id: int, session: AsyncSession, client: str = "web"
+):
     mf = await session.scalar(select(MediaFile).where(MediaFile.id == file_id))
     if not mf:
         raise HTTPException(status_code=404, detail="File not found")
@@ -40,15 +42,20 @@ async def _file_and_decision(file_id: int, session: AsyncSession):
         audio_codec=mf.audio_codec,
         container=mf.container,
         hdr=mf.hdr,
+        client=client,
     )
     return mf, d
 
 
 @router.get("/play/{file_id}")
 async def play_decision(
-    file_id: int, session: AsyncSession = Depends(get_session)
+    file_id: int,
+    client: str = "web",
+    session: AsyncSession = Depends(get_session),
 ) -> dict:
-    _, d = await _file_and_decision(file_id, session)
+    # `client` declares playback capability: "web" (browser caps) or "native"
+    # (libmpv — direct-plays everything). The native ELKO renderer sends native.
+    _, d = await _file_and_decision(file_id, session, client)
     url = (
         f"/api/stream/{file_id}/direct"
         if d["mode"] == "direct"

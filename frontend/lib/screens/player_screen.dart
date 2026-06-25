@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
@@ -71,7 +72,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _load() async {
     try {
-      final p = await ApiService(widget.baseUrl).getPlay(widget.fileId);
+      // The native desktop build is the libmpv renderer — it direct-plays
+      // everything, so it declares 'native' and the backend skips transcode.
+      final p = await ApiService(widget.baseUrl)
+          .getPlay(widget.fileId, client: kIsWeb ? 'web' : 'native');
       if (!mounted) return;
       setState(() {
         _mode = p.mode;
@@ -99,7 +103,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _buffered = playerBuffered();
           _volume = playerVolume();
           _muted = playerMuted();
-          _castAvailable = castDeviceAvailable();
+          _castAvailable = castReady();
         });
       });
       _cachePoll =

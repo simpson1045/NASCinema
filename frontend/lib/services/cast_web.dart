@@ -16,8 +16,12 @@ String _state() {
   }
 }
 
-/// True once the framework is up and at least one Chromecast is on the network
-/// — gates whether we even show the cast button.
+/// True once the Cast framework has initialized (Chrome/Edge). We gate the
+/// button on THIS, not device presence — clicking opens the browser's device
+/// picker (which lists devices or says none found), the standard Cast UX.
+bool castReady() => _state() != 'UNAVAILABLE';
+
+/// True once the framework is up and at least one Chromecast is on the network.
 bool castDeviceAvailable() {
   final s = _state();
   return s != 'UNAVAILABLE' && s != 'NO_DEVICES_AVAILABLE';

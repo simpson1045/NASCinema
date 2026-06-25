@@ -22,7 +22,7 @@ The working checklist. Phases are roughly sequential, but the fun stuff gets **s
 - [x] Target runtime: **Python 3.14** for the core backend (full binary-wheel support verified for FastAPI/psycopg/pydantic/uvicorn); ML/audio sidecars pin their own interpreter
 - [x] FFmpeg/FFprobe confirmed (auto-discovered on ALPINE; `/api/health` reports both available)
 - [x] **Config model** — `pydantic-settings` (`NASCINEMA_` env), ffmpeg auto-discovery, `.env` with generated secret key; zero hardcoded paths/hosts/keys/devices
-- [x] **Backend scaffold** — FastAPI + Socket.IO, async SQLAlchemy 2.0 + Alembic (`0001` users), auth (scrypt + itsdangerous + scoped media tokens), `run.py`; **boots on ALPINE, `/api/health` → `db:true`** 🔁
+- [x] **Backend scaffold** — FastAPI + Socket.IO, async SQLAlchemy 2.0 + Alembic (`0001` users), auth (scrypt + itsdangerous + scoped media tokens), `nascinema_run.py`; **boots on ALPINE, `/api/health` → `db:true`** 🔁
 - [x] First admin user CLI (`manage_users.py` create/list/passwd) 🔁
 - [x] Create the first admin account (`simpson1045`, admin)
 - [x] Frontend scaffold — Flutter shell (Windows + Android) + amber/violet theme; ConnectScreen does a live `/api/health` check (analyze + test green)

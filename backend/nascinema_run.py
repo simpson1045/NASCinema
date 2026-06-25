@@ -1,4 +1,8 @@
-"""Dev/prod entrypoint. `python run.py` to serve; `--scan` reserved for Phase 1.
+"""Dev/prod entrypoint. `python nascinema_run.py` to serve; `--scan` for Phase 1.
+
+Named `nascinema_run.py` (not `run.py`) on purpose: NASRadio shares this box and
+also has a `run.py`, so a unique entrypoint name keeps the two apps' processes
+unambiguous (never identify/kill a backend by the `run.py` name).
 
 Windows note: psycopg's async driver requires a SelectorEventLoop, but uvicorn
 picks ProactorEventLoop for single-process serving on Windows. So on win32 we

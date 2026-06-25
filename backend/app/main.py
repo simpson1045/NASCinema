@@ -37,7 +37,7 @@ async def _db_ok() -> bool:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # Reap transcodes orphaned by a prior run + trim the cache. NOTE: under the
-    # socketio.ASGIApp wrapper this lifespan does not actually fire — run.py does
+    # socketio.ASGIApp wrapper this lifespan does not actually fire — nascinema_run.py does
     # the same cleanup at startup. Kept for direct-ASGI / future use.
     startup_cleanup()
     yield

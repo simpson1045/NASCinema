@@ -91,9 +91,12 @@ class ApiService {
         .toList();
   }
 
-  Future<({String mode, String reason, String url})> getPlay(int fileId) async {
+  /// [client] declares playback capability to the decision engine: 'web'
+  /// (browser codecs) or 'native' (libmpv — direct-plays everything).
+  Future<({String mode, String reason, String url})> getPlay(int fileId,
+      {String client = 'web'}) async {
     final r = await http
-        .get(_u('/api/play/$fileId'))
+        .get(_u('/api/play/$fileId?client=$client'))
         .timeout(const Duration(seconds: 45));
     if (r.statusCode != 200) {
       throw Exception('Backend returned HTTP ${r.statusCode}');

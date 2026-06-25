@@ -25,6 +25,21 @@ def decide(
     a = (audio_codec or "").lower()
     c = (container or "").lower()
 
+    # The native libmpv renderer (ELKO) decodes everything we ship — HEVC/AV1,
+    # HDR, TrueHD/Atmos, MKV — straight off disk. It always direct-plays; the
+    # browser caps below don't apply to it. This is the whole point of the
+    # native client: no server transcode, lossless audio + HDR to the AV stack.
+    if client == "native":
+        bits = (v.upper() or "video") + (" HDR" if hdr else "") + f"/{a.upper() or 'audio'}"
+        return {
+            "mode": "direct",
+            "reason": f"Direct play — your player handles {bits} natively. "
+            "No transcode, no server load.",
+            "video": "copy",
+            "audio": "copy",
+            "hdr": hdr,
+        }
+
     video_ok = v in BROWSER_VIDEO
     audio_ok = a in BROWSER_AUDIO
     container_ok = c in BROWSER_CONTAINERS

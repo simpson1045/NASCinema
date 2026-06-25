@@ -168,7 +168,7 @@ Renderers are **discovered, named, and saved per user** — no device is hardcod
 
 ## Quick start
 
-> ⏳ Coming with Milestone 1. Will mirror NASRadio's flow: configure `.env` (media paths, `DATABASE_URL`, TMDB key), create the first admin user, `python run.py --scan`, then point the Flutter app at your server from the login screen's gear icon. See [ROADMAP.md](ROADMAP.md) for current status.
+> ⏳ Coming with Milestone 1. Will mirror NASRadio's flow: configure `.env` (media paths, `DATABASE_URL`, TMDB key), create the first admin user, `python nascinema_run.py --scan`, then point the Flutter app at your server from the login screen's gear icon. See [ROADMAP.md](ROADMAP.md) for current status.
 
 ---
 
