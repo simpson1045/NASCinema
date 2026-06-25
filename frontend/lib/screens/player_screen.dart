@@ -59,45 +59,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          if (_player != null)
-            Positioned.fill(child: _player!)
-          else if (_error != null)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Could not start playback:\n$_error',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: NasColors.bad)),
-              ),
-            )
-          else
-            const Center(
-                child: CircularProgressIndicator(color: NasColors.amber)),
-          Positioned(top: 0, left: 0, right: 0, child: SafeArea(child: _topBar())),
-          if (_mode != null && _bannerVisible)
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: SafeArea(child: _whyBanner()),
+      // Column (not a Stack overlay): on web the HTML <video> platform view
+      // swallows pointer events, so Flutter controls must sit beside it, not
+      // on top, or the back/close buttons never receive taps.
+      body: SafeArea(
+        child: Column(
+          children: [
+            _topBar(),
+            Expanded(
+              child: _player != null
+                  ? _player!
+                  : _error != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text('Could not start playback:\n$_error',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: NasColors.bad)),
+                          ),
+                        )
+                      : const Center(
+                          child: CircularProgressIndicator(
+                              color: NasColors.amber)),
             ),
-        ],
+            if (_mode != null && _bannerVisible) _whyBanner(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _topBar() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 4, 12, 16),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xCC000000), Colors.transparent],
-        ),
-      ),
+      color: Colors.black,
+      padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
       child: Row(
         children: [
           IconButton(

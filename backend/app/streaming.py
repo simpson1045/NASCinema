@@ -65,6 +65,9 @@ def _build_cmd(src: str, decision: dict, out_dir: Path) -> list[str]:
     args += [
         "-f", "hls",
         "-hls_time", "4",
+        # 'event' = a growing VOD playlist the viewer watches from the start
+        # (vs. a live sliding window, which makes hls.js sit at the live edge).
+        "-hls_playlist_type", "event",
         "-hls_list_size", "0",
         "-hls_flags", "independent_segments",
         "-hls_segment_filename", str(out_dir / "seg_%05d.ts"),
@@ -85,10 +88,11 @@ def get_or_start(file_id: int, src_path: str, decision: dict) -> Session:
             shutil.rmtree(out_dir, ignore_errors=True)
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        log = open(out_dir / "ffmpeg.log", "w")  # noqa: SIM115 (held by ffmpeg)
         proc = subprocess.Popen(
             _build_cmd(src_path, decision, out_dir),
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=log,
         )
         session = Session(file_id, out_dir, proc, decision["mode"])
         _sessions[file_id] = session
