@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     data_dir: Path = Path(".nascinema")
     # Persistent HLS transcode cache cap (GiB); LRU eviction. 0 = unlimited.
     transcode_cache_gb: float = 20.0
+    # Video transcode backend: auto (GPU if a working NVENC is found, else CPU),
+    # nvenc (force GPU), or cpu (force x264).
+    transcode_hwaccel: str = "auto"
 
     # Integrations
     tmdb_api_key: str = ""

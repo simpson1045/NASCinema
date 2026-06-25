@@ -36,6 +36,7 @@ def decide(
             "container. No re-encoding, no CPU.",
             "video": "copy",
             "audio": "copy",
+            "hdr": hdr,
         }
 
     if video_ok and audio_ok and not hdr:
@@ -45,6 +46,7 @@ def decide(
             f"({v.upper()}/{a.upper()}); just repackaging the container. Near-zero CPU.",
             "video": "copy",
             "audio": "copy",
+            "hdr": hdr,
         }
 
     reasons: list[str] = []
@@ -65,4 +67,5 @@ def decide(
         "reason": "Transcoding — " + "; ".join(reasons) + ".",
         "video": video_action,
         "audio": audio_action,
+        "hdr": hdr,
     }
