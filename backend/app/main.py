@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from . import __version__
 from .api.movies import router as movies_router
+from .api.stream import router as stream_router
 from .config import get_settings
 from .db import engine
 from .ffmpeg import ffmpeg_path, ffprobe_path
@@ -57,6 +58,7 @@ def create_fastapi() -> FastAPI:
         }
 
     app.include_router(movies_router)
+    app.include_router(stream_router)
 
     # Serve the built Flutter web app (if present) at the root, so the UI is
     # reachable in any browser with no client-side tooling. Mounted last so the
