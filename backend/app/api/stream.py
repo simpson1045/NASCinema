@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,18 @@ from ..playback import decide
 from ..streaming import cached_ranges, ensure_segment, get_or_start, log_access
 
 router = APIRouter(prefix="/api", tags=["playback"])
+
+
+def _read_ready_segment(path: Path) -> bytes | None:
+    """Read a finished segment in one shot, or None if it isn't ready yet.
+    A single read beats FileResponse's 64 KB chunked streaming over SMB by ~10x,
+    and `temp_file` muxing means the file only appears once it's complete."""
+    try:
+        if path.stat().st_size > 0:
+            return path.read_bytes()
+    except OSError:
+        pass
+    return None
 
 
 async def _file_and_decision(file_id: int, session: AsyncSession):
@@ -63,7 +75,7 @@ async def stream_master(
     mf, d = await _file_and_decision(file_id, session)
     if d["mode"] == "direct":
         raise HTTPException(status_code=400, detail="This file is direct-play")
-    s = get_or_start(file_id, mf.path, d, mf.duration)
+    s = await asyncio.to_thread(get_or_start, file_id, mf.path, d, mf.duration)
     for _ in range(60):  # wait up to ~30s for the playlist to appear
         if s.playlist.exists() and s.playlist.stat().st_size > 0:
             break
@@ -85,10 +97,11 @@ async def stream_cached(
     mf = await session.scalar(select(MediaFile).where(MediaFile.id == file_id))
     if not mf:
         raise HTTPException(status_code=404, detail="File not found")
+    ranges = await asyncio.to_thread(cached_ranges, file_id)
     return {
         "file_id": file_id,
         "duration": mf.duration,
-        "ranges": cached_ranges(file_id),
+        "ranges": ranges,
     }
 
 
@@ -107,12 +120,13 @@ async def stream_segment(file_id: int, segment: str):
         raise HTTPException(status_code=400, detail="Bad segment")
     # Restarts the transcode at this point if it's a forward seek past the head.
     t0 = time.monotonic()
-    path, restarted = ensure_segment(file_id, seg_index)
+    path, restarted = await asyncio.to_thread(ensure_segment, file_id, seg_index)
     if path is None:
         raise HTTPException(status_code=404, detail="No active session")
     for _ in range(60):
-        if path.exists() and path.stat().st_size > 0:
+        data = await asyncio.to_thread(_read_ready_segment, path)
+        if data is not None:
             log_access(file_id, seg_index, restarted, time.monotonic() - t0)
-            return FileResponse(str(path), media_type="video/mp2t")
+            return Response(content=data, media_type="video/mp2t")
         await asyncio.sleep(0.5)
     raise HTTPException(status_code=404, detail="Segment not ready")

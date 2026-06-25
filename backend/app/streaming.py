@@ -89,11 +89,31 @@ def _exists(p: Path) -> bool:
         return False
 
 
+def _existing_segs(out_dir: Path) -> set[int]:
+    """All present segment indices via ONE directory scan. A stat-per-segment
+    loop is fine on local disk but murders us over SMB (a round trip each), so
+    scandir reads names + sizes in a single listing."""
+    found: set[int] = set()
+    try:
+        with os.scandir(out_dir) as it:
+            for e in it:
+                name = e.name
+                if name.startswith("seg_") and name.endswith(".ts"):
+                    try:
+                        if e.stat().st_size > 0:
+                            found.add(int(name[4:-3]))
+                    except (OSError, ValueError):
+                        pass
+    except OSError:
+        pass
+    return found
+
+
 def _first_gap(out_dir: Path, start: int) -> int:
-    """Smallest n >= start whose segment isn't on disk — i.e. the first segment
-    that still needs producing, and the end of the contiguous run from start."""
+    """First segment >= start not yet produced (end of the contiguous run)."""
+    have = _existing_segs(out_dir)
     n = start
-    while _exists(_seg(out_dir, n)):
+    while n in have:
         n += 1
     return n
 
@@ -136,10 +156,19 @@ def reap_orphans() -> None:
 # --- cache eviction -------------------------------------------------------
 
 def _dir_size(p: Path) -> int:
+    # scandir (one listing, sizes included) — rglob+stat per file is brutal on SMB.
+    total = 0
     try:
-        return sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+        with os.scandir(p) as it:
+            for e in it:
+                try:
+                    if e.is_file(follow_symlinks=False):
+                        total += e.stat().st_size
+                except OSError:
+                    pass
     except OSError:
-        return 0
+        pass
+    return total
 
 
 def evict_if_needed() -> None:
@@ -372,11 +401,7 @@ def cached_ranges(file_id: int) -> list[list[float]]:
     """Contiguous converted spans [start_sec, end_sec], for painting the scrubber.
     Reads the disk, so it works even when no session is active."""
     out_dir = _cache_root() / str(file_id)
-    if not out_dir.exists():
-        return []
-    nums = sorted(
-        int(p.stem.split("_")[1]) for p in out_dir.glob("seg_*.ts") if _exists(p)
-    )
+    nums = sorted(_existing_segs(out_dir))
     ranges: list[list[float]] = []
     if not nums:
         return ranges
