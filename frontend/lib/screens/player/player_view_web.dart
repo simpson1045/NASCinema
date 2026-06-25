@@ -16,7 +16,8 @@ Widget buildPlayerView(String url, bool isHls) {
   ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
     final video = web.HTMLVideoElement()
       ..controls = true
-      ..autoplay = true;
+      ..autoplay = true
+      ..muted = true;
     video.style
       ..width = '100%'
       ..height = '100%'

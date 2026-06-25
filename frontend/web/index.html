@@ -32,17 +32,28 @@
   <title>NASCinema</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- HLS playback for the web player -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+  <!-- HLS playback (self-hosted so content blockers can't strip it) -->
+  <script src="hls.min.js"></script>
   <script>
     window.nascinemaAttachHls = function (video, url) {
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = url;
-      } else if (window.Hls && window.Hls.isSupported()) {
+      video.muted = true; // browsers only autoplay muted; user can unmute
+      var tryPlay = function () {
+        var p = video.play();
+        if (p) p.catch(function (e) { console.log('NASCinema play() blocked:', e); });
+      };
+      if (window.Hls && window.Hls.isSupported()) {
         var hls = new Hls();
+        hls.on(window.Hls.Events.MANIFEST_PARSED, tryPlay);
+        hls.on(window.Hls.Events.ERROR, function (evt, data) {
+          console.log('NASCinema HLS error:', data.type, data.details, 'fatal=' + data.fatal);
+        });
         hls.loadSource(url);
         hls.attachMedia(video);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.addEventListener('loadedmetadata', tryPlay);
       } else {
+        console.log('NASCinema: hls.js missing and no native HLS support');
         video.src = url;
       }
     };
