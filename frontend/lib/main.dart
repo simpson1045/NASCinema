@@ -74,7 +74,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
       await _config.set(url);
       if (!mounted) return;
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => LibraryScreen(baseUrl: url)),
+        MaterialPageRoute(
+          builder: (_) => LibraryScreen(baseUrl: url),
+          // Named so the cast remote can pop straight back to the library.
+          settings: const RouteSettings(name: 'library'),
+        ),
       );
     } catch (e) {
       setState(() => _error = e.toString());

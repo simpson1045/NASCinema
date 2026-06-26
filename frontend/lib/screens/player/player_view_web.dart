@@ -189,6 +189,9 @@ void playerSetSubtitleOffset(double seconds) {
   if (v != null) _setSubOffset(v, seconds);
 }
 
+// Audio passthrough is a native-renderer concern; the browser can't bitstream.
+void setForcePassthrough(bool on) {}
+
 /// Runtime facts for the "stats for nerds" overlay. The browser exposes far
 /// less than libmpv — just the decoded video dimensions and the engine.
 Map<String, String> playerStats() {

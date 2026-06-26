@@ -11,10 +11,9 @@ import 'cast/cast_session_manager.dart';
 
 /// Native Chromecast sender (Android / desktop) over the pure-Dart CASTV2 stack
 /// ported from NASRadio. Discovers via mDNS, connects to the Default Media
-/// Receiver, and LOADs a video URL — all over a raw TLS socket, so it works on
-/// a plain-HTTP LAN (no browser, no HTTPS requirement). Lives app-level so the
-/// session survives navigation: you can cast, browse for another movie, and the
-/// "phone as remote" controls keep driving the TV.
+/// Receiver, LOADs a video URL, and exposes transport/volume/subtitle controls
+/// for the remote — all over a raw TLS socket, so it works on a plain-HTTP LAN
+/// (no browser, no HTTPS). Lives app-level so the session survives navigation.
 class CastController extends ChangeNotifier {
   /// Default Media Receiver — plays HLS + a sidecar WebVTT track, and (unlike a
   /// custom HTTPS receiver) is allowed to load plain-HTTP LAN media.
@@ -35,21 +34,34 @@ class CastController extends ChangeNotifier {
   String _playerState = 'IDLE';
   String get playerState => _playerState;
 
-  // What's currently cast — drives the remote screen + library "now casting"
-  // bar, and lets the bar reopen the right movie's remote.
   int? _castingFileId;
   String _castingTitle = '';
   int? get castingFileId => _castingFileId;
   String get castingTitle => _castingTitle;
 
-  // Receiver-reported transport state (polled — Chromecast only pushes on
-  // change), so the remote's scrubber + play/pause reflect the TV.
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
   Duration get position => _position;
   Duration get duration => _duration;
   bool get isPlaying => _isPlaying;
+
+  // Receiver volume, kept in sync with RECEIVER_STATUS. controlType 'fixed'
+  // (typical for a TV → eARC → AVR chain, where the AVR owns volume) means
+  // SET_VOLUME is silently ignored — so the remote hides the volume keys.
+  double _volume = 1.0;
+  bool _muted = false;
+  String? _volumeControlType;
+  double get volume => _volume;
+  bool get muted => _muted;
+  bool get volumeControllable =>
+      _volumeControlType != null && _volumeControlType != 'fixed';
+
+  // Whether the cast media carries a subtitle track, and whether it's showing.
+  bool _hasSubtitles = false;
+  bool _subtitlesOn = false;
+  bool get hasSubtitles => _hasSubtitles;
+  bool get subtitlesOn => _subtitlesOn;
 
   /// Casting is available on this platform (native socket stack present).
   bool get supported => true;
@@ -58,8 +70,6 @@ class CastController extends ChangeNotifier {
   StreamSubscription? _stateSub;
   Timer? _poll;
 
-  /// mDNS-discover `_googlecast._tcp` devices, pushing each into [devices] as it
-  /// resolves so the picker populates live.
   Future<void> discover(
       {Duration timeout = const Duration(seconds: 8)}) async {
     if (_discovering) return;
@@ -67,7 +77,6 @@ class CastController extends ChangeNotifier {
     _devices.clear();
     notifyListeners();
     try {
-      // Android 13+ gates mDNS behind NEARBY_WIFI_DEVICES.
       if (Platform.isAndroid) {
         final st = await Permission.nearbyWifiDevices.request();
         if (!st.isGranted) {
@@ -97,7 +106,6 @@ class CastController extends ChangeNotifier {
           ));
           notifyListeners();
         } else if (event is BonsoirDiscoveryServiceFoundEvent) {
-          // Must explicitly resolve to get host/port.
           try {
             discovery.serviceResolver.resolveService(event.service);
           } catch (_) {}
@@ -114,11 +122,9 @@ class CastController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Open a session and launch the Default Media Receiver. Returns true once the
-  /// session reaches connected state.
   Future<bool> connect(CastDevice device) async {
     if (isConnected && _connected?.serviceName == device.serviceName) {
-      return true; // already on this device — reuse the session
+      return true;
     }
     await _cleanup();
     try {
@@ -150,7 +156,6 @@ class CastController extends ChangeNotifier {
     }
   }
 
-  /// LOAD a video on the receiver. [subUrl] '' / null = no subtitle track.
   Future<void> castVideo({
     required int fileId,
     required String url,
@@ -164,6 +169,8 @@ class CastController extends ChangeNotifier {
     _castingTitle = title;
     _position = Duration.zero;
     _duration = Duration.zero;
+    _hasSubtitles = subUrl != null && subUrl.isNotEmpty;
+    _subtitlesOn = _hasSubtitles;
     final media = <String, dynamic>{
       'contentId': url,
       'contentType': contentType,
@@ -176,7 +183,7 @@ class CastController extends ChangeNotifier {
       'currentTime': 0,
       'media': media,
     };
-    if (subUrl != null && subUrl.isNotEmpty) {
+    if (_hasSubtitles) {
       media['tracks'] = [
         {
           'trackId': 1,
@@ -203,6 +210,34 @@ class CastController extends ChangeNotifier {
     _media({'type': 'SEEK', 'currentTime': seconds});
   }
 
+  /// Show/hide the subtitle track on the receiver (EDIT_TRACKS_INFO).
+  void toggleSubtitles() {
+    final s = _session;
+    if (s == null || _mediaSessionId == null || !_hasSubtitles) return;
+    _subtitlesOn = !_subtitlesOn;
+    s.sendMessage(CastSession.kNamespaceMedia, {
+      'type': 'EDIT_TRACKS_INFO',
+      'mediaSessionId': _mediaSessionId,
+      'activeTrackIds': _subtitlesOn ? [1] : <int>[],
+    });
+    notifyListeners();
+  }
+
+  /// Set receiver volume (0..1). No-op when the chain reports it 'fixed'.
+  void setVolume(double v) {
+    final s = _session;
+    if (s == null || !volumeControllable) return;
+    final clamped = v.clamp(0.0, 1.0);
+    s.sendMessage(CastSession.kNamespaceReceiver, {
+      'type': 'SET_VOLUME',
+      'volume': {'level': clamped},
+    });
+    _volume = clamped;
+    notifyListeners();
+  }
+
+  void adjustVolume(double delta) => setVolume((_volume + delta).clamp(0.0, 1.0));
+
   void _media(Map<String, dynamic> msg) {
     final s = _session;
     if (s == null || _mediaSessionId == null) return;
@@ -211,25 +246,37 @@ class CastController extends ChangeNotifier {
   }
 
   void _onMessage(Map<String, dynamic> m) {
-    if (m['type'] != 'MEDIA_STATUS') return;
-    final list = m['status'] as List?;
-    if (list == null || list.isEmpty) return;
-    final st = list.first as Map<String, dynamic>;
-    _mediaSessionId = st['mediaSessionId'] as int? ?? _mediaSessionId;
-    _playerState = st['playerState'] as String? ?? _playerState;
-    _isPlaying = _playerState == 'PLAYING';
-    final ct = st['currentTime'];
-    if (ct is num) _position = Duration(milliseconds: (ct * 1000).round());
-    final media = st['media'];
-    if (media is Map && media['duration'] is num) {
-      _duration =
-          Duration(milliseconds: ((media['duration'] as num) * 1000).round());
+    final type = m['type'];
+    if (type == 'MEDIA_STATUS') {
+      final list = m['status'] as List?;
+      if (list == null || list.isEmpty) return;
+      final st = list.first as Map<String, dynamic>;
+      _mediaSessionId = st['mediaSessionId'] as int? ?? _mediaSessionId;
+      _playerState = st['playerState'] as String? ?? _playerState;
+      _isPlaying = _playerState == 'PLAYING';
+      final ct = st['currentTime'];
+      if (ct is num) _position = Duration(milliseconds: (ct * 1000).round());
+      final media = st['media'];
+      if (media is Map && media['duration'] is num) {
+        _duration =
+            Duration(milliseconds: ((media['duration'] as num) * 1000).round());
+      }
+      notifyListeners();
+    } else if (type == 'RECEIVER_STATUS') {
+      final status = m['status'] as Map<String, dynamic>?;
+      final vol = status?['volume'] as Map<String, dynamic>?;
+      if (vol != null) {
+        final level = vol['level'];
+        if (level is num) _volume = level.toDouble().clamp(0.0, 1.0);
+        final mut = vol['muted'];
+        if (mut is bool) _muted = mut;
+        final ct = vol['controlType'];
+        if (ct is String) _volumeControlType = ct;
+        notifyListeners();
+      }
     }
-    notifyListeners();
   }
 
-  // Chromecast only pushes status on state changes, so poll for position and
-  // advance locally between polls for a smooth scrubber.
   void _startPolling() {
     _poll?.cancel();
     _poll = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -266,6 +313,9 @@ class CastController extends ChangeNotifier {
     _duration = Duration.zero;
     _castingFileId = null;
     _castingTitle = '';
+    _hasSubtitles = false;
+    _subtitlesOn = false;
+    _volumeControlType = null;
     notifyListeners();
   }
 

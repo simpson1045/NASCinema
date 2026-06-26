@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
 import '../services/cast/cast_device.dart';
@@ -46,6 +47,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Map<String, String> _clientStats = const {};
   bool _statsVisible = false;
 
+  // Native renderer: force lossless audio passthrough (bitstream to the AVR).
+  static const _passthroughPrefKey = 'force_passthrough';
+  bool _forcePassthrough = false;
+
   double _position = 0;
   double _duration = 0;
   bool _paused = true;
@@ -85,13 +90,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // everything, so it declares 'native' and the backend skips transcode.
       final p = await ApiService(widget.baseUrl)
           .getPlay(widget.fileId, client: kIsWeb ? 'web' : 'native');
+      final passthrough = await _readPassthroughPref();
       if (!mounted) return;
+      setForcePassthrough(passthrough); // applied when buildPlayerView opens
       setState(() {
         _mode = p.mode;
         _reason = p.reason;
         _playUrl = '${widget.baseUrl}${p.url}';
         _isHls = p.mode != 'direct';
         _source = p.source;
+        _forcePassthrough = passthrough;
         // Built once — buildPlayerView registers a view factory per call.
         _player = buildPlayerView(_playUrl, _isHls);
       });
@@ -335,6 +343,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
+              if (!kIsWeb)
+                IconButton(
+                  onPressed: _openAudioSettings,
+                  tooltip: 'Audio passthrough',
+                  icon: Icon(Icons.tune,
+                      color:
+                          _forcePassthrough ? NasColors.amber : Colors.white,
+                      size: 22),
+                ),
               IconButton(
                 onPressed: () =>
                     setState(() => _statsVisible = !_statsVisible),
@@ -408,6 +425,54 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => RemoteScreen(baseUrl: widget.baseUrl)),
+    );
+  }
+
+  Future<bool> _readPassthroughPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_passthroughPrefKey) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Renderer audio settings (native only): force lossless bitstream to the AVR.
+  void _openAudioSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: NasColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+      ),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                value: _forcePassthrough,
+                activeThumbColor: NasColors.amber,
+                title: const Text('Force audio passthrough',
+                    style: TextStyle(color: NasColors.text)),
+                subtitle: const Text(
+                    'Bitstream TrueHD/Atmos/DTS-HD straight to your AVR — no PC '
+                    'decode. The thing Plex/JF won’t let you force. Applies '
+                    'on the next play.',
+                    style: TextStyle(color: NasColors.muted, fontSize: 12)),
+                onChanged: (v) async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool(_passthroughPrefKey, v);
+                  setForcePassthrough(v);
+                  if (mounted) setState(() => _forcePassthrough = v);
+                  setSheet(() {});
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

@@ -27,6 +27,7 @@ void playerToggleFullscreen() {}
 void installPlayerKeys() {}
 void removePlayerKeys() {}
 Map<String, String> playerStats() => const {};
+void setForcePassthrough(bool on) {}
 void playerSetSubtitle(String url) {}
 void playerClearSubtitle() {}
 void playerSetSubtitleOffset(double seconds) {}

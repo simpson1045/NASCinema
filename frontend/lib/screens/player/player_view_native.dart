@@ -16,6 +16,14 @@ import 'package:media_kit_video/media_kit_video.dart';
 bool _mkInit = false;
 Player? _player;
 
+// Opt-in lossless audio passthrough (set from renderer settings, persisted by
+// the player screen). OFF by default: forcing exclusive WASAPI + spdif on an
+// output device that can't bitstream silences or halts audio, so the user turns
+// it on only on the wired renderer (ELKO) where the AVR can decode it.
+const _spdifCodecs = 'ac3,dts,eac3,truehd,dts-hd,dts-hd-ma';
+bool _forcePassthrough = false;
+void setForcePassthrough(bool on) => _forcePassthrough = on;
+
 // media_kit has no mute flag; we emulate it by zeroing volume and remembering
 // the level to restore, matching the web <video>.muted semantics.
 bool _muted = false;
@@ -59,12 +67,17 @@ Widget buildPlayerView(String url, bool isHls) {
   // Surface failures off-box (ELKO has no shell): log the open + any libmpv
   // error next to the exe, readable over the C$ share.
   player.stream.error.listen((e) => _diag('ERROR: $e'));
-  _diag('open: $url');
+  _diag('open: $url (passthrough=$_forcePassthrough)');
 
-  // NOTE: lossless audio passthrough (audio-exclusive + audio-spdif bitstream of
-  // TrueHD/Atmos to the Denon) is deferred — forcing it made playback fail on
-  // ELKO when the default output device can't passthrough. It returns as a
-  // per-renderer setting we can tune on the box; for now mpv decodes normally.
+  // Lossless audio passthrough when the user has forced it: take exclusive
+  // control of the output device and bitstream the listed codecs straight to
+  // the AVR. Audio bypasses the Flutter texture, so it works even though video
+  // is composited. Off by default (see _forcePassthrough).
+  final platform = player.platform;
+  if (platform is NativePlayer && _forcePassthrough) {
+    platform.setProperty('audio-exclusive', 'yes');
+    platform.setProperty('audio-spdif', _spdifCodecs);
+  }
 
   // mpv plays HLS and plain files alike; `isHls` is irrelevant here. open()
   // autoplays, riding the detail-screen Play tap like the web leg.

@@ -17,6 +17,11 @@ class CastController extends ChangeNotifier {
   Duration get position => Duration.zero;
   Duration get duration => Duration.zero;
   bool get isPlaying => false;
+  double get volume => 1.0;
+  bool get muted => false;
+  bool get volumeControllable => false;
+  bool get hasSubtitles => false;
+  bool get subtitlesOn => false;
 
   Future<void> discover({Duration timeout = const Duration(seconds: 8)}) async {}
   Future<bool> connect(CastDevice device) async => false;
@@ -31,5 +36,8 @@ class CastController extends ChangeNotifier {
   void pause() {}
   void stop() {}
   void seekTo(double seconds) {}
+  void toggleSubtitles() {}
+  void setVolume(double v) {}
+  void adjustVolume(double delta) {}
   Future<void> disconnect() async {}
 }
