@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Release artifacts produced by backend/release.bat (binaries + manifest).
+backend/updates/*.apk
+backend/updates/*.zip
+backend/updates/*.tar.xz
+backend/updates/version.json

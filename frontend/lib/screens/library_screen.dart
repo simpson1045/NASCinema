@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/movie.dart';
 import '../services/api_service.dart';
 import '../services/cast_controller.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import 'movie_detail_screen.dart';
 import 'remote_screen.dart';
@@ -25,11 +26,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _future = _api.listMovies();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
   }
 
   Future<void> _refresh() async {
     setState(() => _future = _api.listMovies());
     await _future;
+  }
+
+  Future<void> _checkUpdate() async {
+    final info = await UpdateService.checkForUpdate(widget.baseUrl);
+    if (!mounted || info == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: NasColors.surface,
+      duration: const Duration(seconds: 8),
+      content: Text('Update available — v${info.version}',
+          style: const TextStyle(color: NasColors.text)),
+      action: SnackBarAction(
+        label: 'Update',
+        textColor: NasColors.amber,
+        onPressed: () => showDialog(
+          context: context,
+          builder: (_) => _UpdateDialog(baseUrl: widget.baseUrl, info: info),
+        ),
+      ),
+    ));
   }
 
   @override
@@ -324,6 +345,111 @@ class _Message extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Update prompt: shows the changelog + size, downloads with progress, installs.
+class _UpdateDialog extends StatefulWidget {
+  const _UpdateDialog({required this.baseUrl, required this.info});
+
+  final String baseUrl;
+  final UpdateInfo info;
+
+  @override
+  State<_UpdateDialog> createState() => _UpdateDialogState();
+}
+
+class _UpdateDialogState extends State<_UpdateDialog> {
+  double? _progress;
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _start() async {
+    setState(() {
+      _busy = true;
+      _progress = 0;
+      _error = null;
+    });
+    try {
+      final path = await UpdateService.downloadUpdate(
+        widget.baseUrl,
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+      await UpdateService.applyUpdate(path);
+      // Android: the system installer takes over (we stay). Windows: exits.
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Update failed: $e';
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mb = widget.info.sizeBytes / 1024 / 1024;
+    return AlertDialog(
+      backgroundColor: NasColors.surface,
+      title: Text('Update to v${widget.info.version}',
+          style: const TextStyle(color: NasColors.text)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.info.changelog.isNotEmpty)
+              Text(widget.info.changelog,
+                  style:
+                      const TextStyle(color: NasColors.muted, fontSize: 13)),
+            if (mb > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text('Download size: ${mb.toStringAsFixed(1)} MB',
+                    style:
+                        const TextStyle(color: NasColors.muted, fontSize: 12)),
+              ),
+            if (_busy)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Column(
+                  children: [
+                    LinearProgressIndicator(
+                        value: _progress,
+                        color: NasColors.amber,
+                        backgroundColor: NasColors.surfaceRaised),
+                    const SizedBox(height: 6),
+                    Text('${((_progress ?? 0) * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                            color: NasColors.muted, fontSize: 12)),
+                  ],
+                ),
+              ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(_error!,
+                    style: const TextStyle(color: NasColors.bad, fontSize: 12)),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Later', style: TextStyle(color: NasColors.muted)),
+        ),
+        TextButton(
+          onPressed: _busy ? null : _start,
+          child: Text(_busy ? 'Downloading…' : 'Download & install',
+              style: const TextStyle(color: NasColors.amber)),
+        ),
+      ],
     );
   }
 }

@@ -1,0 +1,3 @@
+# Release artifacts (nascinema-android.apk, nascinema-windows.zip) + version.json
+# land here, written by backend/release.bat. The binaries are gitignored; this
+# file just keeps the directory present.
