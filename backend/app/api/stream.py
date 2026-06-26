@@ -55,13 +55,30 @@ async def play_decision(
 ) -> dict:
     # `client` declares playback capability: "web" (browser caps) or "native"
     # (libmpv — direct-plays everything). The native ELKO renderer sends native.
-    _, d = await _file_and_decision(file_id, session, client)
+    mf, d = await _file_and_decision(file_id, session, client)
     url = (
         f"/api/stream/{file_id}/direct"
         if d["mode"] == "direct"
         else f"/api/stream/{file_id}/master.m3u8"
     )
-    return {"file_id": file_id, "mode": d["mode"], "reason": d["reason"], "url": url}
+    # Probed source facts for the "stats for nerds" overlay.
+    return {
+        "file_id": file_id,
+        "mode": d["mode"],
+        "reason": d["reason"],
+        "url": url,
+        "source": {
+            "container": mf.container,
+            "video_codec": mf.video_codec,
+            "audio_codec": mf.audio_codec,
+            "width": mf.width,
+            "height": mf.height,
+            "bit_depth": mf.bit_depth,
+            "hdr": mf.hdr,
+            "duration": mf.duration,
+            "size_bytes": mf.size_bytes,
+        },
+    }
 
 
 @router.get("/stream/{file_id}/direct")

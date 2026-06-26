@@ -188,3 +188,13 @@ void playerSetSubtitleOffset(double seconds) {
   final v = _v;
   if (v != null) _setSubOffset(v, seconds);
 }
+
+/// Runtime facts for the "stats for nerds" overlay. The browser exposes far
+/// less than libmpv — just the decoded video dimensions and the engine.
+Map<String, String> playerStats() {
+  final v = _v;
+  if (v == null) return const {};
+  final out = <String, String>{'Engine': 'hls.js / <video> (browser)'};
+  if (v.videoWidth > 0) out['Video out'] = '${v.videoWidth}×${v.videoHeight}';
+  return out;
+}

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
@@ -10,11 +12,6 @@ import 'package:media_kit_video/media_kit_video.dart';
 ///
 /// Every function here mirrors the web player's accessors one-for-one so
 /// `player_screen.dart` drives both legs through the same calls.
-
-/// Codecs we hand untouched to the AVR (Denon) to decode — lossless/object
-/// audio a browser can never bitstream. Not device names, just an mpv codec
-/// list; the actual output device stays whatever Windows/WASAPI selects.
-const _spdifCodecs = 'ac3,dts,eac3,truehd,dts-hd,dts-hd-ma';
 
 bool _mkInit = false;
 Player? _player;
@@ -36,6 +33,17 @@ void _disposePlayer() {
   p?.dispose();
 }
 
+/// Append a diagnostic line next to the running exe. ELKO (the renderer) has no
+/// remote shell, so this is how we read libmpv failures — over the C$ share.
+/// Best-effort; never throws into playback.
+void _diag(String line) {
+  try {
+    final dir = File(Platform.resolvedExecutable).parent.path;
+    File('$dir${Platform.pathSeparator}nascinema_player.log')
+        .writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
+  } catch (_) {}
+}
+
 Widget buildPlayerView(String url, bool isHls) {
   _ensureInit();
   // New title — tear down any prior libmpv instance (and its audio device)
@@ -48,14 +56,15 @@ Widget buildPlayerView(String url, bool isHls) {
   _muted = false;
   _volBeforeMute = 100;
 
-  // Lossless audio passthrough: take exclusive control of the output device
-  // and bitstream the listed codecs straight to the Denon. Audio bypasses the
-  // Flutter texture entirely, so this works even though video is composited.
-  final platform = player.platform;
-  if (platform is NativePlayer) {
-    platform.setProperty('audio-exclusive', 'yes');
-    platform.setProperty('audio-spdif', _spdifCodecs);
-  }
+  // Surface failures off-box (ELKO has no shell): log the open + any libmpv
+  // error next to the exe, readable over the C$ share.
+  player.stream.error.listen((e) => _diag('ERROR: $e'));
+  _diag('open: $url');
+
+  // NOTE: lossless audio passthrough (audio-exclusive + audio-spdif bitstream of
+  // TrueHD/Atmos to the Denon) is deferred — forcing it made playback fail on
+  // ELKO when the default output device can't passthrough. It returns as a
+  // per-renderer setting we can tune on the box; for now mpv decodes normally.
 
   // mpv plays HLS and plain files alike; `isHls` is irrelevant here. open()
   // autoplays, riding the detail-screen Play tap like the web leg.
@@ -169,4 +178,28 @@ void playerClearSubtitle() => _player?.setSubtitleTrack(SubtitleTrack.no());
 void playerSetSubtitleOffset(double seconds) {
   final p = _player?.platform;
   if (p is NativePlayer) p.setProperty('sub-delay', seconds.toString());
+}
+
+/// Runtime playback facts for the "stats for nerds" overlay — what libmpv is
+/// actually doing right now (vs the probed source the backend reports).
+Map<String, String> playerStats() {
+  final p = _player;
+  if (p == null) return const {};
+  final s = p.state;
+  final out = <String, String>{'Engine': 'libmpv (native, direct)'};
+  if ((s.width ?? 0) > 0 && (s.height ?? 0) > 0) {
+    out['Video out'] = '${s.width}×${s.height}';
+  }
+  final ap = s.audioParams;
+  final aud = <String>[];
+  if (ap.format != null && ap.format!.isNotEmpty) aud.add(ap.format!);
+  if ((ap.sampleRate ?? 0) > 0) {
+    aud.add('${(ap.sampleRate! / 1000).toStringAsFixed(1)} kHz');
+  }
+  if ((ap.channelCount ?? 0) > 0) aud.add('${ap.channelCount} ch');
+  if (aud.isNotEmpty) out['Audio out'] = aud.join(' · ');
+  if ((s.audioBitrate ?? 0) > 0) {
+    out['Audio bitrate'] = '${(s.audioBitrate! / 1000).round()} kbps';
+  }
+  return out;
 }

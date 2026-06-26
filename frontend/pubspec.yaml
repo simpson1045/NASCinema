@@ -43,6 +43,11 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
+  # Chromecast (native, pure-Dart CASTV2 — works over plain HTTP, no browser):
+  # bonsoir = mDNS discovery, protobuf = the cast channel wire format.
+  bonsoir: ^6.0.2
+  protobuf: ^3.1.0
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:

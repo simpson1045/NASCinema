@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
-import '../services/cast.dart';
+import '../services/cast/cast_device.dart';
+import '../services/cast_controller.dart';
 import '../theme/app_theme.dart';
 import 'player/player_view.dart';
 import 'player/scrubber.dart';
@@ -32,11 +33,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget? _player;
   bool _bannerVisible = true;
 
-  // Cast: the URL/type the local player resolved to (Chromecast plays the same
-  // stream), and whether a receiver is on the network this tick.
   String _playUrl = '';
   bool _isHls = false;
-  bool _castAvailable = false;
+  // Native Chromecast sender (Android/desktop). Web build gets a no-op stub.
+  final CastController _cast = CastController();
+
+  // Stats for nerds: probed source facts (from the backend) + live client-side
+  // playback facts (from the player engine), toggled by the info button.
+  Map<String, dynamic> _source = const {};
+  Map<String, String> _clientStats = const {};
+  bool _statsVisible = false;
 
   double _position = 0;
   double _duration = 0;
@@ -67,6 +73,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _offsetSave?.cancel();
     _bannerTimer?.cancel();
     removePlayerKeys();
+    _cast.dispose();
     super.dispose();
   }
 
@@ -82,6 +89,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _reason = p.reason;
         _playUrl = '${widget.baseUrl}${p.url}';
         _isHls = p.mode != 'direct';
+        _source = p.source;
         // Built once — buildPlayerView registers a view factory per call.
         _player = buildPlayerView(_playUrl, _isHls);
       });
@@ -103,7 +111,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _buffered = playerBuffered();
           _volume = playerVolume();
           _muted = playerMuted();
-          _castAvailable = castReady();
+          _clientStats = playerStats();
         });
       });
       _cachePoll =
@@ -174,20 +182,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _topBar(),
             if (_syncMode) _syncBar(),
             Expanded(
-              child: _player != null
-                  ? _player!
-                  : _error != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Text('Could not start playback:\n$_error',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: NasColors.bad)),
-                          ),
-                        )
-                      : const Center(
-                          child: CircularProgressIndicator(
-                              color: NasColors.amber)),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _player != null
+                      ? _player!
+                      : _error != null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text('Could not start playback:\n$_error',
+                                    textAlign: TextAlign.center,
+                                    style:
+                                        const TextStyle(color: NasColors.bad)),
+                              ),
+                            )
+                          : const Center(
+                              child: CircularProgressIndicator(
+                                  color: NasColors.amber)),
+                  if (_statsVisible)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      // Display-only; never steal pointer events (matters on web,
+                      // where the <video> platform view sits underneath).
+                      child: IgnorePointer(child: _statsPanel()),
+                    ),
+                ],
+              ),
             ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 350),
@@ -206,119 +228,174 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Widget _controlBar() {
+    // Inline volume slider only where there's room; phones use hardware keys.
+    final wide = MediaQuery.of(context).size.width > 520;
     return Container(
       color: Colors.black,
-      padding: const EdgeInsets.fromLTRB(6, 2, 14, 8),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            onPressed: () {
-              playerTogglePlay();
-              setState(() => _paused = playerPaused());
-            },
-            icon: Icon(_paused ? Icons.play_arrow : Icons.pause,
-                color: Colors.white, size: 28),
-          ),
-          Text(_fmt(_position),
-              style: const TextStyle(color: NasColors.muted, fontSize: 12)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Scrubber(
-              duration: _duration,
-              position: _position,
-              buffered: _buffered,
-              cached: _cached,
-              onSeek: (s) {
-                playerSeek(s);
-                setState(() => _position = s);
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(_fmt(_duration),
-              style: const TextStyle(color: NasColors.muted, fontSize: 12)),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: _openSubsMenu,
-            tooltip: 'Subtitles',
-            icon: Icon(
-                _activeSub != null
-                    ? Icons.closed_caption
-                    : Icons.closed_caption_outlined,
-                color: _activeSub != null ? NasColors.amber : Colors.white,
-                size: 22),
-          ),
-          if (_castAvailable)
-            IconButton(
-              onPressed: _castNow,
-              tooltip: 'Cast to TV',
-              icon: Icon(
-                  castConnected() ? Icons.cast_connected : Icons.cast,
-                  color: castConnected() ? NasColors.amber : Colors.white,
-                  size: 22),
-            ),
-          IconButton(
-            onPressed: () {
-              playerToggleMute();
-              setState(() => _muted = playerMuted());
-            },
-            icon: Icon(
-                (_muted || _volume == 0)
-                    ? Icons.volume_off_rounded
-                    : Icons.volume_up_rounded,
-                color: Colors.white,
-                size: 22),
-          ),
-          SizedBox(
-            width: 84,
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                activeTrackColor: NasColors.amber,
-                inactiveTrackColor: NasColors.surfaceRaised,
-                thumbColor: NasColors.amber,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+          // Scrubber on its own row so it never fights the buttons for width —
+          // the old single-row bar overflowed on narrow (phone) screens.
+          Row(
+            children: [
+              Text(_fmt(_position),
+                  style: const TextStyle(color: NasColors.muted, fontSize: 12)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Scrubber(
+                  duration: _duration,
+                  position: _position,
+                  buffered: _buffered,
+                  cached: _cached,
+                  onSeek: (s) {
+                    playerSeek(s);
+                    setState(() => _position = s);
+                  },
+                ),
               ),
-              child: Slider(
-                value: (_muted ? 0.0 : _volume).clamp(0.0, 1.0).toDouble(),
-                onChanged: (v) {
-                  playerSetVolume(v);
-                  setState(() {
-                    _volume = v;
-                    _muted = v == 0;
-                  });
+              const SizedBox(width: 10),
+              Text(_fmt(_duration),
+                  style: const TextStyle(color: NasColors.muted, fontSize: 12)),
+            ],
+          ),
+          Row(
+            children: [
+              IconButton(
+                onPressed: () {
+                  playerTogglePlay();
+                  setState(() => _paused = playerPaused());
                 },
+                icon: Icon(_paused ? Icons.play_arrow : Icons.pause,
+                    color: Colors.white, size: 28),
               ),
-            ),
-          ),
-          IconButton(
-            onPressed: playerToggleFullscreen,
-            tooltip: 'Fullscreen (F)',
-            icon: const Icon(Icons.fullscreen_rounded,
-                color: Colors.white, size: 24),
+              const Spacer(),
+              IconButton(
+                onPressed: _openSubsMenu,
+                tooltip: 'Subtitles',
+                icon: Icon(
+                    _activeSub != null
+                        ? Icons.closed_caption
+                        : Icons.closed_caption_outlined,
+                    color: _activeSub != null ? NasColors.amber : Colors.white,
+                    size: 22),
+              ),
+              if (_cast.supported)
+                AnimatedBuilder(
+                  animation: _cast,
+                  builder: (_, _) => IconButton(
+                    onPressed: _openCastSheet,
+                    tooltip: 'Cast to TV',
+                    icon: Icon(
+                        _cast.isConnected ? Icons.cast_connected : Icons.cast,
+                        color:
+                            _cast.isConnected ? NasColors.amber : Colors.white,
+                        size: 22),
+                  ),
+                ),
+              IconButton(
+                onPressed: () {
+                  playerToggleMute();
+                  setState(() => _muted = playerMuted());
+                },
+                icon: Icon(
+                    (_muted || _volume == 0)
+                        ? Icons.volume_off_rounded
+                        : Icons.volume_up_rounded,
+                    color: Colors.white,
+                    size: 22),
+              ),
+              if (wide)
+                SizedBox(
+                  width: 84,
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      activeTrackColor: NasColors.amber,
+                      inactiveTrackColor: NasColors.surfaceRaised,
+                      thumbColor: NasColors.amber,
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 12),
+                    ),
+                    child: Slider(
+                      value:
+                          (_muted ? 0.0 : _volume).clamp(0.0, 1.0).toDouble(),
+                      onChanged: (v) {
+                        playerSetVolume(v);
+                        setState(() {
+                          _volume = v;
+                          _muted = v == 0;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              IconButton(
+                onPressed: () =>
+                    setState(() => _statsVisible = !_statsVisible),
+                tooltip: 'Stats for nerds',
+                icon: Icon(Icons.info_outline,
+                    color: _statsVisible ? NasColors.amber : Colors.white,
+                    size: 22),
+              ),
+              IconButton(
+                onPressed: playerToggleFullscreen,
+                tooltip: 'Fullscreen (F)',
+                icon: const Icon(Icons.fullscreen_rounded,
+                    color: Colors.white, size: 24),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Hand the current stream + active subtitle to a Chromecast. The receiver
-  /// plays the same URL the local player uses (HLS master or the direct file);
-  /// the WebVTT track rides along as a sidecar.
-  void _castNow() {
-    var sub = '';
+  void _openCastSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: NasColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+      ),
+      builder: (_) => _CastSheet(
+        cast: _cast,
+        onPick: (d) {
+          Navigator.pop(context);
+          _castTo(d);
+        },
+        onDisconnect: () {
+          _cast.disconnect();
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  /// Connect, then hand the receiver the **web** decision URL — a Chromecast is
+  /// browser-class (can't direct-play the REMUX or bitstream), so it wants the
+  /// transcoded HLS (or a browser-native direct file), not this client's URL.
+  Future<void> _castTo(CastDevice device) async {
+    final ok = await _cast.connect(device);
+    if (!ok || !mounted) return;
+    final web =
+        await ApiService(widget.baseUrl).getPlay(widget.fileId, client: 'web');
+    String? sub;
     if (_activeSub != null) {
       final s = _subs.firstWhere((x) => x['id'] == _activeSub,
           orElse: () => const {});
-      final u = s['url'];
-      if (u != null) sub = '${widget.baseUrl}$u';
+      if (s['url'] != null) sub = '${widget.baseUrl}${s['url']}';
     }
-    castLoadMedia(
-      _playUrl,
-      _isHls ? 'application/vnd.apple.mpegurl' : 'video/mp4',
-      widget.title,
-      sub,
+    await _cast.castVideo(
+      url: '${widget.baseUrl}${web.url}',
+      contentType: web.mode == 'direct'
+          ? 'video/mp4'
+          : 'application/vnd.apple.mpegurl',
+      title: widget.title,
+      subUrl: sub,
     );
   }
 
@@ -491,6 +568,78 @@ class _PlayerScreenState extends State<PlayerScreen> {
             icon: const Icon(Icons.close, color: NasColors.muted, size: 16),
             visualDensity: VisualDensity.compact,
           ),
+        ],
+      ),
+    );
+  }
+
+  /// "Stats for nerds": probed source facts (left of the slash, what's on disk)
+  /// + live client facts (what the engine is actually outputting). The thing
+  /// Plex/JF bury — surfaced in one glance.
+  Widget _statsPanel() {
+    String? str(String k) {
+      final v = _source[k];
+      return (v == null || '$v'.isEmpty) ? null : '$v';
+    }
+
+    final rows = <(String, String)>[('Playback', (_mode ?? '—').toUpperCase())];
+    final w = _source['width'], h = _source['height'];
+    final vbits = <String>[
+      if (str('video_codec') != null) str('video_codec')!.toUpperCase(),
+      if (w != null && h != null) '$w×$h',
+      if (_source['hdr'] == true) 'HDR',
+      if (_source['bit_depth'] != null) '${_source['bit_depth']}-bit',
+    ];
+    if (vbits.isNotEmpty) rows.add(('Source video', vbits.join(' · ')));
+    if (str('audio_codec') != null) {
+      rows.add(('Source audio', str('audio_codec')!.toUpperCase()));
+    }
+    if (str('container') != null) {
+      rows.add(('Container', str('container')!.toUpperCase()));
+    }
+    _clientStats.forEach((k, v) => rows.add((k, v)));
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 340),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: NasColors.surfaceRaised),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text('STATS FOR NERDS',
+                style: TextStyle(
+                    color: NasColors.amber,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8)),
+          ),
+          for (final r in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1.5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 104,
+                    child: Text(r.$1,
+                        style: const TextStyle(
+                            color: NasColors.muted, fontSize: 12)),
+                  ),
+                  Expanded(
+                    child: Text(r.$2,
+                        style: const TextStyle(
+                            color: NasColors.text, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -705,6 +854,96 @@ class _SubsSheetState extends State<_SubsSheet> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Chromecast device picker. Kicks off mDNS discovery on open and lists devices
+/// live via the controller's ChangeNotifier.
+class _CastSheet extends StatefulWidget {
+  const _CastSheet({
+    required this.cast,
+    required this.onPick,
+    required this.onDisconnect,
+  });
+
+  final CastController cast;
+  final void Function(CastDevice) onPick;
+  final VoidCallback onDisconnect;
+
+  @override
+  State<_CastSheet> createState() => _CastSheetState();
+}
+
+class _CastSheetState extends State<_CastSheet> {
+  @override
+  void initState() {
+    super.initState();
+    widget.cast.discover();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: AnimatedBuilder(
+        animation: widget.cast,
+        builder: (_, _) {
+          final c = widget.cast;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                child: Row(
+                  children: [
+                    const Text('Cast to TV',
+                        style: TextStyle(
+                            color: NasColors.text,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    if (c.isDiscovering)
+                      const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: NasColors.amber)),
+                  ],
+                ),
+              ),
+              if (c.isConnected)
+                ListTile(
+                  leading:
+                      const Icon(Icons.cast_connected, color: NasColors.amber),
+                  title: Text('Connected — ${c.connectedDevice?.name ?? ''}',
+                      style: const TextStyle(color: NasColors.text)),
+                  trailing: TextButton(
+                    onPressed: widget.onDisconnect,
+                    child: const Text('Stop',
+                        style: TextStyle(color: NasColors.amber)),
+                  ),
+                ),
+              for (final d in c.devices)
+                ListTile(
+                  leading: const Icon(Icons.tv, color: NasColors.muted),
+                  title: Text(d.name,
+                      style: const TextStyle(color: NasColors.text)),
+                  subtitle: Text(d.host,
+                      style: const TextStyle(
+                          color: NasColors.muted, fontSize: 11)),
+                  onTap: () => widget.onPick(d),
+                ),
+              if (!c.isDiscovering && c.devices.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('No Chromecast devices found',
+                      style: TextStyle(color: NasColors.muted)),
+                ),
+              const SizedBox(height: 8),
+            ],
+          );
+        },
+      ),
     );
   }
 }
