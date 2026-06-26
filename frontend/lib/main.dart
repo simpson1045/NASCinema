@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'screens/library_screen.dart';
 import 'services/api_service.dart';
+import 'services/cast_controller.dart';
 import 'services/server_config.dart';
 import 'theme/app_theme.dart';
 
@@ -13,11 +15,17 @@ class NasCinemaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'NASCinema',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
-      home: const ConnectScreen(),
+    // Cast controller lives above the navigator so a cast session survives
+    // screen changes — cast a movie, browse for another, the remote keeps
+    // driving the TV. On web this is a no-op stub.
+    return ChangeNotifierProvider(
+      create: (_) => CastController(),
+      child: MaterialApp(
+        title: 'NASCinema',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.dark,
+        home: const ConnectScreen(),
+      ),
     );
   }
 }

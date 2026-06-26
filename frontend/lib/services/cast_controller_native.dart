@@ -12,8 +12,9 @@ import 'cast/cast_session_manager.dart';
 /// Native Chromecast sender (Android / desktop) over the pure-Dart CASTV2 stack
 /// ported from NASRadio. Discovers via mDNS, connects to the Default Media
 /// Receiver, and LOADs a video URL — all over a raw TLS socket, so it works on
-/// a plain-HTTP LAN (no browser, no HTTPS requirement). This is the "phone as
-/// remote" path; the web CAF sender was a dead end (Chrome needs HTTPS to cast).
+/// a plain-HTTP LAN (no browser, no HTTPS requirement). Lives app-level so the
+/// session survives navigation: you can cast, browse for another movie, and the
+/// "phone as remote" controls keep driving the TV.
 class CastController extends ChangeNotifier {
   /// Default Media Receiver — plays HLS + a sidecar WebVTT track, and (unlike a
   /// custom HTTPS receiver) is allowed to load plain-HTTP LAN media.
@@ -34,11 +35,28 @@ class CastController extends ChangeNotifier {
   String _playerState = 'IDLE';
   String get playerState => _playerState;
 
+  // What's currently cast — drives the remote screen + library "now casting"
+  // bar, and lets the bar reopen the right movie's remote.
+  int? _castingFileId;
+  String _castingTitle = '';
+  int? get castingFileId => _castingFileId;
+  String get castingTitle => _castingTitle;
+
+  // Receiver-reported transport state (polled — Chromecast only pushes on
+  // change), so the remote's scrubber + play/pause reflect the TV.
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  bool _isPlaying = false;
+  Duration get position => _position;
+  Duration get duration => _duration;
+  bool get isPlaying => _isPlaying;
+
   /// Casting is available on this platform (native socket stack present).
   bool get supported => true;
 
   StreamSubscription? _msgSub;
   StreamSubscription? _stateSub;
+  Timer? _poll;
 
   /// mDNS-discover `_googlecast._tcp` devices, pushing each into [devices] as it
   /// resolves so the picker populates live.
@@ -99,6 +117,9 @@ class CastController extends ChangeNotifier {
   /// Open a session and launch the Default Media Receiver. Returns true once the
   /// session reaches connected state.
   Future<bool> connect(CastDevice device) async {
+    if (isConnected && _connected?.serviceName == device.serviceName) {
+      return true; // already on this device — reuse the session
+    }
     await _cleanup();
     try {
       final session = await CastSessionManager().startSession(device);
@@ -107,6 +128,7 @@ class CastController extends ChangeNotifier {
       _stateSub = session.stateStream.listen((state) {
         if (state == CastSessionState.connected) {
           _connected = device;
+          _startPolling();
           notifyListeners();
           if (!connected.isCompleted) connected.complete(true);
         } else if (state == CastSessionState.closed) {
@@ -130,6 +152,7 @@ class CastController extends ChangeNotifier {
 
   /// LOAD a video on the receiver. [subUrl] '' / null = no subtitle track.
   Future<void> castVideo({
+    required int fileId,
     required String url,
     required String contentType,
     required String title,
@@ -137,6 +160,10 @@ class CastController extends ChangeNotifier {
   }) async {
     final s = _session;
     if (s == null || !isConnected) return;
+    _castingFileId = fileId;
+    _castingTitle = title;
+    _position = Duration.zero;
+    _duration = Duration.zero;
     final media = <String, dynamic>{
       'contentId': url,
       'contentType': contentType,
@@ -164,13 +191,17 @@ class CastController extends ChangeNotifier {
       load['activeTrackIds'] = [1];
     }
     s.sendMessage(CastSession.kNamespaceMedia, load);
+    notifyListeners();
   }
 
   void play() => _media({'type': 'PLAY'});
   void pause() => _media({'type': 'PAUSE'});
   void stop() => _media({'type': 'STOP'});
-  void seekTo(double seconds) =>
-      _media({'type': 'SEEK', 'currentTime': seconds});
+  void seekTo(double seconds) {
+    _position = Duration(milliseconds: (seconds * 1000).round());
+    notifyListeners();
+    _media({'type': 'SEEK', 'currentTime': seconds});
+  }
 
   void _media(Map<String, dynamic> msg) {
     final s = _session;
@@ -186,7 +217,34 @@ class CastController extends ChangeNotifier {
     final st = list.first as Map<String, dynamic>;
     _mediaSessionId = st['mediaSessionId'] as int? ?? _mediaSessionId;
     _playerState = st['playerState'] as String? ?? _playerState;
+    _isPlaying = _playerState == 'PLAYING';
+    final ct = st['currentTime'];
+    if (ct is num) _position = Duration(milliseconds: (ct * 1000).round());
+    final media = st['media'];
+    if (media is Map && media['duration'] is num) {
+      _duration =
+          Duration(milliseconds: ((media['duration'] as num) * 1000).round());
+    }
     notifyListeners();
+  }
+
+  // Chromecast only pushes status on state changes, so poll for position and
+  // advance locally between polls for a smooth scrubber.
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!isConnected) return;
+      if (_isPlaying && _duration > Duration.zero) {
+        _position += const Duration(seconds: 1);
+        if (_position > _duration) _position = _duration;
+        notifyListeners();
+      }
+      final s = _session;
+      if (s != null && _mediaSessionId != null) {
+        s.sendMessage(CastSession.kNamespaceMedia,
+            {'type': 'GET_STATUS', 'mediaSessionId': _mediaSessionId});
+      }
+    });
   }
 
   Future<void> disconnect() async {
@@ -203,10 +261,17 @@ class CastController extends ChangeNotifier {
     _connected = null;
     _mediaSessionId = null;
     _playerState = 'IDLE';
+    _isPlaying = false;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _castingFileId = null;
+    _castingTitle = '';
     notifyListeners();
   }
 
   Future<void> _cleanup() async {
+    _poll?.cancel();
+    _poll = null;
     await _msgSub?.cancel();
     await _stateSub?.cancel();
     _msgSub = null;

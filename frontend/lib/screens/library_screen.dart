@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/movie.dart';
 import '../services/api_service.dart';
+import '../services/cast_controller.dart';
 import '../theme/app_theme.dart';
 import 'movie_detail_screen.dart';
+import 'remote_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.baseUrl});
@@ -115,6 +118,73 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           );
         },
+      ),
+      bottomNavigationBar: _NowCastingBar(baseUrl: widget.baseUrl),
+    );
+  }
+}
+
+/// Persistent bar shown while a cast session is live, so you can browse the
+/// library and still see/return to what's playing on the TV.
+class _NowCastingBar extends StatelessWidget {
+  const _NowCastingBar({required this.baseUrl});
+
+  final String baseUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final cast = context.watch<CastController>();
+    if (!cast.isConnected) return const SizedBox.shrink();
+    return Material(
+      color: NasColors.surface,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => RemoteScreen(baseUrl: baseUrl)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.cast_connected,
+                    color: NasColors.amber, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        cast.castingTitle.isEmpty ? 'Casting' : cast.castingTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: NasColors.text,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      Text('on ${cast.connectedDevice?.name ?? 'TV'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: NasColors.muted, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => cast.isPlaying ? cast.pause() : cast.play(),
+                  icon: Icon(cast.isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white),
+                ),
+                IconButton(
+                  onPressed: () => cast.disconnect(),
+                  icon: const Icon(Icons.stop, color: NasColors.muted),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../services/api_service.dart';
 import '../services/cast/cast_device.dart';
@@ -9,6 +10,7 @@ import '../services/cast_controller.dart';
 import '../theme/app_theme.dart';
 import 'player/player_view.dart';
 import 'player/scrubber.dart';
+import 'remote_screen.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -35,8 +37,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   String _playUrl = '';
   bool _isHls = false;
-  // Native Chromecast sender (Android/desktop). Web build gets a no-op stub.
-  final CastController _cast = CastController();
+  // App-level Chromecast controller (survives navigation). Web → no-op stub.
+  late final CastController _cast;
 
   // Stats for nerds: probed source facts (from the backend) + live client-side
   // playback facts (from the player engine), toggled by the info button.
@@ -63,6 +65,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _cast = context.read<CastController>();
     _load();
   }
 
@@ -73,7 +76,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _offsetSave?.cancel();
     _bannerTimer?.cancel();
     removePlayerKeys();
-    _cast.dispose();
     super.dispose();
   }
 
@@ -285,7 +287,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 AnimatedBuilder(
                   animation: _cast,
                   builder: (_, _) => IconButton(
-                    onPressed: _openCastSheet,
+                    onPressed: _cast.isConnected ? _doCast : _openCastSheet,
                     tooltip: 'Cast to TV',
                     icon: Icon(
                         _cast.isConnected ? Icons.cast_connected : Icons.cast,
@@ -375,12 +377,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  /// Connect, then hand the receiver the **web** decision URL — a Chromecast is
-  /// browser-class (can't direct-play the REMUX or bitstream), so it wants the
-  /// transcoded HLS (or a browser-native direct file), not this client's URL.
   Future<void> _castTo(CastDevice device) async {
     final ok = await _cast.connect(device);
     if (!ok || !mounted) return;
+    await _doCast();
+  }
+
+  /// Hand the receiver the **web** decision URL — a Chromecast is browser-class
+  /// (can't direct-play the REMUX or bitstream), so it wants the transcoded HLS
+  /// (or a browser-native direct file), not this client's URL. Then replace this
+  /// screen with the remote — replacing it disposes the local player, so local
+  /// playback stops cleanly (no double playback).
+  Future<void> _doCast() async {
     final web =
         await ApiService(widget.baseUrl).getPlay(widget.fileId, client: 'web');
     String? sub;
@@ -390,12 +398,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (s['url'] != null) sub = '${widget.baseUrl}${s['url']}';
     }
     await _cast.castVideo(
+      fileId: widget.fileId,
       url: '${widget.baseUrl}${web.url}',
-      contentType: web.mode == 'direct'
-          ? 'video/mp4'
-          : 'application/vnd.apple.mpegurl',
+      contentType:
+          web.mode == 'direct' ? 'video/mp4' : 'application/vnd.apple.mpegurl',
       title: widget.title,
       subUrl: sub,
+    );
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => RemoteScreen(baseUrl: widget.baseUrl)),
     );
   }
 

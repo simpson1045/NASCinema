@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'cast/cast_device.dart';
 
 /// Web fallback: the pure-Dart cast stack needs raw TLS sockets (dart:io),
-/// which the browser can't do. No-op here so player_screen compiles on web;
-/// casting from the browser would need the HTTPS-gated CAF sender instead.
+/// which the browser can't do. No-op here so the rest of the app compiles on
+/// web; casting from the browser would need the HTTPS-gated CAF sender instead.
 class CastController extends ChangeNotifier {
   bool get supported => false;
   List<CastDevice> get devices => const [];
@@ -12,10 +12,16 @@ class CastController extends ChangeNotifier {
   bool get isConnected => false;
   CastDevice? get connectedDevice => null;
   String get playerState => 'IDLE';
+  int? get castingFileId => null;
+  String get castingTitle => '';
+  Duration get position => Duration.zero;
+  Duration get duration => Duration.zero;
+  bool get isPlaying => false;
 
   Future<void> discover({Duration timeout = const Duration(seconds: 8)}) async {}
   Future<bool> connect(CastDevice device) async => false;
   Future<void> castVideo({
+    required int fileId,
     required String url,
     required String contentType,
     required String title,
