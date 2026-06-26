@@ -48,14 +48,30 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$new = $existing -replace '(?m)^version:.*$', 'version: %VERSION%+%BUILD%';" ^
   "[IO.File]::WriteAllText('%PUBSPEC%', $new, [Text.UTF8Encoding]::new($false))" || exit /b 1
 
+echo [1.5/7] flutter clean + pub get (release builds reuse a stale Dart
+echo         snapshot otherwise — exe relinks but app.so/dex stays old)...
+pushd "%FRONTEND%"
+call flutter clean || (popd ^& exit /b 1)
+call flutter pub get || (popd ^& exit /b 1)
+popd
+
 echo [2/7] flutter build apk --release ...
 pushd "%FRONTEND%"
 call flutter build apk --release || (popd ^& exit /b 1)
 popd
 
-echo [3/7] flutter build windows --release ...
+REM The `jni` plugin's Windows native links against the JDK's jvm.lib; the
+REM machine's default JAVA_HOME is a 32-bit JDK, so an x64 build fails with
+REM "machine type x86 conflicts with x64". Point at an x64 JDK for this step.
+set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot"
+echo [3/7] flutter build windows --release (JAVA_HOME=%JAVA_HOME%) ...
 pushd "%FRONTEND%"
 call flutter build windows --release || (popd ^& exit /b 1)
+popd
+
+echo [3.5/7] flutter build web (clean wiped build\web — restore the served UI)...
+pushd "%FRONTEND%"
+call flutter build web --pwa-strategy=none || (popd ^& exit /b 1)
 popd
 
 if not exist "%APK_SRC%" (
@@ -69,6 +85,8 @@ if not exist "%WIN_SRC%\data\app.so" (
 
 echo [4/7] Copying APK...
 copy /Y "%APK_SRC%" "%APK_DST%" >nul || exit /b 1
+REM Also serve it at the friendly URL (/nascinema.apk) for manual installs.
+copy /Y "%APK_SRC%" "%FRONTEND%\build\web\nascinema.apk" >nul
 
 echo [5/7] Zipping Windows build...
 REM Compress-Archive can exit 0 while silently failing (e.g. nascinema.exe held

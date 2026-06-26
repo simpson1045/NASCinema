@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.3.9 - 2026-06-25
+- **Roku-style cast remote**: a D-pad ring (play/pause, seek ±10, volume) over buttons for subtitles, library, and stop. Subtitles and volume are now controllable from the phone (volume hides when the AV chain owns it).
+- **Force audio passthrough** (native renderer): an opt-in toggle to bitstream TrueHD/Atmos/DTS-HD straight to your AVR — no PC decode.
+
 ## 0.3.8 - 2026-06-25
 - **Native ELKO renderer** (media_kit/libmpv): direct-plays HEVC/HDR/TrueHD off disk — no server transcode.
 - **Capability-aware playback**: the native client direct-plays; the browser still gets the honest transcode + "why" badge.
