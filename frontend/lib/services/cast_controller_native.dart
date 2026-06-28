@@ -39,6 +39,12 @@ class CastController extends ChangeNotifier {
   int? get castingFileId => _castingFileId;
   String get castingTitle => _castingTitle;
 
+  // Probed source + stream type, for the remote's "stats for nerds" sheet.
+  Map<String, dynamic> _castSource = const {};
+  String _castContentType = '';
+  Map<String, dynamic> get castSource => _castSource;
+  bool get castIsHls => _castContentType.contains('mpegurl');
+
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
@@ -161,16 +167,22 @@ class CastController extends ChangeNotifier {
     required String url,
     required String contentType,
     required String title,
+    Map<String, dynamic> source = const {},
     String? subUrl,
+    bool subActive = true,
   }) async {
     final s = _session;
     if (s == null || !isConnected) return;
     _castingFileId = fileId;
     _castingTitle = title;
+    _castSource = source;
+    _castContentType = contentType;
     _position = Duration.zero;
     _duration = Duration.zero;
+    // Attach the track if one's available (so the remote can toggle it), but
+    // only show it if it was active before casting.
     _hasSubtitles = subUrl != null && subUrl.isNotEmpty;
-    _subtitlesOn = _hasSubtitles;
+    _subtitlesOn = _hasSubtitles && subActive;
     final media = <String, dynamic>{
       'contentId': url,
       'contentType': contentType,
@@ -195,7 +207,7 @@ class CastController extends ChangeNotifier {
           'language': 'en',
         }
       ];
-      load['activeTrackIds'] = [1];
+      load['activeTrackIds'] = subActive ? [1] : <int>[];
     }
     s.sendMessage(CastSession.kNamespaceMedia, load);
     notifyListeners();
@@ -316,6 +328,8 @@ class CastController extends ChangeNotifier {
     _hasSubtitles = false;
     _subtitlesOn = false;
     _volumeControlType = null;
+    _castSource = const {};
+    _castContentType = '';
     notifyListeners();
   }
 

@@ -409,10 +409,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final web =
         await ApiService(widget.baseUrl).getPlay(widget.fileId, client: 'web');
     String? sub;
+    var subActive = true;
     if (_activeSub != null) {
       final s = _subs.firstWhere((x) => x['id'] == _activeSub,
           orElse: () => const {});
       if (s['url'] != null) sub = '${widget.baseUrl}${s['url']}';
+    } else if (_subs.isNotEmpty && _subs.first['url'] != null) {
+      // No active sub — attach one (off) so it's togglable from the remote.
+      sub = '${widget.baseUrl}${_subs.first['url']}';
+      subActive = false;
     }
     await _cast.castVideo(
       fileId: widget.fileId,
@@ -420,7 +425,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       contentType:
           web.mode == 'direct' ? 'video/mp4' : 'application/vnd.apple.mpegurl',
       title: widget.title,
+      source: web.source,
       subUrl: sub,
+      subActive: subActive,
     );
     if (!mounted) return;
     Navigator.of(context).pushReplacement(

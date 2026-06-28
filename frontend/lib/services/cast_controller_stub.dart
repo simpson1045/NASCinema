@@ -22,6 +22,8 @@ class CastController extends ChangeNotifier {
   bool get volumeControllable => false;
   bool get hasSubtitles => false;
   bool get subtitlesOn => false;
+  Map<String, dynamic> get castSource => const {};
+  bool get castIsHls => false;
 
   Future<void> discover({Duration timeout = const Duration(seconds: 8)}) async {}
   Future<bool> connect(CastDevice device) async => false;
@@ -30,7 +32,9 @@ class CastController extends ChangeNotifier {
     required String url,
     required String contentType,
     required String title,
+    Map<String, dynamic> source = const {},
     String? subUrl,
+    bool subActive = true,
   }) async {}
   void play() {}
   void pause() {}

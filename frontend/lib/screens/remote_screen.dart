@@ -33,6 +33,82 @@ class RemoteScreen extends StatelessWidget {
             style: const TextStyle(color: NasColors.text)),
       ));
 
+  void _openStats(BuildContext context, CastController cast) =>
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: NasColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        ),
+        builder: (_) => SafeArea(child: _statsContent(cast)),
+      );
+
+  Widget _statsContent(CastController cast) {
+    final s = cast.castSource;
+    String? str(String k) {
+      final v = s[k];
+      return (v == null || '$v'.isEmpty) ? null : '$v';
+    }
+
+    final w = s['width'], h = s['height'];
+    final rows = <(String, String)>[
+      ('Casting to', cast.connectedDevice?.name ?? 'TV'),
+      ('Stream', cast.castIsHls ? 'HLS · server transcode' : 'Direct file'),
+    ];
+    final vbits = <String>[
+      if (str('video_codec') != null) str('video_codec')!.toUpperCase(),
+      if (w != null && h != null) '$w×$h',
+      if (s['hdr'] == true) 'HDR',
+    ];
+    if (vbits.isNotEmpty) rows.add(('Source video', vbits.join(' · ')));
+    if (str('audio_codec') != null) {
+      rows.add(('Source audio', str('audio_codec')!.toUpperCase()));
+    }
+    if (str('container') != null) {
+      rows.add(('Container', str('container')!.toUpperCase()));
+    }
+    rows.add(('State', cast.isPlaying ? 'Playing' : 'Paused'));
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('STATS FOR NERDS',
+                style: TextStyle(
+                    color: NasColors.amber,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8)),
+          ),
+          for (final r in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 110,
+                    child: Text(r.$1,
+                        style: const TextStyle(
+                            color: NasColors.muted, fontSize: 13)),
+                  ),
+                  Expanded(
+                    child: Text(r.$2,
+                        style: const TextStyle(
+                            color: NasColors.text, fontSize: 13)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cast = context.watch<CastController>();
@@ -68,6 +144,12 @@ class RemoteScreen extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                                 color: NasColors.muted, fontSize: 12)),
+                      ),
+                      IconButton(
+                        onPressed: () => _openStats(context, cast),
+                        tooltip: 'Stats for nerds',
+                        icon: const Icon(Icons.info_outline,
+                            color: Colors.white, size: 20),
                       ),
                       const Icon(Icons.cast_connected,
                           color: NasColors.amber, size: 18),
