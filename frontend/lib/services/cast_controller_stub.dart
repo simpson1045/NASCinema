@@ -43,6 +43,8 @@ class CastController extends ChangeNotifier {
     String? meta,
     List<Map<String, dynamic>> subtitleTracks = const [],
     int activeSubId = 0,
+    double startTime = 0,
+    String? baseUrl,
   }) async {}
   void play() {}
   void pause() {}

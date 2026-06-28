@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_session
 from ..metadata import get_movie_logo
 from ..models import MediaFile, Movie
+from ..models.watch_progress import WatchProgress
 from ..playback import decide
 from ..streaming import cached_ranges, ensure_segment, get_or_start, log_access
 
@@ -74,6 +75,12 @@ async def play_decision(
                 backdrop = f"https://image.tmdb.org/t/p/w1280{mv.backdrop_path}"
             if mv.tmdb_id:
                 logo = await get_movie_logo(mv.tmdb_id)
+    # Where to resume + which subtitle was on (0 / null when fresh).
+    prog = await session.scalar(
+        select(WatchProgress).where(WatchProgress.media_file_id == file_id)
+    )
+    resume_position = prog.position_seconds if prog else 0.0
+    resume_subtitle = prog.subtitle_id if prog else None
     # Probed source facts for the "stats for nerds" overlay.
     return {
         "file_id": file_id,
@@ -82,6 +89,8 @@ async def play_decision(
         "url": url,
         "backdrop": backdrop,
         "logo": logo,
+        "resume_position": resume_position,
+        "resume_subtitle": resume_subtitle,
         "source": {
             "container": mf.container,
             "video_codec": mf.video_codec,

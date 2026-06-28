@@ -101,6 +101,8 @@ class ApiService {
         Map<String, dynamic> source,
         String? backdrop,
         String? logo,
+        double resumePosition,
+        String? resumeSubtitle,
       })> getPlay(int fileId, {String client = 'web'}) async {
     final r = await http
         .get(_u('/api/play/$fileId?client=$client'))
@@ -116,7 +118,25 @@ class ApiService {
       source: (d['source'] as Map<String, dynamic>?) ?? const {},
       backdrop: d['backdrop'] as String?,
       logo: d['logo'] as String?,
+      resumePosition: (d['resume_position'] as num?)?.toDouble() ?? 0.0,
+      resumeSubtitle: d['resume_subtitle'] as String?,
     );
+  }
+
+  /// Save where the user is in a file (+ which subtitle is on) so the next play
+  /// resumes there. Best-effort — never throws into the playback path.
+  Future<void> saveProgress(int fileId, double position, String? subtitle) async {
+    try {
+      await http
+          .put(
+            _u('/api/progress/$fileId'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'position': position, 'subtitle': subtitle}),
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // ignore — a missed save just means a slightly stale resume point
+    }
   }
 
   /// Converted spans (seconds) for the scrubber, plus the film's duration.

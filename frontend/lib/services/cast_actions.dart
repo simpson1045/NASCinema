@@ -24,8 +24,13 @@ Future<void> castFileToTv(
   final web = await api.getPlay(fileId, client: 'web');
   final castBase = cast.hasCustomReceiver ? cast.castBase : baseUrl;
 
+  // Which subtitle to start on: an explicit pick (in-player), else the saved
+  // resume subtitle.
+  final wantSub = activeSubtitleId ?? web.resumeSubtitle;
+
   // Declare every available subtitle as a cast track (trackId = index + 1) so
-  // the remote can switch among them; activeSubId picks the starting one.
+  // the remote can switch among them; activeSubId picks the starting one. Each
+  // track carries its backend subtitle id (subId) so progress can be saved.
   final subtitleTracks = <Map<String, dynamic>>[];
   var activeSubId = 0;
   try {
@@ -40,8 +45,9 @@ Future<void> castFileToTv(
         'url': '$castBase$u',
         'name': (s['label'] ?? 'Subtitle $id').toString(),
         'language': 'und',
+        'subId': s['id'],
       });
-      if (activeSubtitleId != null && s['id'] == activeSubtitleId) {
+      if (wantSub != null && s['id'] == wantSub) {
         activeSubId = id;
       }
     }
@@ -68,6 +74,8 @@ Future<void> castFileToTv(
     meta: meta,
     subtitleTracks: subtitleTracks,
     activeSubId: activeSubId,
+    startTime: web.resumePosition,
+    baseUrl: baseUrl,
   );
 
   if (!context.mounted) return;

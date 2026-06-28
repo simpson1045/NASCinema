@@ -76,6 +76,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _cachePoll;
   Timer? _bannerTimer;
 
+  // Resume: where to seek to + which subtitle to re-enable (from the backend),
+  // applied once the player reports a duration. _saveTimer persists progress.
+  double _resumePosition = 0;
+  String? _resumeSubtitle;
+  bool _resumeApplied = false;
+  Timer? _saveTimer;
+
   @override
   void initState() {
     super.initState();
@@ -85,12 +92,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _saveProgress(); // capture the resume point on the way out
     _poll?.cancel();
     _cachePoll?.cancel();
     _offsetSave?.cancel();
     _bannerTimer?.cancel();
+    _saveTimer?.cancel();
     removePlayerKeys();
     super.dispose();
+  }
+
+  /// Persist the local playback position + active subtitle for resume. Skips
+  /// the very start/end so we don't clobber a good resume point with 0.
+  void _saveProgress() {
+    if (_duration <= 0 || _position <= 2) return;
+    if (_position >= _duration - 5) return; // basically finished
+    ApiService(widget.baseUrl).saveProgress(widget.fileId, _position, _activeSub);
   }
 
   Future<void> _load() async {
@@ -100,6 +117,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // transcodes what they can't natively play (HEVC/HDR/TrueHD).
       final p = await ApiService(widget.baseUrl)
           .getPlay(widget.fileId, client: _isDesktop ? 'native' : 'web');
+      _resumePosition = p.resumePosition;
+      _resumeSubtitle = p.resumeSubtitle;
       final passthrough = await _readPassthroughPref();
       if (!mounted) return;
       setForcePassthrough(passthrough); // applied when buildPlayerView opens
@@ -133,10 +152,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _muted = playerMuted();
           _clientStats = playerStats();
         });
+        // Resume once the player knows its duration (so the seek lands).
+        if (!_resumeApplied && _resumePosition > 2 && _duration > 0) {
+          _resumeApplied = true;
+          if (_resumePosition < _duration - 5) {
+            playerSeek(_resumePosition);
+            setState(() => _position = _resumePosition);
+          }
+        }
       });
       _cachePoll =
           Timer.periodic(const Duration(seconds: 2), (_) => _refreshCached());
       _refreshCached();
+      // Persist the resume point periodically while watching.
+      _saveTimer =
+          Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
       _loadSubs();
     } catch (e) {
       if (!mounted) return;
@@ -153,6 +183,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _subOffset = r.offset;
       });
       if (r.offset != 0) playerSetSubtitleOffset(r.offset);
+      // Re-enable the subtitle the user had on last time, if it still exists.
+      if (_resumeSubtitle != null && _activeSub == null) {
+        for (final s in _subs) {
+          if (s['id'] == _resumeSubtitle) {
+            _selectSub(s);
+            break;
+          }
+        }
+      }
     } catch (_) {
       // best-effort
     }

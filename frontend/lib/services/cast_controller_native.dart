@@ -5,6 +5,7 @@ import 'package:bonsoir/bonsoir.dart';
 import 'package:flutter/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'api_service.dart';
 import 'cast/cast_device.dart';
 import 'cast/cast_session.dart';
 import 'cast/cast_session_manager.dart';
@@ -103,6 +104,12 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
   int get activeSubId => _activeSubId;
   bool get hasSubtitles => _subtitleOptions.isNotEmpty;
   bool get subtitlesOn => _activeSubId > 0;
+
+  // For persisting resume progress while casting: where to POST, the trackId →
+  // backend-subtitle-id map, and a tick counter to throttle saves.
+  String? _castBaseUrl;
+  Map<int, String> _subIdByTrack = {};
+  int _pollTick = 0;
 
   /// Casting is available on this platform (native socket stack present).
   bool get supported => true;
@@ -223,6 +230,8 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
     String? meta,
     List<Map<String, dynamic>> subtitleTracks = const [],
     int activeSubId = 0,
+    double startTime = 0,
+    String? baseUrl,
   }) async {
     final s = _session;
     if (s == null || !isConnected) return;
@@ -230,14 +239,21 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
     _castingTitle = title;
     _castSource = source;
     _castContentType = contentType;
-    _position = Duration.zero;
+    _castBaseUrl = baseUrl ?? _castBaseUrl;
+    _position = Duration(milliseconds: (startTime * 1000).round());
     _duration = Duration.zero;
     // Declare every available sub track so the remote can switch among them;
-    // activeSubId (0 = off) picks which one starts showing.
+    // activeSubId (0 = off) picks which one starts showing. Keep the trackId →
+    // backend-subtitle-id map so we can persist which sub is on.
     _subtitleOptions = subtitleTracks
         .map((t) =>
             (id: t['trackId'] as int, label: (t['name'] ?? 'Subtitle').toString()))
         .toList();
+    _subIdByTrack = {
+      for (final t in subtitleTracks)
+        if (t['trackId'] is int && t['subId'] != null)
+          t['trackId'] as int: t['subId'].toString(),
+    };
     _activeSubId = activeSubId;
     final media = <String, dynamic>{
       'contentId': url,
@@ -258,7 +274,7 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
     final load = <String, dynamic>{
       'type': 'LOAD',
       'autoPlay': true,
-      'currentTime': 0,
+      'currentTime': startTime,
       'media': media,
     };
     if (subtitleTracks.isNotEmpty) {
@@ -380,6 +396,27 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
         if (md is Map && md['title'] is String && (md['title'] as String).isNotEmpty) {
           _castingTitle = md['title'] as String;
         }
+        // Rebuild the subtitle track list from the running media's declared
+        // tracks, so the remote's subtitle picker works again after a rejoin.
+        final tracks = media['tracks'];
+        if (tracks is List && tracks.isNotEmpty) {
+          final subs = <({int id, String label})>[];
+          for (final t in tracks) {
+            if (t is Map && t['type'] == 'TEXT' && t['trackId'] is int) {
+              subs.add((
+                id: t['trackId'] as int,
+                label: (t['name'] ?? 'Subtitle').toString(),
+              ));
+            }
+          }
+          if (subs.isNotEmpty) _subtitleOptions = subs;
+        }
+      }
+      // Which subtitle (if any) is currently showing.
+      final active = st['activeTrackIds'];
+      if (active is List) {
+        _activeSubId =
+            (active.isNotEmpty && active.first is int) ? active.first as int : 0;
       }
       notifyListeners();
     } else if (type == 'RECEIVER_STATUS') {
@@ -407,11 +444,28 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       }
       final s = _session;
-      if (s != null && _mediaSessionId != null) {
-        s.sendMessage(CastSession.kNamespaceMedia,
-            {'type': 'GET_STATUS', 'mediaSessionId': _mediaSessionId});
+      if (s != null) {
+        // Always poll status. Without a mediaSessionId (e.g. right after a
+        // rejoin-on-resume) the receiver replies with the running media's full
+        // status — that re-discovers the session and repopulates the remote.
+        final msg = <String, dynamic>{'type': 'GET_STATUS'};
+        if (_mediaSessionId != null) msg['mediaSessionId'] = _mediaSessionId;
+        s.sendMessage(CastSession.kNamespaceMedia, msg);
       }
+      if (++_pollTick % 15 == 0) _saveProgress(); // resume point, ~every 15s
     });
+  }
+
+  /// Persist the current cast position + active subtitle so the next play (here
+  /// or on another device) resumes there. Fire-and-forget, best-effort.
+  void _saveProgress() {
+    final base = _castBaseUrl;
+    final fid = _castingFileId;
+    if (base == null || fid == null) return;
+    final pos = _position.inMilliseconds / 1000.0;
+    if (pos <= 0) return;
+    final subId = _activeSubId > 0 ? _subIdByTrack[_activeSubId] : null;
+    ApiService(base).saveProgress(fid, pos, subId);
   }
 
   @override
@@ -452,6 +506,7 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onClosed() {
+    _saveProgress(); // capture the resume point before we clear it
     _connected = null;
     _mediaSessionId = null;
     _playerState = 'IDLE';
