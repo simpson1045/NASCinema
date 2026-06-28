@@ -125,7 +125,9 @@ body.paused #overlay { opacity: 1; }
   right: 64px;
   font-size: 26px;
   color: var(--muted);
+  transition: opacity 0.4s ease;
 }
+#clock.hidden { opacity: 0; }
 
 /* Idle / Art Mode. */
 #idle {

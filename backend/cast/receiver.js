@@ -146,6 +146,9 @@ function setState(state) {
   const S = cast.framework.messages.PlayerState;
   const idle = state === S.IDLE || !state;
   els.idle.classList.toggle('hidden', !idle);
+  // The clock is an art-mode touch — only show it on the idle screen, never
+  // over the movie during playback.
+  els.clock.classList.toggle('hidden', !idle);
   document.body.classList.toggle('paused', state === S.PAUSED || state === S.BUFFERING);
   // Park the clearlogo/title in the corner only while paused.
   els.pausedTag.classList.toggle('hidden', state !== S.PAUSED);
@@ -175,7 +178,19 @@ try {
   pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
     const cid = (req.media && req.media.contentId) || '?';
     dbg('LOAD ' + String(cid).slice(0, 64));
-    if (req.media) applyMeta(req.media);
+    if (req.media) {
+      applyMeta(req.media);
+      // Match the web player's subtitle look: no black box, white text with a
+      // black outline for readability (colors are #RRGGBBAA).
+      req.media.textTrackStyle = {
+        backgroundColor: '#00000000',
+        foregroundColor: '#FFFFFFFF',
+        edgeType: 'OUTLINE',
+        edgeColor: '#000000FF',
+        fontScale: 1.0,
+        fontGenericFamily: 'SANS_SERIF',
+      };
+    }
     toggleStats(false);
     // Reliably drop the idle screen the moment media loads — otherwise the
     // opaque "Ready to cast" overlay sits on top of the video (audio plays,

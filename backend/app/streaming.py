@@ -221,15 +221,14 @@ def _write_vod_playlist(out_dir: Path, duration: float) -> None:
 
 
 @_lru_cache(maxsize=1)
-def _use_nvenc() -> bool:
-    """Whether to transcode on the GPU. 'auto' actually test-runs a tiny NVENC
-    encode so a box with the encoder compiled in but no usable GPU still falls
-    back to x264."""
-    mode = get_settings().transcode_hwaccel.strip().lower()
-    if mode == "cpu":
-        return False
-    if mode in ("nvenc", "gpu", "cuda"):
-        return True
+@_lru_cache(maxsize=1)
+def _nvenc_probe() -> bool:
+    """Test-run a tiny NVENC encode to see if the GPU encoder actually works.
+    Cached for the process lifetime: GPU capability doesn't change at runtime,
+    and this shells out to ffmpeg (up to a 25s blocking call). Caching keeps it
+    OFF the hot path — it previously ran on every transcode start and every
+    seek-restart while the global session lock was held, which serialised all
+    streaming requests behind a multi-second probe under cast load."""
     try:
         r = subprocess.run(
             [ffmpeg_path(), "-hide_banner", "-f", "lavfi",
@@ -240,6 +239,17 @@ def _use_nvenc() -> bool:
         return r.returncode == 0
     except Exception:
         return False
+
+
+def _use_nvenc() -> bool:
+    """Whether to transcode on the GPU. 'auto' test-runs NVENC once (cached) so a
+    box with the encoder compiled in but no usable GPU still falls back to x264."""
+    mode = get_settings().transcode_hwaccel.strip().lower()
+    if mode == "cpu":
+        return False
+    if mode in ("nvenc", "gpu", "cuda"):
+        return True
+    return _nvenc_probe()
 
 
 # libplacebo HDR(PQ/BT.2020) -> SDR(BT.709) tone-map, scaled + 8-bit, all on GPU.
