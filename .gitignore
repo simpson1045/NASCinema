@@ -10,3 +10,4 @@ backend/updates/*.apk
 backend/updates/*.zip
 backend/updates/*.tar.xz
 backend/updates/version.json
+roku-channel.zip
