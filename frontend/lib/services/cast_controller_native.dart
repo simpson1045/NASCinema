@@ -19,12 +19,22 @@ class CastController extends ChangeNotifier {
   /// custom HTTPS receiver) is allowed to load plain-HTTP LAN media.
   static const _defaultReceiver = 'CC1AD845';
 
-  /// Once the custom NASCinema receiver is registered in the Google Cast
-  /// console (HTTPS-hosted via nginx), paste its App ID here — it'll be used
-  /// instead, giving the branded TV screen + on-TV stats + Art-Mode idle.
-  static const _customReceiver = '';
+  /// Custom NASCinema receiver (registered in the Cast console) — the branded
+  /// TV screen + on-TV stats + Art-Mode idle.
+  static const _customReceiver = '4D655A07';
+
+  /// HTTPS origin the custom receiver loads media from. The receiver is an
+  /// HTTPS page, so its media MUST be HTTPS too (mixed content is blocked);
+  /// nginx/NPM on the NAS proxies this to the backend.
+  static const _castHttpsBase = 'https://nascinema.simpson1045.com';
+
   static String get _receiverAppId =>
       _customReceiver.isNotEmpty ? _customReceiver : _defaultReceiver;
+
+  /// True when casting through our branded receiver (→ use the HTTPS base for
+  /// media + subtitle URLs so the HTTPS page can load them).
+  bool get hasCustomReceiver => _customReceiver.isNotEmpty;
+  String get castBase => _castHttpsBase;
 
   final List<CastDevice> _devices = [];
   List<CastDevice> get devices => List.unmodifiable(_devices);

@@ -408,6 +408,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _doCast() async {
     final web =
         await ApiService(widget.baseUrl).getPlay(widget.fileId, client: 'web');
+    // Through the custom receiver the media + subs must be HTTPS (it's an HTTPS
+    // page — mixed content is blocked); the default receiver takes LAN HTTP.
+    final castBase = _cast.hasCustomReceiver ? _cast.castBase : widget.baseUrl;
     // Declare every available subtitle as a cast track (trackId = index+1) so
     // the remote can switch among them; activeSubId picks the starting one.
     final subtitleTracks = <Map<String, dynamic>>[];
@@ -419,7 +422,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final id = i + 1;
       subtitleTracks.add({
         'trackId': id,
-        'url': '${widget.baseUrl}$u',
+        'url': '$castBase$u',
         'name': (s['label'] ?? 'Subtitle $id').toString(),
         'language': 'und',
       });
@@ -434,7 +437,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ].join(' · ');
     await _cast.castVideo(
       fileId: widget.fileId,
-      url: '${widget.baseUrl}${web.url}',
+      url: '$castBase${web.url}',
       contentType:
           web.mode == 'direct' ? 'video/mp4' : 'application/vnd.apple.mpegurl',
       title: widget.title,
