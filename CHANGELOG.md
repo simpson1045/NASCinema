@@ -4,6 +4,7 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.3.11 - 2026-06-27
 - **Custom NASCinema TV receiver is live** — casting now shows the branded now-playing screen on the TV (blurred backdrop, title, progress + "ends at" ETA, stats overlay, Art-Mode idle) instead of the generic Chromecast screen. Media is routed over HTTPS so it loads cleanly.
+- Update notice is now a banner on the library, not a SnackBar that could appear under the player.
 
 ## 0.3.10 - 2026-06-27
 - **Subtitle track picker** on the cast remote — pick any track, not just on/off.
