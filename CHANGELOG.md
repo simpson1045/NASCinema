@@ -7,6 +7,8 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 - **Phone playback shows the honest badge** — no more false "DIRECT" on the phone; it correctly transcodes.
 - **Cast button on the home screen** — connect to the TV first, then pick a movie.
 - **Play sends it to the TV when connected** — once you're connected to a TV, a movie's amber Play button casts straight to the TV and turns your phone into the remote (no need to open the local player and tap cast).
+- **Remote reconnects when you come back** — locking the phone or switching apps no longer leaves the remote dead. The movie keeps playing on the TV, and when you return to NASCinema it silently rejoins the TV so the remote works again.
+- **Branded TV screen is fully custom** — the default Chromecast overlay (title/scrubber/seek/CC) no longer covers our now-playing screen on pause; on pause you see the actual movie frame with a clean bottom gradient. (Receiver-side; applies to any app version.)
 - **Reliable cast connect** — if the branded receiver ever can't launch, casting automatically falls back to the default Chromecast receiver, so it always connects.
 
 ## 0.3.11 - 2026-06-27

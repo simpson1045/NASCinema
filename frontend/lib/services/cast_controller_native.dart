@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:bonsoir/bonsoir.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'cast/cast_device.dart';
@@ -14,7 +14,12 @@ import 'cast/cast_session_manager.dart';
 /// Receiver, LOADs a video URL, and exposes transport/volume/subtitle controls
 /// for the remote — all over a raw TLS socket, so it works on a plain-HTTP LAN
 /// (no browser, no HTTPS). Lives app-level so the session survives navigation.
-class CastController extends ChangeNotifier {
+class CastController extends ChangeNotifier with WidgetsBindingObserver {
+  CastController() {
+    // Watch app lifecycle so we can rejoin the TV after the OS suspends us.
+    WidgetsBinding.instance.addObserver(this);
+  }
+
   /// Default Media Receiver — plays HLS + a sidecar WebVTT track, and (unlike a
   /// custom HTTPS receiver) is allowed to load plain-HTTP LAN media.
   static const _defaultReceiver = 'CC1AD845';
@@ -51,6 +56,12 @@ class CastController extends ChangeNotifier {
   CastDevice? _connected;
   CastDevice? get connectedDevice => _connected;
   bool get isConnected => _connected != null;
+
+  // The device we last cast to — kept across a dropped socket so we can rejoin
+  // the still-running receiver when the app resumes. Cleared only on an explicit
+  // disconnect(). _reconnecting guards against overlapping resume attempts.
+  CastDevice? _lastDevice;
+  bool _reconnecting = false;
 
   int? _mediaSessionId;
   String _playerState = 'IDLE';
@@ -182,6 +193,7 @@ class CastController extends ChangeNotifier {
       _stateSub = session.stateStream.listen((state) {
         if (state == CastSessionState.connected) {
           _connected = device;
+          _lastDevice = device;
           _startPolling();
           notifyListeners();
           if (!connected.isCompleted) connected.complete(true);
@@ -357,9 +369,17 @@ class CastController extends ChangeNotifier {
       final ct = st['currentTime'];
       if (ct is num) _position = Duration(milliseconds: (ct * 1000).round());
       final media = st['media'];
-      if (media is Map && media['duration'] is num) {
-        _duration =
-            Duration(milliseconds: ((media['duration'] as num) * 1000).round());
+      if (media is Map) {
+        if (media['duration'] is num) {
+          _duration = Duration(
+              milliseconds: ((media['duration'] as num) * 1000).round());
+        }
+        // Restore the title from status (e.g. after a rejoin-on-resume, when the
+        // dropped session cleared it).
+        final md = media['metadata'];
+        if (md is Map && md['title'] is String && (md['title'] as String).isNotEmpty) {
+          _castingTitle = md['title'] as String;
+        }
       }
       notifyListeners();
     } else if (type == 'RECEIVER_STATUS') {
@@ -394,12 +414,39 @@ class CastController extends ChangeNotifier {
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The OS kills our control socket when we're backgrounded/locked; the movie
+    // keeps playing on the TV. On resume, silently rejoin the running receiver
+    // so the remote works again.
+    if (state == AppLifecycleState.resumed) _reconnectIfDropped();
+  }
+
+  Future<void> _reconnectIfDropped() async {
+    if (isConnected || _reconnecting) return;
+    final device = _lastDevice;
+    if (device == null) return;
+    _reconnecting = true;
+    try {
+      // connect() sends LAUNCH; for an already-running app the receiver returns
+      // the existing session (it does NOT restart playback), so this re-attaches
+      // the control link and resumes status polling.
+      await connect(device);
+    } catch (e) {
+      debugPrint('[Cast] resume reconnect failed: $e');
+    } finally {
+      _reconnecting = false;
+    }
+  }
+
   Future<void> disconnect() async {
     final s = _session;
     if (s != null && _mediaSessionId != null) {
       s.sendMessage(CastSession.kNamespaceMedia,
           {'type': 'STOP', 'mediaSessionId': _mediaSessionId});
     }
+    // Intentional stop — forget the device so we don't auto-rejoin on resume.
+    _lastDevice = null;
     await _cleanup();
     _onClosed();
   }
@@ -439,6 +486,7 @@ class CastController extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cleanup();
     super.dispose();
   }
