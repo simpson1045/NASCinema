@@ -33,6 +33,57 @@ class RemoteScreen extends StatelessWidget {
             style: const TextStyle(color: NasColors.text)),
       ));
 
+  void _openSubtitles(BuildContext context, CastController cast) =>
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: NasColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        ),
+        builder: (_) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text('Subtitles',
+                    style: TextStyle(
+                        color: NasColors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.subtitles_off_outlined,
+                    color: NasColors.muted),
+                title:
+                    const Text('Off', style: TextStyle(color: NasColors.text)),
+                trailing: cast.activeSubId == 0
+                    ? const Icon(Icons.check, color: NasColors.amber)
+                    : null,
+                onTap: () {
+                  cast.selectSubtitle(0);
+                  Navigator.pop(context);
+                },
+              ),
+              for (final t in cast.subtitleOptions)
+                ListTile(
+                  leading:
+                      const Icon(Icons.subtitles, color: NasColors.muted),
+                  title: Text(t.label,
+                      style: const TextStyle(color: NasColors.text)),
+                  trailing: cast.activeSubId == t.id
+                      ? const Icon(Icons.check, color: NasColors.amber)
+                      : null,
+                  onTap: () {
+                    cast.selectSubtitle(t.id);
+                    Navigator.pop(context);
+                  },
+                ),
+            ],
+          ),
+        ),
+      );
+
   void _openStats(BuildContext context, CastController cast) =>
       showModalBottomSheet(
         context: context,
@@ -299,7 +350,7 @@ class RemoteScreen extends StatelessWidget {
                 label: 'Subtitles',
                 active: cast.subtitlesOn,
                 enabled: cast.hasSubtitles,
-                onTap: cast.toggleSubtitles),
+                onTap: () => _openSubtitles(context, cast)),
             _round(
                 icon: Icons.headphones,
                 label: 'Audio',

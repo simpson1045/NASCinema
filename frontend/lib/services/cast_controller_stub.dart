@@ -22,6 +22,8 @@ class CastController extends ChangeNotifier {
   bool get volumeControllable => false;
   bool get hasSubtitles => false;
   bool get subtitlesOn => false;
+  List<({int id, String label})> get subtitleOptions => const [];
+  int get activeSubId => 0;
   Map<String, dynamic> get castSource => const {};
   bool get castIsHls => false;
 
@@ -33,14 +35,14 @@ class CastController extends ChangeNotifier {
     required String contentType,
     required String title,
     Map<String, dynamic> source = const {},
-    String? subUrl,
-    bool subActive = true,
+    List<Map<String, dynamic>> subtitleTracks = const [],
+    int activeSubId = 0,
   }) async {}
   void play() {}
   void pause() {}
   void stop() {}
   void seekTo(double seconds) {}
-  void toggleSubtitles() {}
+  void selectSubtitle(int id) {}
   void setVolume(double v) {}
   void adjustVolume(double delta) {}
   Future<void> disconnect() async {}

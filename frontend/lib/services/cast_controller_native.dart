@@ -63,11 +63,13 @@ class CastController extends ChangeNotifier {
   bool get volumeControllable =>
       _volumeControlType != null && _volumeControlType != 'fixed';
 
-  // Whether the cast media carries a subtitle track, and whether it's showing.
-  bool _hasSubtitles = false;
-  bool _subtitlesOn = false;
-  bool get hasSubtitles => _hasSubtitles;
-  bool get subtitlesOn => _subtitlesOn;
+  // Subtitle tracks declared in the LOAD, for the remote's selection modal.
+  List<({int id, String label})> _subtitleOptions = const [];
+  int _activeSubId = 0; // 0 = off
+  List<({int id, String label})> get subtitleOptions => _subtitleOptions;
+  int get activeSubId => _activeSubId;
+  bool get hasSubtitles => _subtitleOptions.isNotEmpty;
+  bool get subtitlesOn => _activeSubId > 0;
 
   /// Casting is available on this platform (native socket stack present).
   bool get supported => true;
@@ -168,8 +170,8 @@ class CastController extends ChangeNotifier {
     required String contentType,
     required String title,
     Map<String, dynamic> source = const {},
-    String? subUrl,
-    bool subActive = true,
+    List<Map<String, dynamic>> subtitleTracks = const [],
+    int activeSubId = 0,
   }) async {
     final s = _session;
     if (s == null || !isConnected) return;
@@ -179,10 +181,13 @@ class CastController extends ChangeNotifier {
     _castContentType = contentType;
     _position = Duration.zero;
     _duration = Duration.zero;
-    // Attach the track if one's available (so the remote can toggle it), but
-    // only show it if it was active before casting.
-    _hasSubtitles = subUrl != null && subUrl.isNotEmpty;
-    _subtitlesOn = _hasSubtitles && subActive;
+    // Declare every available sub track so the remote can switch among them;
+    // activeSubId (0 = off) picks which one starts showing.
+    _subtitleOptions = subtitleTracks
+        .map((t) =>
+            (id: t['trackId'] as int, label: (t['name'] ?? 'Subtitle').toString()))
+        .toList();
+    _activeSubId = activeSubId;
     final media = <String, dynamic>{
       'contentId': url,
       'contentType': contentType,
@@ -195,19 +200,20 @@ class CastController extends ChangeNotifier {
       'currentTime': 0,
       'media': media,
     };
-    if (_hasSubtitles) {
+    if (subtitleTracks.isNotEmpty) {
       media['tracks'] = [
-        {
-          'trackId': 1,
-          'type': 'TEXT',
-          'trackContentId': subUrl,
-          'trackContentType': 'text/vtt',
-          'subtype': 'SUBTITLES',
-          'name': 'Subtitles',
-          'language': 'en',
-        }
+        for (final t in subtitleTracks)
+          {
+            'trackId': t['trackId'],
+            'type': 'TEXT',
+            'trackContentId': t['url'],
+            'trackContentType': 'text/vtt',
+            'subtype': 'SUBTITLES',
+            'name': t['name'],
+            'language': t['language'] ?? 'und',
+          }
       ];
-      load['activeTrackIds'] = subActive ? [1] : <int>[];
+      if (activeSubId > 0) load['activeTrackIds'] = [activeSubId];
     }
     s.sendMessage(CastSession.kNamespaceMedia, load);
     notifyListeners();
@@ -222,15 +228,15 @@ class CastController extends ChangeNotifier {
     _media({'type': 'SEEK', 'currentTime': seconds});
   }
 
-  /// Show/hide the subtitle track on the receiver (EDIT_TRACKS_INFO).
-  void toggleSubtitles() {
+  /// Select a subtitle track by id (0 = off) via EDIT_TRACKS_INFO.
+  void selectSubtitle(int id) {
     final s = _session;
-    if (s == null || _mediaSessionId == null || !_hasSubtitles) return;
-    _subtitlesOn = !_subtitlesOn;
+    if (s == null || _mediaSessionId == null) return;
+    _activeSubId = id;
     s.sendMessage(CastSession.kNamespaceMedia, {
       'type': 'EDIT_TRACKS_INFO',
       'mediaSessionId': _mediaSessionId,
-      'activeTrackIds': _subtitlesOn ? [1] : <int>[],
+      'activeTrackIds': id > 0 ? [id] : <int>[],
     });
     notifyListeners();
   }
@@ -325,8 +331,8 @@ class CastController extends ChangeNotifier {
     _duration = Duration.zero;
     _castingFileId = null;
     _castingTitle = '';
-    _hasSubtitles = false;
-    _subtitlesOn = false;
+    _subtitleOptions = const [];
+    _activeSubId = 0;
     _volumeControlType = null;
     _castSource = const {};
     _castContentType = '';

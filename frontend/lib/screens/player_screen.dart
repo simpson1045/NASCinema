@@ -408,16 +408,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _doCast() async {
     final web =
         await ApiService(widget.baseUrl).getPlay(widget.fileId, client: 'web');
-    String? sub;
-    var subActive = true;
-    if (_activeSub != null) {
-      final s = _subs.firstWhere((x) => x['id'] == _activeSub,
-          orElse: () => const {});
-      if (s['url'] != null) sub = '${widget.baseUrl}${s['url']}';
-    } else if (_subs.isNotEmpty && _subs.first['url'] != null) {
-      // No active sub — attach one (off) so it's togglable from the remote.
-      sub = '${widget.baseUrl}${_subs.first['url']}';
-      subActive = false;
+    // Declare every available subtitle as a cast track (trackId = index+1) so
+    // the remote can switch among them; activeSubId picks the starting one.
+    final subtitleTracks = <Map<String, dynamic>>[];
+    var activeSubId = 0;
+    for (var i = 0; i < _subs.length; i++) {
+      final s = _subs[i];
+      final u = s['url'];
+      if (u == null) continue;
+      final id = i + 1;
+      subtitleTracks.add({
+        'trackId': id,
+        'url': '${widget.baseUrl}$u',
+        'name': (s['label'] ?? 'Subtitle $id').toString(),
+        'language': 'und',
+      });
+      if (_activeSub != null && s['id'] == _activeSub) activeSubId = id;
     }
     await _cast.castVideo(
       fileId: widget.fileId,
@@ -426,8 +432,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           web.mode == 'direct' ? 'video/mp4' : 'application/vnd.apple.mpegurl',
       title: widget.title,
       source: web.source,
-      subUrl: sub,
-      subActive: subActive,
+      subtitleTracks: subtitleTracks,
+      activeSubId: activeSubId,
     );
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
