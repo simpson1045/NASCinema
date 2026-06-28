@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/extra.dart';
@@ -8,6 +9,8 @@ import '../models/movie.dart';
 import '../models/movie_file.dart';
 import '../models/video.dart';
 import '../services/api_service.dart';
+import '../services/cast_actions.dart';
+import '../services/cast_controller.dart';
 import '../theme/app_theme.dart';
 import 'player_screen.dart';
 
@@ -114,6 +117,20 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   void _play() {
     if (_files.isEmpty) {
       _snack('Still loading the file…');
+      return;
+    }
+    final cast = context.read<CastController>();
+    if (cast.isConnected) {
+      // Already connected to a TV (e.g. cast from the home screen) → the Play
+      // banner sends the movie straight to the TV and flips to the remote,
+      // instead of opening the local phone player.
+      castFileToTv(
+        context,
+        cast: cast,
+        baseUrl: widget.baseUrl,
+        fileId: _files.first.id,
+        title: widget.movie.title,
+      );
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(

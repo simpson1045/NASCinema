@@ -8,12 +8,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
 import '../services/cast/cast_device.dart';
+import '../services/cast_actions.dart';
 import '../services/cast_controller.dart';
 import '../theme/app_theme.dart';
 import 'cast_picker.dart';
 import 'player/player_view.dart';
 import 'player/scrubber.dart';
-import 'remote_screen.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -410,57 +410,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _doCast();
   }
 
-  /// Hand the receiver the **web** decision URL — a Chromecast is browser-class
-  /// (can't direct-play the REMUX or bitstream), so it wants the transcoded HLS
-  /// (or a browser-native direct file), not this client's URL. Then replace this
-  /// screen with the remote — replacing it disposes the local player, so local
-  /// playback stops cleanly (no double playback).
+  /// Cast the current movie to the TV and switch to the remote. Shared logic
+  /// lives in [castFileToTv]; here we just pass the active subtitle along.
   Future<void> _doCast() async {
-    final web =
-        await ApiService(widget.baseUrl).getPlay(widget.fileId, client: 'web');
-    // Through the custom receiver the media + subs must be HTTPS (it's an HTTPS
-    // page — mixed content is blocked); the default receiver takes LAN HTTP.
-    final castBase = _cast.hasCustomReceiver ? _cast.castBase : widget.baseUrl;
-    // Declare every available subtitle as a cast track (trackId = index+1) so
-    // the remote can switch among them; activeSubId picks the starting one.
-    final subtitleTracks = <Map<String, dynamic>>[];
-    var activeSubId = 0;
-    for (var i = 0; i < _subs.length; i++) {
-      final s = _subs[i];
-      final u = s['url'];
-      if (u == null) continue;
-      final id = i + 1;
-      subtitleTracks.add({
-        'trackId': id,
-        'url': '$castBase$u',
-        'name': (s['label'] ?? 'Subtitle $id').toString(),
-        'language': 'und',
-      });
-      if (_activeSub != null && s['id'] == _activeSub) activeSubId = id;
-    }
-    final src = web.source;
-    final meta = <String>[
-      if (src['height'] != null) '${src['height']}p',
-      if (src['hdr'] == true) 'HDR',
-      if (src['audio_codec'] != null)
-        src['audio_codec'].toString().toUpperCase(),
-    ].join(' · ');
-    await _cast.castVideo(
+    await castFileToTv(
+      context,
+      cast: _cast,
+      baseUrl: widget.baseUrl,
       fileId: widget.fileId,
-      url: '$castBase${web.url}',
-      contentType:
-          web.mode == 'direct' ? 'video/mp4' : 'application/vnd.apple.mpegurl',
       title: widget.title,
-      source: web.source,
-      backdrop: web.backdrop,
-      logo: web.logo,
-      meta: meta,
-      subtitleTracks: subtitleTracks,
-      activeSubId: activeSubId,
-    );
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => RemoteScreen(baseUrl: widget.baseUrl)),
+      activeSubtitleId: _activeSub,
     );
   }
 
