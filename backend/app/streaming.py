@@ -194,6 +194,19 @@ def evict_if_needed() -> None:
         shutil.rmtree(d, ignore_errors=True)
 
 
+def remove_file_cache(file_id: int) -> None:
+    """Drop a file's transcode session + cached segments — e.g. when the source
+    file has been deleted, so we stop serving the stale cached copy."""
+    with _lock:
+        sess = _sessions.pop(file_id, None)
+    if sess and sess.proc and sess.alive:
+        try:
+            sess.proc.terminate()
+        except Exception:
+            pass
+    shutil.rmtree(_cache_root() / str(file_id), ignore_errors=True)
+
+
 def startup_cleanup() -> None:
     _sessions.clear()
     reap_orphans()

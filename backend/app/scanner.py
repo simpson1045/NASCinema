@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from guessit import guessit
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .config import get_settings
 from .db import SessionLocal
@@ -23,6 +23,7 @@ from .fingerprint import fingerprint_file
 from .metadata import get_movie_metadata
 from .models import MediaFile, Movie
 from .probe import probe_file
+from .streaming import remove_file_cache
 
 VIDEO_EXTENSIONS = {
     ".mkv", ".mp4", ".m4v", ".avi", ".mov", ".wmv", ".ts", ".m2ts", ".webm", ".flv",
@@ -137,6 +138,7 @@ async def scan(limit: int | None = None) -> dict:
         "matched": 0,
         "extras": 0,
         "skipped": 0,
+        "removed": 0,
         "errors": 0,
     }
     if not dirs:
@@ -220,6 +222,30 @@ async def scan(limit: int | None = None) -> dict:
                         if limit and stats["added"] >= limit:
                             reached_limit = True
                             break
+
+        # Prune files whose source is gone — but only under roots we can
+        # actually reach, so an offline mount never wipes the library.
+        accessible = [os.path.normpath(d) for d in dirs if os.path.isdir(d)]
+        if accessible:
+            for mf in (await session.scalars(select(MediaFile))).all():
+                p = os.path.normpath(mf.path)
+                if any(p.startswith(r) for r in accessible) and not os.path.exists(
+                    mf.path
+                ):
+                    remove_file_cache(mf.id)  # drop stale cached transcode
+                    await session.delete(mf)
+                    stats["removed"] += 1
+            await session.commit()
+            # Drop movies that are left with no files at all.
+            for mv in (await session.scalars(select(Movie))).all():
+                n = await session.scalar(
+                    select(func.count(MediaFile.id)).where(
+                        MediaFile.movie_id == mv.id
+                    )
+                )
+                if not n:
+                    await session.delete(mv)
+            await session.commit()
 
     return stats
 
