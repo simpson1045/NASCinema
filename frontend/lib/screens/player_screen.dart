@@ -425,6 +425,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       if (_activeSub != null && s['id'] == _activeSub) activeSubId = id;
     }
+    final src = web.source;
+    final meta = <String>[
+      if (src['height'] != null) '${src['height']}p',
+      if (src['hdr'] == true) 'HDR',
+      if (src['audio_codec'] != null)
+        src['audio_codec'].toString().toUpperCase(),
+    ].join(' · ');
     await _cast.castVideo(
       fileId: widget.fileId,
       url: '${widget.baseUrl}${web.url}',
@@ -432,6 +439,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           web.mode == 'direct' ? 'video/mp4' : 'application/vnd.apple.mpegurl',
       title: widget.title,
       source: web.source,
+      backdrop: web.backdrop,
+      logo: web.logo,
+      meta: meta,
       subtitleTracks: subtitleTracks,
       activeSubId: activeSubId,
     );

@@ -93,8 +93,15 @@ class ApiService {
 
   /// [client] declares playback capability to the decision engine: 'web'
   /// (browser codecs) or 'native' (libmpv — direct-plays everything).
-  Future<({String mode, String reason, String url, Map<String, dynamic> source})>
-      getPlay(int fileId, {String client = 'web'}) async {
+  Future<
+      ({
+        String mode,
+        String reason,
+        String url,
+        Map<String, dynamic> source,
+        String? backdrop,
+        String? logo,
+      })> getPlay(int fileId, {String client = 'web'}) async {
     final r = await http
         .get(_u('/api/play/$fileId?client=$client'))
         .timeout(const Duration(seconds: 45));
@@ -107,6 +114,8 @@ class ApiService {
       reason: (d['reason'] ?? '').toString(),
       url: (d['url'] ?? '').toString(),
       source: (d['source'] as Map<String, dynamic>?) ?? const {},
+      backdrop: d['backdrop'] as String?,
+      logo: d['logo'] as String?,
     );
   }
 

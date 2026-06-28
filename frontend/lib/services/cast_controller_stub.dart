@@ -35,6 +35,9 @@ class CastController extends ChangeNotifier {
     required String contentType,
     required String title,
     Map<String, dynamic> source = const {},
+    String? backdrop,
+    String? logo,
+    String? meta,
     List<Map<String, dynamic>> subtitleTracks = const [],
     int activeSubId = 0,
   }) async {}
@@ -45,5 +48,6 @@ class CastController extends ChangeNotifier {
   void selectSubtitle(int id) {}
   void setVolume(double v) {}
   void adjustVolume(double delta) {}
+  void tvStats(bool show) {}
   Future<void> disconnect() async {}
 }

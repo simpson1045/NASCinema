@@ -75,6 +75,13 @@ def create_fastapi() -> FastAPI:
     app.include_router(subtitles_router)
     app.include_router(update_router)
 
+    # The custom Cast receiver (branded TV "now playing" screen). Served here so
+    # it lives in one place; an HTTPS reverse proxy (nginx on the NAS) fronts it
+    # for Cast, which requires custom receivers over HTTPS.
+    cast_dir = Path(__file__).resolve().parents[1] / "cast"
+    if cast_dir.is_dir():
+        app.mount("/cast", StaticFiles(directory=str(cast_dir)), name="cast")
+
     # Serve the built Flutter web app (if present) at the root, so the UI is
     # reachable in any browser with no client-side tooling. Mounted last so the
     # /api/* routes above take precedence.

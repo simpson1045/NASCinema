@@ -19,6 +19,13 @@ class CastController extends ChangeNotifier {
   /// custom HTTPS receiver) is allowed to load plain-HTTP LAN media.
   static const _defaultReceiver = 'CC1AD845';
 
+  /// Once the custom NASCinema receiver is registered in the Google Cast
+  /// console (HTTPS-hosted via nginx), paste its App ID here — it'll be used
+  /// instead, giving the branded TV screen + on-TV stats + Art-Mode idle.
+  static const _customReceiver = '';
+  static String get _receiverAppId =>
+      _customReceiver.isNotEmpty ? _customReceiver : _defaultReceiver;
+
   final List<CastDevice> _devices = [];
   List<CastDevice> get devices => List.unmodifiable(_devices);
 
@@ -152,7 +159,7 @@ class CastController extends ChangeNotifier {
       });
       _msgSub = session.messageStream.listen(_onMessage);
       session.sendMessage(CastSession.kNamespaceReceiver,
-          {'type': 'LAUNCH', 'appId': _defaultReceiver});
+          {'type': 'LAUNCH', 'appId': _receiverAppId});
       final ok = await connected.future
           .timeout(const Duration(seconds: 15), onTimeout: () => false);
       if (!ok) await _cleanup();
@@ -170,6 +177,9 @@ class CastController extends ChangeNotifier {
     required String contentType,
     required String title,
     Map<String, dynamic> source = const {},
+    String? backdrop,
+    String? logo,
+    String? meta,
     List<Map<String, dynamic>> subtitleTracks = const [],
     int activeSubId = 0,
   }) async {
@@ -193,6 +203,16 @@ class CastController extends ChangeNotifier {
       'contentType': contentType,
       'streamType': 'BUFFERED',
       'metadata': {'type': 0, 'metadataType': 0, 'title': title},
+      // Read by the custom NASCinema receiver for its now-playing screen.
+      'customData': {
+        if (backdrop != null && backdrop.isNotEmpty) 'backdrop': backdrop,
+        if (logo != null && logo.isNotEmpty) 'logo': logo,
+        if (meta != null && meta.isNotEmpty) 'meta': meta,
+        'stream': contentType.contains('mpegurl')
+            ? 'HLS · server transcode'
+            : 'Direct file',
+        'source': source,
+      },
     };
     final load = <String, dynamic>{
       'type': 'LOAD',
@@ -255,6 +275,13 @@ class CastController extends ChangeNotifier {
   }
 
   void adjustVolume(double delta) => setVolume((_volume + delta).clamp(0.0, 1.0));
+
+  /// Toggle the stats overlay on the custom TV receiver (no-op on the default
+  /// receiver, which ignores the custom namespace).
+  void tvStats(bool show) {
+    _session?.sendMessage(
+        'urn:x-cast:com.nascinema.control', {'type': 'STATS', 'show': show});
+  }
 
   void _media(Map<String, dynamic> msg) {
     final s = _session;

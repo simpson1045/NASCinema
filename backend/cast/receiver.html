@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NASCinema</title>
+  <link rel="stylesheet" href="/cast/receiver.css?v=1">
+</head>
+<body>
+  <!-- CAF renders the video here; our overlay sits on top. -->
+  <cast-media-player id="player"></cast-media-player>
+
+  <!-- Ambient blurred backdrop + scrim (faded in when paused/idle). -->
+  <div id="backdrop"></div>
+  <div id="scrim"></div>
+
+  <!-- Now-playing overlay (clearlogo or title, metadata, progress + ETA). -->
+  <div id="overlay">
+    <div id="np">
+      <img id="clearlogo" alt="">
+      <div id="title"></div>
+      <div id="meta"></div>
+    </div>
+    <div id="progress">
+      <div id="bar"><div id="fill"></div></div>
+      <div id="times">
+        <span id="elapsed">0:00</span>
+        <span id="eta"></span>
+        <span id="remaining">0:00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause badge: clearlogo/title parks in the corner, JF-style. -->
+  <div id="paused-tag" class="hidden">
+    <img id="paused-logo" alt="">
+    <span id="paused-title"></span>
+  </div>
+
+  <!-- Stats for nerds (toggled from the remote). -->
+  <div id="stats" class="hidden"></div>
+
+  <!-- Top-right clock. -->
+  <div id="clock"></div>
+
+  <!-- Idle / Art Mode: cycles backdrops when nothing is casting. -->
+  <div id="idle">
+    <div id="idle-bg"></div>
+    <div id="idle-scrim"></div>
+    <div id="idle-brand">NAS<span>Cinema</span></div>
+    <div id="idle-tag">Ready to cast</div>
+  </div>
+
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <script src="/cast/receiver.js?v=1"></script>
+</body>
+</html>

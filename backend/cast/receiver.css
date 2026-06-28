@@ -1,0 +1,159 @@
+:root {
+  --navy: #0a0e27;
+  --amber: #ffb020;
+  --violet: #b46bff;
+  --text: #eef1ff;
+  --muted: #9aa0cc;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--navy);
+  color: var(--text);
+  font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+}
+
+/* CAF's video surface fills the screen; we hide its default chrome and
+   overlay our own. */
+#player {
+  position: absolute;
+  inset: 0;
+  --background-color: #0a0e27;
+  --splash-image: none;
+  --theme-hue: 38;
+  --progress-color: #ffb020;
+}
+
+/* Backdrop + scrim — faded in over the (paused/idle) video. */
+#backdrop {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(28px) saturate(1.1) brightness(0.55);
+  transform: scale(1.1);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+#scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10,14,39,0.25) 0%, rgba(10,14,39,0.85) 100%);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+body.paused #backdrop,
+body.paused #scrim { opacity: 1; }
+
+/* Now-playing overlay (visible while paused/buffering). */
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 64px 80px 72px;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+body.paused #overlay { opacity: 1; }
+
+#np { margin-bottom: 28px; }
+#clearlogo { max-height: 150px; max-width: 60%; object-fit: contain; display: none; }
+#title { font-size: 56px; font-weight: 600; letter-spacing: -0.5px; }
+#meta { margin-top: 10px; font-size: 22px; color: var(--muted); }
+
+#progress { width: 100%; }
+#bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.18);
+  overflow: hidden;
+}
+#fill { height: 100%; width: 0; background: var(--amber); border-radius: 3px; transition: width 0.5s linear; }
+#times {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 22px;
+  color: var(--muted);
+}
+#eta { color: var(--text); font-size: 20px; }
+
+/* Paused clearlogo/title parked in the corner (Jellyfin-style). */
+#paused-tag {
+  position: absolute;
+  top: 48px;
+  left: 64px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  opacity: 0.92;
+  transition: opacity 0.4s ease;
+}
+#paused-tag.hidden { opacity: 0; }
+#paused-logo { max-height: 80px; max-width: 320px; object-fit: contain; display: none; }
+#paused-title { font-size: 30px; font-weight: 600; }
+
+/* Stats for nerds. */
+#stats {
+  position: absolute;
+  top: 48px;
+  right: 64px;
+  min-width: 320px;
+  padding: 20px 24px;
+  background: rgba(10,14,39,0.82);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  font-size: 22px;
+  line-height: 1.7;
+  transition: opacity 0.3s ease;
+}
+#stats.hidden { opacity: 0; pointer-events: none; }
+#stats .lbl { color: var(--muted); }
+#stats .hdr { color: var(--amber); font-size: 16px; letter-spacing: 1px; margin-bottom: 8px; }
+
+#clock {
+  position: absolute;
+  top: 52px;
+  right: 64px;
+  font-size: 26px;
+  color: var(--muted);
+}
+
+/* Idle / Art Mode. */
+#idle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--navy);
+  transition: opacity 0.8s ease;
+}
+#idle.hidden { opacity: 0; pointer-events: none; }
+#idle-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(24px) brightness(0.4);
+  transform: scale(1.1);
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+#idle-bg.show { opacity: 1; }
+#idle-scrim { position: absolute; inset: 0; background: rgba(10,14,39,0.55); }
+#idle-brand { position: relative; font-size: 72px; font-weight: 600; letter-spacing: -1px; }
+#idle-brand span { color: var(--amber); }
+#idle-tag { position: relative; margin-top: 14px; font-size: 26px; color: var(--muted); }
+
+/* #stats / #paused-tag / #idle fade via their own #id.hidden { opacity:0 }
+   rules above — no generic display:none, which would kill the transition. */

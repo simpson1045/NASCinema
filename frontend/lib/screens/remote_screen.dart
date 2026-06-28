@@ -84,15 +84,17 @@ class RemoteScreen extends StatelessWidget {
         ),
       );
 
-  void _openStats(BuildContext context, CastController cast) =>
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: NasColors.surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
-        ),
-        builder: (_) => SafeArea(child: _statsContent(cast)),
-      );
+  void _openStats(BuildContext context, CastController cast) {
+    cast.tvStats(true); // mirror the overlay onto the TV while open
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: NasColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+      ),
+      builder: (_) => SafeArea(child: _statsContent(cast)),
+    ).whenComplete(() => cast.tvStats(false));
+  }
 
   Widget _statsContent(CastController cast) {
     final s = cast.castSource;
