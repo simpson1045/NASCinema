@@ -17,15 +17,19 @@ html, body {
   font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
 }
 
-/* CAF's video surface fills the screen; we hide its default chrome and
-   overlay our own. */
+/* The CAF SDK injects its own <touch-controls> overlay (title, scrubber, seek,
+   CC) even with a plain <video>. We render our own UI, so kill it entirely. */
+touch-controls { display: none !important; }
+
+/* Plain <video> surface fills the screen (no default Cast chrome); our own
+   overlays sit on top. */
 #player {
   position: absolute;
   inset: 0;
-  --background-color: #0a0e27;
-  --splash-image: none;
-  --theme-hue: 38;
-  --progress-color: #ffb020;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--navy);
 }
 
 /* Backdrop + scrim — faded in over the (paused/idle) video. */
@@ -42,11 +46,15 @@ html, body {
 #scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(10,14,39,0.25) 0%, rgba(10,14,39,0.85) 100%);
+  /* Bottom-only gradient: the paused movie frame stays visible, the now-playing
+     text at the bottom stays readable. No full-screen dimming/blur. */
+  background: linear-gradient(180deg,
+      transparent 0%, transparent 42%, rgba(10, 14, 39, 0.9) 100%);
   opacity: 0;
   transition: opacity 0.6s ease;
 }
-body.paused #backdrop,
+/* On pause, show the real (paused) movie frame — only the bottom gradient fades
+   in, NOT the blurred wallpaper backdrop. */
 body.paused #scrim { opacity: 1; }
 
 /* Now-playing overlay (visible while paused/buffering). */

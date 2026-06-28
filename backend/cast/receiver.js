@@ -241,6 +241,13 @@ try {
   dbg('init: context.start');
   context.start();
   dbg('context started (ready for LOAD)');
+  // Try the official way to strip the SDK's default control buttons.
+  try {
+    cast.framework.ui.Controls.getInstance().clearDefaultSlotAssignments();
+    dbg('controls slots cleared');
+  } catch (e) {
+    dbg('controls err: ' + (e && e.message ? e.message : e));
+  }
 } catch (err) {
   dbg('INIT THREW: ' + (err && err.message ? err.message : err) +
       (err && err.stack ? ' || ' + String(err.stack).slice(0, 160) : ''));

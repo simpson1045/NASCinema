@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NASCinema</title>
-  <link rel="stylesheet" href="/cast/receiver.css?v=10">
+  <link rel="stylesheet" href="/cast/receiver.css?v=14">
 </head>
 <body>
-  <!-- CAF renders the video here; our overlay sits on top. -->
-  <cast-media-player id="player"></cast-media-player>
+  <!-- Plain <video> (not <cast-media-player>) so there's NO default Cast UI —
+       we render our own overlays. CAF binds to this media element. -->
+  <video id="player" autoplay playsinline></video>
 
   <!-- Ambient blurred backdrop + scrim (faded in when paused/idle). -->
   <div id="backdrop"></div>
@@ -55,6 +56,6 @@
   <div id="debug"></div>
 
   <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-  <script src="/cast/receiver.js?v=10"></script>
+  <script src="/cast/receiver.js?v=14"></script>
 </body>
 </html>
