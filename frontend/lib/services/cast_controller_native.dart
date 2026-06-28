@@ -28,12 +28,13 @@ class CastController extends ChangeNotifier {
   /// nginx/NPM on the NAS proxies this to the backend.
   static const _castHttpsBase = 'https://nascinema.simpson1045.com';
 
-  static String get _receiverAppId =>
-      _customReceiver.isNotEmpty ? _customReceiver : _defaultReceiver;
+  // Which receiver actually connected — the custom one can fall back to the
+  // default (e.g. while its App ID is still propagating).
+  bool _usingCustom = false;
 
   /// True when casting through our branded receiver (→ use the HTTPS base for
   /// media + subtitle URLs so the HTTPS page can load them).
-  bool get hasCustomReceiver => _customReceiver.isNotEmpty;
+  bool get hasCustomReceiver => _usingCustom;
   String get castBase => _castHttpsBase;
 
   final List<CastDevice> _devices = [];
@@ -152,6 +153,21 @@ class CastController extends ChangeNotifier {
       return true;
     }
     await _cleanup();
+    // Try the branded custom receiver first; if it won't launch (App ID still
+    // propagating, receiver error, …) fall back to the Default Media Receiver
+    // so casting always works.
+    if (_customReceiver.isNotEmpty &&
+        await _launch(device, _customReceiver, const Duration(seconds: 8))) {
+      _usingCustom = true;
+      return true;
+    }
+    await _cleanup();
+    _usingCustom = false;
+    return _launch(device, _defaultReceiver, const Duration(seconds: 15));
+  }
+
+  Future<bool> _launch(
+      CastDevice device, String appId, Duration timeout) async {
     try {
       final session = await CastSessionManager().startSession(device);
       _session = session;
@@ -168,15 +184,11 @@ class CastController extends ChangeNotifier {
         }
       });
       _msgSub = session.messageStream.listen(_onMessage);
-      session.sendMessage(CastSession.kNamespaceReceiver,
-          {'type': 'LAUNCH', 'appId': _receiverAppId});
-      final ok = await connected.future
-          .timeout(const Duration(seconds: 15), onTimeout: () => false);
-      if (!ok) await _cleanup();
-      return ok;
+      session.sendMessage(
+          CastSession.kNamespaceReceiver, {'type': 'LAUNCH', 'appId': appId});
+      return await connected.future.timeout(timeout, onTimeout: () => false);
     } catch (e) {
-      debugPrint('[Cast] connect failed: $e');
-      await _cleanup();
+      debugPrint('[Cast] launch($appId) failed: $e');
       return false;
     }
   }
@@ -373,6 +385,7 @@ class CastController extends ChangeNotifier {
     _volumeControlType = null;
     _castSource = const {};
     _castContentType = '';
+    _usingCustom = false;
     notifyListeners();
   }
 

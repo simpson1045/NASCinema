@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import '../services/api_service.dart';
 import '../services/cast/cast_device.dart';
 import '../services/cast_controller.dart';
 import '../theme/app_theme.dart';
+import 'cast_picker.dart';
 import 'player/player_view.dart';
 import 'player/scrubber.dart';
 import 'remote_screen.dart';
@@ -51,6 +53,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   static const _passthroughPrefKey = 'force_passthrough';
   bool _forcePassthrough = false;
 
+  // The wired desktop renderer (ELKO) — the only libmpv direct-play client.
+  bool get _isDesktop =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux);
+
   double _position = 0;
   double _duration = 0;
   bool _paused = true;
@@ -86,10 +95,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _load() async {
     try {
-      // The native desktop build is the libmpv renderer — it direct-plays
-      // everything, so it declares 'native' and the backend skips transcode.
+      // Only the wired DESKTOP renderer (ELKO) is the libmpv direct-play client.
+      // Phone/tablet (and web) are browser-class → 'web' so the decision engine
+      // transcodes what they can't natively play (HEVC/HDR/TrueHD).
       final p = await ApiService(widget.baseUrl)
-          .getPlay(widget.fileId, client: kIsWeb ? 'web' : 'native');
+          .getPlay(widget.fileId, client: _isDesktop ? 'native' : 'web');
       final passthrough = await _readPassthroughPref();
       if (!mounted) return;
       setForcePassthrough(passthrough); // applied when buildPlayerView opens
@@ -343,7 +353,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
-              if (!kIsWeb)
+              if (_isDesktop)
                 IconButton(
                   onPressed: _openAudioSettings,
                   tooltip: 'Audio passthrough',
@@ -380,7 +390,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
       ),
-      builder: (_) => _CastSheet(
+      builder: (_) => CastPicker(
         cast: _cast,
         onPick: (d) {
           Navigator.pop(context);
@@ -963,90 +973,4 @@ class _SubsSheetState extends State<_SubsSheet> {
 
 /// Chromecast device picker. Kicks off mDNS discovery on open and lists devices
 /// live via the controller's ChangeNotifier.
-class _CastSheet extends StatefulWidget {
-  const _CastSheet({
-    required this.cast,
-    required this.onPick,
-    required this.onDisconnect,
-  });
-
-  final CastController cast;
-  final void Function(CastDevice) onPick;
-  final VoidCallback onDisconnect;
-
-  @override
-  State<_CastSheet> createState() => _CastSheetState();
-}
-
-class _CastSheetState extends State<_CastSheet> {
-  @override
-  void initState() {
-    super.initState();
-    widget.cast.discover();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: AnimatedBuilder(
-        animation: widget.cast,
-        builder: (_, _) {
-          final c = widget.cast;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-                child: Row(
-                  children: [
-                    const Text('Cast to TV',
-                        style: TextStyle(
-                            color: NasColors.text,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    if (c.isDiscovering)
-                      const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: NasColors.amber)),
-                  ],
-                ),
-              ),
-              if (c.isConnected)
-                ListTile(
-                  leading:
-                      const Icon(Icons.cast_connected, color: NasColors.amber),
-                  title: Text('Connected — ${c.connectedDevice?.name ?? ''}',
-                      style: const TextStyle(color: NasColors.text)),
-                  trailing: TextButton(
-                    onPressed: widget.onDisconnect,
-                    child: const Text('Stop',
-                        style: TextStyle(color: NasColors.amber)),
-                  ),
-                ),
-              for (final d in c.devices)
-                ListTile(
-                  leading: const Icon(Icons.tv, color: NasColors.muted),
-                  title: Text(d.name,
-                      style: const TextStyle(color: NasColors.text)),
-                  subtitle: Text(d.host,
-                      style: const TextStyle(
-                          color: NasColors.muted, fontSize: 11)),
-                  onTap: () => widget.onPick(d),
-                ),
-              if (!c.isDiscovering && c.devices.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('No Chromecast devices found',
-                      style: TextStyle(color: NasColors.muted)),
-                ),
-              const SizedBox(height: 8),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+// (cast device picker extracted to cast_picker.dart — CastPicker)

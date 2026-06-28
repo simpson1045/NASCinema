@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/cast_controller.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
+import 'cast_picker.dart';
 import 'movie_detail_screen.dart';
 import 'remote_screen.dart';
 
@@ -34,6 +35,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() => _future = _api.listMovies());
     await _future;
   }
+
+  // Connect from the home screen; the movie you open next casts to this device.
+  void _openCast(CastController cast) => showModalBottomSheet(
+        context: context,
+        backgroundColor: NasColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        ),
+        builder: (_) => CastPicker(
+          cast: cast,
+          onPick: (d) {
+            Navigator.pop(context);
+            cast.connect(d);
+          },
+          onDisconnect: () {
+            cast.disconnect();
+            Navigator.pop(context);
+          },
+        ),
+      );
 
   Future<void> _checkUpdate() async {
     final info = await UpdateService.checkForUpdate(widget.baseUrl);
@@ -107,6 +128,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ],
         ),
         actions: [
+          // Connect to the TV from here, then pick a movie. Consumer so only
+          // the button repaints on cast updates, not the whole grid.
+          Consumer<CastController>(
+            builder: (_, cast, _) => cast.supported
+                ? IconButton(
+                    onPressed: () => _openCast(cast),
+                    tooltip: 'Cast to TV',
+                    icon: Icon(
+                        cast.isConnected ? Icons.cast_connected : Icons.cast,
+                        color: cast.isConnected
+                            ? NasColors.amber
+                            : NasColors.muted),
+                  )
+                : const SizedBox.shrink(),
+          ),
           IconButton(
             onPressed: _refresh,
             icon: const Icon(Icons.refresh, color: NasColors.muted),
