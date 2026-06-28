@@ -61,6 +61,16 @@ class ApiService {
         .toList();
   }
 
+  /// Re-scan the media folders on the server: add new files, prune deleted ones.
+  /// Best-effort — if it's slow/unreachable the caller still reloads the list.
+  Future<void> triggerScan() async {
+    try {
+      await http.post(_u('/api/scan')).timeout(const Duration(seconds: 180));
+    } catch (_) {
+      // scan keeps running server-side; the list reload still reflects progress
+    }
+  }
+
   Future<({List<MovieFile> files, List<Extra> extras})> getMovieDetail(
       int id) async {
     final r =

@@ -32,6 +32,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _refresh() async {
+    // Re-scan the disk (add new files + prune deleted ones), then reload — so
+    // Refresh actually reflects the library on disk, not just a DB re-read.
+    await _api.triggerScan();
     setState(() => _future = _api.listMovies());
     await _future;
   }

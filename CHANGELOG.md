@@ -13,6 +13,7 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 - **Accurate resume point when casting** — pressing Stop now pulls the live position from the TV before saving (and the position is saved when you background the app), so it no longer resumes a few minutes behind where you actually were.
 - **Branded TV screen is fully custom** — the default Chromecast overlay (title/scrubber/seek/CC) no longer covers our now-playing screen on pause; on pause you see the actual movie frame with a clean bottom gradient. (Receiver-side; applies to any app version.)
 - **Reliable cast connect** — if the branded receiver ever can't launch, casting automatically falls back to the default Chromecast receiver, so it always connects.
+- **Refresh actually re-scans the library** — the Refresh button now re-scans the disk: it adds new files **and removes ones you deleted** (clearing their cached transcode), instead of only re-reading the database. No more playing a copy you already deleted.
 
 ## 0.3.11 - 2026-06-27
 - **Custom NASCinema TV receiver is live** — casting now shows the branded now-playing screen on the TV (blurred backdrop, title, progress + "ends at" ETA, stats overlay, Art-Mode idle) instead of the generic Chromecast screen. Media is routed over HTTPS so it loads cleanly.
