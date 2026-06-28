@@ -28,9 +28,13 @@ class CastController extends ChangeNotifier {
   /// nginx/NPM on the NAS proxies this to the backend.
   static const _castHttpsBase = 'https://nascinema.simpson1045.com';
 
-  // Which receiver actually connected — the custom one can fall back to the
-  // default (e.g. while its App ID is still propagating).
+  // Which receiver actually connected.
   bool _usingCustom = false;
+
+  // Prefer the branded custom receiver (now registered + working). connect()
+  // still falls back to the Default Media Receiver if it ever fails to launch,
+  // so casting stays reliable either way.
+  bool preferCustomReceiver = true;
 
   /// True when casting through our branded receiver (→ use the HTTPS base for
   /// media + subtitle URLs so the HTTPS page can load them).
@@ -95,6 +99,7 @@ class CastController extends ChangeNotifier {
   StreamSubscription? _msgSub;
   StreamSubscription? _stateSub;
   Timer? _poll;
+  Timer? _loadRetry;
 
   Future<void> discover(
       {Duration timeout = const Duration(seconds: 8)}) async {
@@ -153,10 +158,12 @@ class CastController extends ChangeNotifier {
       return true;
     }
     await _cleanup();
-    // Try the branded custom receiver first; if it won't launch (App ID still
-    // propagating, receiver error, …) fall back to the Default Media Receiver
-    // so casting always works.
-    if (_customReceiver.isNotEmpty &&
+    // Default Media Receiver by default — same as NASRadio, always launches,
+    // no Cast-console registration needed. Only reach for the branded custom
+    // receiver when explicitly opted in (and it's published / the device is a
+    // registered test device); if that fails, fall back to the default.
+    if (preferCustomReceiver &&
+        _customReceiver.isNotEmpty &&
         await _launch(device, _customReceiver, const Duration(seconds: 8))) {
       _usingCustom = true;
       return true;
@@ -257,7 +264,33 @@ class CastController extends ChangeNotifier {
       ];
       if (activeSubId > 0) load['activeTrackIds'] = [activeSubId];
     }
-    s.sendMessage(CastSession.kNamespaceMedia, load);
+    // A custom receiver has to download + boot its JS before its LOAD handler
+    // exists; the session reports "connected" the moment the app *launches*, so
+    // a single LOAD fired right away can arrive before the receiver is ready
+    // and get dropped (the default receiver is always booted, so it never hits
+    // this). Re-send LOAD until the receiver acknowledges with MEDIA_STATUS
+    // (_mediaSessionId becomes non-null), or we give up after ~10s.
+    _mediaSessionId = null;
+    _loadRetry?.cancel();
+    var attempts = 0;
+    void fireLoad() {
+      final s2 = _session;
+      if (s2 == null || !isConnected || _mediaSessionId != null) {
+        _loadRetry?.cancel();
+        _loadRetry = null;
+        return;
+      }
+      attempts++;
+      s2.sendMessage(CastSession.kNamespaceMedia, load);
+      if (attempts >= 8) {
+        _loadRetry?.cancel();
+        _loadRetry = null;
+      }
+    }
+
+    fireLoad();
+    _loadRetry =
+        Timer.periodic(const Duration(milliseconds: 1200), (_) => fireLoad());
     notifyListeners();
   }
 
@@ -392,6 +425,8 @@ class CastController extends ChangeNotifier {
   Future<void> _cleanup() async {
     _poll?.cancel();
     _poll = null;
+    _loadRetry?.cancel();
+    _loadRetry = null;
     await _msgSub?.cancel();
     await _stateSub?.cancel();
     _msgSub = null;

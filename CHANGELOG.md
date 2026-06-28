@@ -2,6 +2,12 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.3.12 - 2026-06-28
+- **Casting to the TV now actually plays.** The branded NASCinema now-playing screen was coming up but the movie never started — the receiver was crashing on startup (it referenced a Cast SDK event that no longer exists). Fixed: video **and** audio now play on the branded screen.
+- **Phone playback shows the honest badge** — no more false "DIRECT" on the phone; it correctly transcodes.
+- **Cast button on the home screen** — connect to the TV first, then pick a movie.
+- **Reliable cast connect** — if the branded receiver ever can't launch, casting automatically falls back to the default Chromecast receiver, so it always connects.
+
 ## 0.3.11 - 2026-06-27
 - **Custom NASCinema TV receiver is live** — casting now shows the branded now-playing screen on the TV (blurred backdrop, title, progress + "ends at" ETA, stats overlay, Art-Mode idle) instead of the generic Chromecast screen. Media is routed over HTTPS so it loads cleanly.
 - Update notice is now a banner on the library, not a SnackBar that could appear under the player.

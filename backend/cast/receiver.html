@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NASCinema</title>
-  <link rel="stylesheet" href="/cast/receiver.css?v=1">
+  <link rel="stylesheet" href="/cast/receiver.css?v=9">
 </head>
 <body>
   <!-- CAF renders the video here; our overlay sits on top. -->
@@ -51,7 +51,10 @@
     <div id="idle-tag">Ready to cast</div>
   </div>
 
+  <!-- On-screen debug log (temporary — reads out what the receiver is doing). -->
+  <div id="debug"></div>
+
   <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-  <script src="/cast/receiver.js?v=1"></script>
+  <script src="/cast/receiver.js?v=9"></script>
 </body>
 </html>

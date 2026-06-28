@@ -28,6 +28,36 @@ const els = {
 
 let lastBackdrop = '';
 
+// On-screen debug log (temporary). Newest line on top.
+const _dbg = [];
+function dbg(msg) {
+  _dbg.unshift(msg);
+  if (_dbg.length > 14) _dbg.pop();
+  const el = document.getElementById('debug');
+  if (el) el.textContent = _dbg.join('\n');
+  try { console.log('[NASC]', msg); } catch (e) {}
+  // Ship it back to the backend so the TV's log is readable remotely.
+  try {
+    fetch('/cast/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msg: msg }),
+    }).catch(function () {});
+  } catch (e) {}
+}
+dbg('receiver loaded');
+
+// Surface any startup crash (the receiver currently dies before context.start)
+// to the on-screen log + backend so we can see exactly what throws.
+window.addEventListener('error', function (e) {
+  dbg('JSERR: ' + (e.message || e) +
+      (e.lineno ? ' @' + e.lineno + ':' + (e.colno || '') : ''));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  var r = e.reason;
+  dbg('REJECT: ' + ((r && r.message) ? r.message : r));
+});
+
 function fmt(sec) {
   if (!isFinite(sec) || sec < 0) sec = 0;
   sec = Math.round(sec);
@@ -107,7 +137,12 @@ function updateProgress() {
   els.eta.textContent = `Ends at ${h12}:${mm} ${ampm}`;
 }
 
+let _lastLoggedState = null;
 function setState(state) {
+  if (state !== _lastLoggedState) {
+    dbg('state=' + state);
+    _lastLoggedState = state;
+  }
   const S = cast.framework.messages.PlayerState;
   const idle = state === S.IDLE || !state;
   els.idle.classList.toggle('hidden', !idle);
@@ -128,23 +163,70 @@ function tickClock() {
   const h12 = ((hh + 11) % 12) + 1;
   els.clock.textContent = `${h12}:${mm} ${ampm}`;
 }
-tickClock();
-setInterval(tickClock, 15000);
+// Wrapped in try/catch with step markers: a cross-origin throw from the CAF
+// SDK shows only "Script error." in window.onerror, but a local catch gives us
+// the real message — and the markers pinpoint which call throws.
+try {
+  dbg('init: clock');
+  tickClock();
+  setInterval(tickClock, 15000);
 
-pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
-  if (req.media) applyMeta(req.media);
-  toggleStats(false);
-  return req;
-});
+  dbg('init: interceptor');
+  pm.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
+    const cid = (req.media && req.media.contentId) || '?';
+    dbg('LOAD ' + String(cid).slice(0, 64));
+    if (req.media) applyMeta(req.media);
+    toggleStats(false);
+    // Reliably drop the idle screen the moment media loads — otherwise the
+    // opaque "Ready to cast" overlay sits on top of the video (audio plays,
+    // nothing visible). Don't depend on a player-state event for this.
+    setState(cast.framework.messages.PlayerState.PLAYING);
+    return req;
+  });
 
-pm.addEventListener(cast.framework.events.EventType.PLAYER_STATE_CHANGED, (e) =>
-  setState(e.playerState));
-pm.addEventListener(cast.framework.events.EventType.TIME_UPDATE, updateProgress);
+  dbg('init: listeners');
+  const ET = cast.framework.events.EventType;
+  dbg('evtypes PSC=' + typeof ET.PLAYER_STATE_CHANGED +
+      ' TU=' + typeof ET.TIME_UPDATE + ' ERR=' + typeof ET.ERROR);
+  // Defensive: an undefined EventType constant makes addEventListener throw and
+  // kills the whole receiver. Skip-and-log instead so playback still works.
+  function on(type, label, fn) {
+    if (type === undefined || type === null) {
+      dbg('listener SKIPPED (undefined type): ' + label);
+      return;
+    }
+    pm.addEventListener(type, fn);
+  }
+  const PS = cast.framework.messages.PlayerState;
+  dbg('media evtypes PLAYING=' + typeof ET.PLAYING + ' PAUSE=' + typeof ET.PAUSE +
+      ' ENDED=' + typeof ET.ENDED + ' MEDIA_STATUS=' + typeof ET.MEDIA_STATUS);
+  // PLAYER_STATE_CHANGED doesn't exist in this SDK; drive the overlay from the
+  // real media-element events (and MEDIA_STATUS if present) instead.
+  on(ET.MEDIA_STATUS, 'MEDIA_STATUS', (e) => {
+    const s = e && e.mediaStatus && e.mediaStatus.playerState;
+    if (s) setState(s);
+  });
+  on(ET.PLAYING, 'PLAYING', () => setState(PS.PLAYING));
+  on(ET.PAUSE, 'PAUSE', () => setState(PS.PAUSED));
+  on(ET.ENDED, 'ENDED', () => setState(PS.IDLE));
+  on(ET.TIME_UPDATE, 'TIME_UPDATE', updateProgress);
+  on(ET.ERROR, 'ERROR', (e) =>
+    dbg('ERR code=' + (e.detailedErrorCode || '?') +
+        (e.error ? ' ' + JSON.stringify(e.error).slice(0, 80) : '')));
 
-context.addCustomMessageListener(NS, (e) => {
-  const d = e.data || {};
-  if (d.type === 'STATS') toggleStats(!!d.show);
-});
+  dbg('init: custom msg listener');
+  context.addCustomMessageListener(NS, (e) => {
+    const d = e.data || {};
+    if (d.type === 'STATS') toggleStats(!!d.show);
+  });
 
-setState(cast.framework.messages.PlayerState.IDLE);
-context.start();
+  dbg('init: setState idle');
+  setState(cast.framework.messages.PlayerState.IDLE);
+
+  dbg('init: context.start');
+  context.start();
+  dbg('context started (ready for LOAD)');
+} catch (err) {
+  dbg('INIT THREW: ' + (err && err.message ? err.message : err) +
+      (err && err.stack ? ' || ' + String(err.stack).slice(0, 160) : ''));
+}

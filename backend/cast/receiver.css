@@ -157,3 +157,25 @@ body.paused #overlay { opacity: 1; }
 
 /* #stats / #paused-tag / #idle fade via their own #id.hidden { opacity:0 }
    rules above — no generic display:none, which would kill the transition. */
+
+/* On-screen debug log — hidden by default now that casting works. Add the
+   class "debug" to <body> to show it again; backend POST logging stays on. */
+#debug { display: none; }
+body.debug #debug {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  max-width: 70%;
+  max-height: 40%;
+  overflow: hidden;
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  line-height: 1.4;
+  color: #9effa0;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px 12px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  z-index: 9999;
+}
+#debug:empty { display: none; }

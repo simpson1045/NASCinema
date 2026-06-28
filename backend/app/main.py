@@ -6,11 +6,12 @@ Watch Together will live. For now it just accepts connections.
 
 from __future__ import annotations
 
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import socketio
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -74,6 +75,30 @@ def create_fastapi() -> FastAPI:
     app.include_router(stream_router)
     app.include_router(subtitles_router)
     app.include_router(update_router)
+
+    # Cast receiver debug pipe: the branded receiver POSTs each on-screen debug
+    # line here so we can read what happened on the TV without chrome://inspect.
+    # Registered before the /cast static mount so it isn't swallowed by it.
+    _cast_log: deque[str] = deque(maxlen=200)
+
+    @app.post("/cast/log")
+    async def cast_log_post(req: Request) -> dict:
+        try:
+            data = await req.json()
+        except Exception:
+            data = {}
+        msg = str(data.get("msg", ""))[:500]
+        _cast_log.append(msg)
+        return {"ok": True}
+
+    @app.get("/cast/log")
+    async def cast_log_get() -> dict:
+        return {"lines": list(_cast_log)}
+
+    @app.delete("/cast/log")
+    async def cast_log_clear() -> dict:
+        _cast_log.clear()
+        return {"ok": True}
 
     # The custom Cast receiver (branded TV "now playing" screen). Served here so
     # it lives in one place; an HTTPS reverse proxy (nginx on the NAS) fronts it

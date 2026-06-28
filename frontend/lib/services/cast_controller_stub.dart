@@ -28,6 +28,7 @@ class CastController extends ChangeNotifier {
   bool get castIsHls => false;
   bool get hasCustomReceiver => false;
   String get castBase => '';
+  bool preferCustomReceiver = false;
 
   Future<void> discover({Duration timeout = const Duration(seconds: 8)}) async {}
   Future<bool> connect(CastDevice device) async => false;
