@@ -63,6 +63,52 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
     }
 
 
+# tmdb_id -> clearlogo URL (or None). Cached for the process so the play path
+# only hits TMDB once per movie. None is cached too (movie has no logo); only
+# transient fetch failures are left uncached so a later play can retry.
+_logo_cache: dict[int, str | None] = {}
+
+
+async def get_movie_logo(tmdb_id: int) -> str | None:
+    """A movie's clearlogo (transparent PNG, ~JF-style) URL, or None."""
+    if tmdb_id in _logo_cache:
+        return _logo_cache[tmdb_id]
+    key = get_settings().tmdb_api_key
+    if not key:
+        return None
+    try:
+        # Short timeout: this rides the play decision, so a slow TMDB must not
+        # stall playback — we just skip the logo.
+        async with httpx.AsyncClient(timeout=6) as client:
+            r = await client.get(
+                f"{TMDB_BASE}/movie/{tmdb_id}/images",
+                params={"api_key": key, "include_image_language": "en,null"},
+            )
+            r.raise_for_status()
+            logos = r.json().get("logos", [])
+    except (httpx.HTTPError, ValueError):
+        return None  # uncached — retry on a later play
+
+    url: str | None = None
+    if logos:
+        # Prefer English, then PNG (renders cleaner than SVG on the TV), then the
+        # most-voted.
+        def _score(lg: dict) -> tuple:
+            fp = str(lg.get("file_path", "")).lower()
+            return (
+                1 if lg.get("iso_639_1") == "en" else 0,
+                1 if fp.endswith(".png") else 0,
+                lg.get("vote_average") or 0,
+            )
+
+        best = max(logos, key=_score)
+        fp = best.get("file_path")
+        if fp:
+            url = f"https://image.tmdb.org/t/p/w500{fp}"
+    _logo_cache[tmdb_id] = url
+    return url
+
+
 async def get_movie_videos(tmdb_id: int) -> list[dict]:
     """Official trailers/clips for a movie (YouTube-hosted) from TMDB."""
     key = get_settings().tmdb_api_key

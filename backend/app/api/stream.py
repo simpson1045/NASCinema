@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
+from ..metadata import get_movie_logo
 from ..models import MediaFile, Movie
 from ..playback import decide
 from ..streaming import cached_ranges, ensure_segment, get_or_start, log_access
@@ -62,12 +63,17 @@ async def play_decision(
         else f"/api/stream/{file_id}/master.m3u8"
     )
     # Artwork for the cast receiver's now-playing screen (absolute TMDB URLs the
-    # Chromecast can fetch directly). Logo (clearlogo) isn't fetched yet.
+    # Chromecast can fetch directly): a backdrop and the clearlogo (fetched +
+    # cached on first play; the receiver shows it in place of the title text).
     backdrop = None
+    logo = None
     if mf.movie_id:
         mv = await session.scalar(select(Movie).where(Movie.id == mf.movie_id))
-        if mv and mv.backdrop_path:
-            backdrop = f"https://image.tmdb.org/t/p/w1280{mv.backdrop_path}"
+        if mv:
+            if mv.backdrop_path:
+                backdrop = f"https://image.tmdb.org/t/p/w1280{mv.backdrop_path}"
+            if mv.tmdb_id:
+                logo = await get_movie_logo(mv.tmdb_id)
     # Probed source facts for the "stats for nerds" overlay.
     return {
         "file_id": file_id,
@@ -75,7 +81,7 @@ async def play_decision(
         "reason": d["reason"],
         "url": url,
         "backdrop": backdrop,
-        "logo": None,
+        "logo": logo,
         "source": {
             "container": mf.container,
             "video_codec": mf.video_codec,

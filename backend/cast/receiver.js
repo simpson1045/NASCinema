@@ -78,19 +78,20 @@ function applyMeta(media) {
   els.title.textContent = title;
   els.pausedTitle.textContent = title;
 
+  // Upper-left corner (on pause): the clearlogo when we have it (JF-style),
+  // else the title text.
   if (cd.logo) {
-    els.clearlogo.src = cd.logo;
-    els.clearlogo.style.display = 'block';
-    els.title.style.display = 'none';
     els.pausedLogo.src = cd.logo;
     els.pausedLogo.style.display = 'block';
     els.pausedTitle.style.display = 'none';
   } else {
-    els.clearlogo.style.display = 'none';
-    els.title.style.display = 'block';
     els.pausedLogo.style.display = 'none';
     els.pausedTitle.style.display = 'inline';
   }
+  // Bottom now-playing card always uses the text title (+ meta + progress) —
+  // the logo lives in the corner, so we don't repeat it here.
+  els.clearlogo.style.display = 'none';
+  els.title.style.display = 'block';
 
   els.meta.textContent = cd.meta || '';
 
