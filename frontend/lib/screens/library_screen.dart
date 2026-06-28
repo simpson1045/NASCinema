@@ -21,6 +21,7 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   late final ApiService _api = ApiService(widget.baseUrl);
   late Future<List<Movie>> _future;
+  UpdateInfo? _update;
 
   @override
   void initState() {
@@ -36,21 +37,46 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _checkUpdate() async {
     final info = await UpdateService.checkForUpdate(widget.baseUrl);
-    if (!mounted || info == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: NasColors.surface,
-      duration: const Duration(seconds: 8),
-      content: Text('Update available — v${info.version}',
-          style: const TextStyle(color: NasColors.text)),
-      action: SnackBarAction(
-        label: 'Update',
-        textColor: NasColors.amber,
-        onPressed: () => showDialog(
+    // A persistent banner on the library — not a SnackBar, which fires whenever
+    // the async check lands (often after you've opened a movie) and shows up on
+    // whatever screen is current.
+    if (mounted && info != null) setState(() => _update = info);
+  }
+
+  Widget _updateBanner() {
+    final u = _update!;
+    return Material(
+      color: NasColors.amber.withValues(alpha: 0.14),
+      child: InkWell(
+        onTap: () => showDialog(
           context: context,
-          builder: (_) => _UpdateDialog(baseUrl: widget.baseUrl, info: info),
+          builder: (_) => _UpdateDialog(baseUrl: widget.baseUrl, info: u),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
+          child: Row(
+            children: [
+              const Icon(Icons.system_update, color: NasColors.amber, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('Update available — v${u.version}',
+                    style: const TextStyle(
+                        color: NasColors.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+              ),
+              const Text('Update',
+                  style: TextStyle(
+                      color: NasColors.amber, fontWeight: FontWeight.w600)),
+              IconButton(
+                onPressed: () => setState(() => _update = null),
+                icon: const Icon(Icons.close, color: NasColors.muted, size: 18),
+              ),
+            ],
+          ),
         ),
       ),
-    ));
+    );
   }
 
   @override
@@ -88,9 +114,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<Movie>>(
-        future: _future,
-        builder: (context, snap) {
+      body: Column(
+        children: [
+          if (_update != null) _updateBanner(),
+          Expanded(
+            child: FutureBuilder<List<Movie>>(
+              future: _future,
+              builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: NasColors.amber),
@@ -138,7 +168,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
           );
-        },
+              },
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: _NowCastingBar(baseUrl: widget.baseUrl),
     );
