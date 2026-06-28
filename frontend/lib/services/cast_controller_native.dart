@@ -472,8 +472,13 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // The OS kills our control socket when we're backgrounded/locked; the movie
     // keeps playing on the TV. On resume, silently rejoin the running receiver
-    // so the remote works again.
-    if (state == AppLifecycleState.resumed) _reconnectIfDropped();
+    // so the remote works again. On the way out, save the position while our
+    // clock is still fresh (it freezes once we're suspended).
+    if (state == AppLifecycleState.resumed) {
+      _reconnectIfDropped();
+    } else if (state == AppLifecycleState.paused) {
+      _saveProgress();
+    }
   }
 
   Future<void> _reconnectIfDropped() async {
@@ -494,6 +499,11 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> disconnect() async {
+    // The phone's local position goes stale if the app was backgrounded while
+    // you watched the TV — pull a fresh one from the receiver and save it BEFORE
+    // sending STOP (which resets the receiver's clock).
+    await _refreshPosition();
+    _saveProgress();
     final s = _session;
     if (s != null && _mediaSessionId != null) {
       s.sendMessage(CastSession.kNamespaceMedia,
@@ -503,6 +513,17 @@ class CastController extends ChangeNotifier with WidgetsBindingObserver {
     _lastDevice = null;
     await _cleanup();
     _onClosed();
+  }
+
+  /// Ask the receiver for its current position and give the reply a moment to
+  /// land (it updates _position via _onMessage), so a save reflects reality even
+  /// after the app was backgrounded and its local clock froze.
+  Future<void> _refreshPosition() async {
+    final s = _session;
+    if (s == null || _mediaSessionId == null) return;
+    s.sendMessage(CastSession.kNamespaceMedia,
+        {'type': 'GET_STATUS', 'mediaSessionId': _mediaSessionId});
+    await Future<void>.delayed(const Duration(milliseconds: 700));
   }
 
   void _onClosed() {
