@@ -228,10 +228,11 @@ sub buildMeta(it as object)
 
     if it.rt_score <> invalid then
         ' Approximated from score (OMDb gives no real Certified-Fresh flag):
-        ' >=75 certified, 60-74 fresh, else rotten.
-        img = "pkg:/images/rt_rotten.png"
+        ' >=75 certified, 60-74 fresh, else rotten. (Versioned names bust Roku's
+        ' image cache after the transparency re-encode.)
+        img = "pkg:/images/rt_rotten1.png"
         if it.rt_score >= 75 then
-            img = "pkg:/images/rt_certified.png"
+            img = "pkg:/images/rt_certified1.png"
         else if it.rt_score >= 60 then
             img = "pkg:/images/rt_fresh.png"
         end if
