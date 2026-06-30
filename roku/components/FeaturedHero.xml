@@ -41,7 +41,7 @@
          Covers the video plane (which ignores opacity). Height set in code. -->
     <Rectangle id="fader" width="1920" height="560" color="0x000000FF" opacity="0" />
 
-    <Timer id="auto" duration="25" repeat="true" />
+    <Timer id="auto" duration="25" repeat="false" />
     <!-- Short delay after a backdrop appears before its trailer starts. -->
     <Timer id="trailerDelay" duration="1.4" repeat="false" />
 

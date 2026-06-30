@@ -18,20 +18,26 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 from pathlib import Path
 
 from .config import get_settings
 from .ffmpeg import ffmpeg_path, ffprobe_path, yt_dlp_path
+
+# Run the heavy yt-dlp/ffmpeg children below-normal so they never starve the
+# event loop (the box also runs Postgres + other apps). Windows-only flag; 0 is a
+# harmless no-op elsewhere.
+_LOWPRI = subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0
 from .metadata import get_movie_videos
 
 # movie_id -> lock, so concurrent callers coalesce onto one download.
 _locks: dict[int, asyncio.Lock] = {}
 # tmdb_id -> ranked list of candidate YouTube keys. Cached per process.
 _key_cache: dict[int, list] = {}
-# Global cap on concurrent trailer work: yt-dlp + ffmpeg are heavy, and firing a
-# whole featured set at once thrashes the box (and stalls the API). Keep it small.
-_download_sem = asyncio.Semaphore(2)
+# Global cap on concurrent trailer work: yt-dlp + ffmpeg are heavy (esp. 4K), and
+# even 2 at once pegs the CPU and stalls the API. One at a time, low priority.
+_download_sem = asyncio.Semaphore(1)
 
 _AAC_OK = {"aac", "mp4a"}
 _MAX_CANDIDATES = 3  # try at most this many trailers before giving up
@@ -107,7 +113,9 @@ def _probe_sync(path: Path) -> dict | None:
         "-show_format", "-show_streams", str(path),
     ]
     try:
-        proc = subprocess.run(args, capture_output=True, text=True, timeout=60)
+        proc = subprocess.run(
+            args, capture_output=True, text=True, timeout=60, creationflags=_LOWPRI
+        )
     except (subprocess.TimeoutExpired, OSError):
         return None
     if proc.returncode != 0 or not proc.stdout:
@@ -172,7 +180,9 @@ async def _download(movie_id: int, key: str) -> bool:
     # subprocess.run in a thread, NOT asyncio subprocess: the app forces a
     # SelectorEventLoop (psycopg) which can't spawn async subprocesses on Windows.
     def _run() -> subprocess.CompletedProcess:
-        return subprocess.run(args, capture_output=True, text=True, timeout=600)
+        return subprocess.run(
+            args, capture_output=True, text=True, timeout=600, creationflags=_LOWPRI
+        )
 
     try:
         await asyncio.to_thread(_run)
@@ -196,7 +206,9 @@ async def _force_aac(movie_id: int) -> None:
     ]
 
     def _run() -> subprocess.CompletedProcess:
-        return subprocess.run(args, capture_output=True, text=True, timeout=300)
+        return subprocess.run(
+            args, capture_output=True, text=True, timeout=300, creationflags=_LOWPRI
+        )
 
     try:
         proc = await asyncio.to_thread(_run)

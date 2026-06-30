@@ -66,8 +66,7 @@ sub onFeatured()
 
     buildDots(m.items.count())
     m.index = 0
-    showItem()   ' first one shows immediately (no fade)
-    m.timer.control = "start"
+    showItem()   ' first one shows immediately (no fade); showItem starts the timer
 end sub
 
 sub shuffle(a as object)
@@ -107,9 +106,20 @@ sub showItem()
     m.meta.text = metaLine(it)
     updateDots()
 
+    ' Fallback advance timer, always running per item: if NO trailer ends up
+    ' playing (not cached, error), this still moves us on. A playing trailer
+    ' overrides it — idle keeps the 25s cap, fullscreen stops it for full play.
+    m.timer.duration = dwellSeconds()
+    m.timer.control = "start"
+
     ' Show the backdrop for a beat, then start this item's trailer.
     if not m.top.suspended then m.trailerDelay.control = "start"
 end sub
+
+function dwellSeconds() as integer
+    if m.activeState then return 15   ' fullscreen: short fallback if nothing plays
+    return 25                         ' idle banner cap
+end function
 
 sub onTrailerDelay()
     playTrailer()
@@ -145,10 +155,14 @@ end sub
 sub onTrailerState()
     st = m.trailer.state
     if st = "playing" then
-        ' Real frames now — dissolve from backdrop to video, and start the dwell
-        ' clock from here so buffering time doesn't shorten the trailer.
+        ' Real frames now — dissolve from backdrop to video.
         m.trailer.visible = true
-        if not m.activeState then m.timer.control = "start"
+        if m.activeState then
+            m.timer.control = "stop"    ' fullscreen: let the trailer play to the end
+        else
+            m.timer.duration = 25       ' idle: 25s cap, counted from playback start
+            m.timer.control = "start"
+        end if
     else if st = "finished" then
         advance(1)
     else if st = "error" then
@@ -161,11 +175,17 @@ end sub
 sub onActiveChange()
     m.activeState = m.top.active
     if m.activeState then
-        m.timer.control = "stop"   ' no 25s cap while watching — let it play out
         m.trailer.mute = false
+        if m.trailer.state = "playing" then
+            m.timer.control = "stop"    ' let the playing trailer finish (no cap)
+        else
+            m.timer.duration = 15       ' fullscreen fallback if nothing's playing
+            m.timer.control = "start"
+        end if
     else
         m.trailer.mute = true
-        m.timer.control = "start"  ' 25s cap resumes for the idle cycle
+        m.timer.duration = 25
+        m.timer.control = "start"       ' idle cap resumes
     end if
     ' Smoothly fade through black into/out of fullscreen instead of snapping.
     m.fader.height = 1080          ' cover the whole screen during the transition
