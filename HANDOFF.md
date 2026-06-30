@@ -1,9 +1,35 @@
 # NASCinema — Handoff (honest current state)
 
-*Last updated: 2026-06-29. This is the truthful state of the project for the next
+*Last updated: 2026-06-30. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
 actually are and what's next." Current version: **v0.3.12+11**.*
+
+---
+
+## Latest session (2026-06-30)
+
+- **Roku playback "never worked" — root-caused & fixed.** The library was never
+  rescanned after the NAS consolidation, so every `media_files.path` was stale
+  (`\\NorthsideNAS\...\Totally Legal Movies\Totally Legal Movies\...` doubled
+  hostname path) → `/api/stream/{id}/direct` 404'd → Roku bailed at pos=0s.
+  Reran the scan (287 files re-added at `\\192.168.0.248\...`), then deleted 439
+  stale `NorthsideNAS` media_files the prune guard skipped. Stream now serves
+  HTTP 206 w/ range, direct + via NPM.
+- **Side effect:** Continue Watching emptied (its progress was pinned to the
+  deleted dead files). Will refill as movies are watched.
+- **Roku audio:** ROTS direct-play then surfaced `audio=mat` (TrueHD) → silence +
+  freeze ~6s. Roku can't bitstream TrueHD/DTS-HD. Shipped on-device audio-track
+  selection (`scoreAudio`/`onAudioTracks` in MainScene.brs): switches to the best
+  passthrough track (EAC3/Atmos → AC-3), skips TrueHD/DTS-HD/commentary. **Needs
+  a sideload + replay of ROTS to verify** (read `/cast/log`). If audio is fixed
+  but it still stutters, next suspect is throughput (~90 Mbps 4K REMUX; check the
+  Roku is wired, not Wi‑Fi).
+- **RT logos:** rotten/certified re-encoded to transparent RGBA + versioned
+  filenames (`rt_rotten1`/`rt_certified1`) to bust Roku's image cache.
+- **Direction set:** after the Roku audio verify, dev shifts to **phone + ELKO**
+  native renderer as a couch appliance (auto-launch TV mode + phone-as-remote for
+  lossless from the couch), plus **XInput/Xbox controller** support as a remote.
 
 ---
 
