@@ -33,6 +33,7 @@ sub init()
     ' then AC-3), skipping TrueHD/DTS-HD and commentaries. Direct play, file
     ' untouched — we just point it at the right existing track.
     m.video.observeField("availableAudioTracks", "onAudioTracks")
+    m.desiredAudioTrack = invalid
 
     logmsg("channel init; base=" + m.base)
     loadHome()
@@ -183,6 +184,7 @@ sub onDetailLoaded()
 end sub
 
 sub playFile(file as object, title as dynamic)
+    m.desiredAudioTrack = invalid   ' recompute per movie
     vc = createObject("roSGNode", "ContentNode")
     vc.url = m.base + "/api/stream/" + file.id.toStr() + "/direct"
     vc.streamFormat = streamFormatFor(file.container)
@@ -218,6 +220,8 @@ sub onVideoState()
         if si.streamBitrate <> invalid then extra = extra + " streamKbps=" + si.streamBitrate.toStr()
         if si.isUnderrun <> invalid then extra = extra + " underrun=" + si.isUnderrun.toStr()
     end if
+
+    if st = "playing" then applyAudioTrack()
 
     if st = "error" then
         logmsg("video ERROR code=" + m.video.errorCode.toStr() + " msg=" + firstStr(m.video.errorMsg) + extra)
@@ -259,7 +263,18 @@ sub onAudioTracks()
     ' Only switch when we actually found a passthrough-friendly track; if every
     ' track scores <=0 (unlabeled), leave Roku's default alone.
     if best >= 0 and bestScore > 0 then
-        m.video.audioTrack = tracks[best].Track
+        m.desiredAudioTrack = tracks[best].Track
+        applyAudioTrack()   ' applies now if already playing, else once "playing"
+    end if
+end sub
+
+' Switch to the chosen track only once playback is actually running — switching
+' during buffering can wedge the initial buffer fill on a high-bitrate stream.
+sub applyAudioTrack()
+    if m.desiredAudioTrack = invalid then return
+    if m.video.state <> "playing" then return
+    if m.video.audioTrack <> m.desiredAudioTrack then
+        m.video.audioTrack = m.desiredAudioTrack
     end if
 end sub
 
