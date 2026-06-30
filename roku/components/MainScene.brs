@@ -27,6 +27,12 @@ sub init()
     m.rows.observeField("rowItemSelected", "onItemSelected")
     m.hero.observeField("playMovieId", "onHeroPlay")
     m.video.observeField("state", "onVideoState")
+    ' Roku defaults to the first audio track, which on our remuxes is lossless
+    ' TrueHD/Atmos — Roku CAN'T bitstream that (silence + freeze). When the track
+    ' list arrives, switch to the best track Roku CAN pass through (E-AC3/Atmos,
+    ' then AC-3), skipping TrueHD/DTS-HD and commentaries. Direct play, file
+    ' untouched — we just point it at the right existing track.
+    m.video.observeField("availableAudioTracks", "onAudioTracks")
 
     logmsg("channel init; base=" + m.base)
     loadHome()
@@ -223,6 +229,55 @@ sub onVideoState()
         logmsg("video state=" + st + extra)
     end if
 end sub
+
+' Roku reports the file's audio tracks here once it has parsed the container.
+' Pick the best one Roku can actually pass through and switch to it, so we never
+' sit on the TrueHD track that produces silence + a freeze.
+sub onAudioTracks()
+    tracks = m.video.availableAudioTracks
+    if tracks = invalid or tracks.count() = 0 then return
+
+    best = -1
+    bestScore = -1000000
+    info = ""
+    for i = 0 to tracks.count() - 1
+        t = tracks[i]
+        nm = ""
+        if t.Name <> invalid then nm = t.Name
+        lang = ""
+        if t.Language <> invalid then lang = t.Language
+        sc = scoreAudio(nm)
+        info = info + " [" + i.toStr() + " '" + nm + "'/" + lang + "=" + sc.toStr() + "]"
+        if sc > bestScore then
+            bestScore = sc
+            best = i
+        end if
+    end for
+
+    logmsg("audioTracks(" + tracks.count().toStr() + ")" + info + " -> pick " + best.toStr())
+
+    ' Only switch when we actually found a passthrough-friendly track; if every
+    ' track scores <=0 (unlabeled), leave Roku's default alone.
+    if best >= 0 and bestScore > 0 then
+        m.video.audioTrack = tracks[best].Track
+    end if
+end sub
+
+' Rank an audio track by how well the Roku/Denon chain handles it, using the
+' track's title. EAC3/Atmos (DD+) bitstreams to the Denon as Atmos; AC-3 as 5.1.
+' TrueHD/DTS-HD can't be formed into a Roku passthrough bitstream. Commentaries
+' are never auto-selected.
+function scoreAudio(name as string) as integer
+    u = UCase(name)
+    if Instr(1, u, "COMMENT") > 0 then return -1000
+    if Instr(1, u, "TRUEHD") > 0 or Instr(1, u, "TRUE-HD") > 0 or Instr(1, u, "MLP") > 0 then return -900
+    if Instr(1, u, "DTS-HD") > 0 or Instr(1, u, "DTSHD") > 0 or Instr(1, u, "DTS:X") > 0 or Instr(1, u, "DTS-X") > 0 then return -800
+    if Instr(1, u, "EAC3") > 0 or Instr(1, u, "E-AC3") > 0 or Instr(1, u, "E-AC-3") > 0 or Instr(1, u, "DIGITAL PLUS") > 0 or Instr(1, u, "DD+") > 0 or Instr(1, u, "DDP") > 0 or Instr(1, u, "JOC") > 0 or Instr(1, u, "ATMOS") > 0 then return 100
+    if Instr(1, u, "AC3") > 0 or Instr(1, u, "AC-3") > 0 or Instr(1, u, "DOLBY DIGITAL") > 0 then return 50
+    if Instr(1, u, "DTS") > 0 then return 30
+    if Instr(1, u, "AAC") > 0 then return 20
+    return 0
+end function
 
 sub backToRows()
     m.video.control = "stop"
