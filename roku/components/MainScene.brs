@@ -3,8 +3,9 @@
 ' Recently Added, Top Rated, genres) — the TV just renders them.
 
 sub init()
-    ' Backend base URL — the NASCinema server on the LAN (ALPINE).
-    m.base = "http://192.168.0.150:8400"
+    ' Backend base URL — through NPM/HTTPS like every other app (not the raw LAN
+    ' IP). HttpTask sets the cert bundle; the Video node streams HTTPS fine.
+    m.base = "https://nascinema.simpson1045.com"
     m.logTasks = []
 
     m.brand = m.top.findNode("brand")

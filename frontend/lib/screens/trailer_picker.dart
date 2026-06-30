@@ -133,7 +133,12 @@ class _TrailerPickerState extends State<TrailerPicker> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) Navigator.of(context).pop(_pin); // hand the pin back
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text('Trailer · ${widget.title}')),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -212,6 +217,7 @@ class _TrailerPickerState extends State<TrailerPicker> {
               ),
             ),
         ],
+      ),
       ),
     );
   }

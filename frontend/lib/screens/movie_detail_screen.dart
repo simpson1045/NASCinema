@@ -42,13 +42,38 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   bool _loading = true;
   String? _error;
   String? _blurayUrl;
+  String? _trailerPin;
 
   @override
   void initState() {
     super.initState();
     _blurayUrl = widget.movie.blurayUrl;
+    _trailerPin = widget.movie.trailerYoutube;
     _load();
   }
+
+  /// YouTube id from a URL or bare key (to match a pin against the video list).
+  String? _ytKey(String? s) {
+    if (s == null) return null;
+    s = s.trim();
+    if (s.isEmpty) return null;
+    if (s.contains('watch?v=')) return s.split('watch?v=')[1].split('&')[0];
+    if (s.contains('youtu.be/')) return s.split('youtu.be/')[1].split('?')[0];
+    if (s.contains('/')) return s.split('/').last.split('?')[0];
+    return s;
+  }
+
+  /// Label for the trailer button: none / the matched TMDB trailer / custom.
+  String get _trailerLabel {
+    if (_trailerPin == null || _trailerPin!.isEmpty) return 'Choose trailer';
+    final k = _ytKey(_trailerPin);
+    for (final v in _videos) {
+      if (_ytKey(v.url) == k) return 'Trailer: ${v.name}';
+    }
+    return 'Trailer: custom link';
+  }
+
+  bool get _trailerPinned => _trailerPin != null && _trailerPin!.isNotEmpty;
 
   Future<void> _load() async {
     try {
@@ -116,15 +141,16 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   }
 
   Future<void> _chooseTrailer() async {
-    await Navigator.of(context).push(MaterialPageRoute(
+    final result = await Navigator.of(context).push<String?>(MaterialPageRoute(
       builder: (_) => TrailerPicker(
         api: _api,
         movieId: widget.movie.id,
         title: widget.movie.title,
         videos: _videos,
-        currentPin: widget.movie.trailerYoutube,
+        currentPin: _trailerPin,
       ),
     ));
+    if (mounted) setState(() => _trailerPin = result);
   }
 
   void _play() {
@@ -324,8 +350,23 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton.icon(
                           onPressed: _chooseTrailer,
-                          icon: const Icon(Icons.movie_filter_outlined, size: 18),
-                          label: const Text('Choose trailer'),
+                          icon: Icon(
+                            _trailerPinned
+                                ? Icons.check_circle
+                                : Icons.movie_filter_outlined,
+                            size: 18,
+                            color: _trailerPinned ? Colors.amber : null,
+                          ),
+                          label: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 380),
+                            child: Text(
+                              _trailerPinned
+                                  ? '$_trailerLabel  ·  Change'
+                                  : 'Choose trailer',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 28),
