@@ -3,7 +3,7 @@
 *Last updated: 2026-06-30. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.3.12+11**.*
+actually are and what's next." Current version: **v0.3.13+12**.*
 
 ---
 
@@ -40,8 +40,16 @@ actually are and what's next." Current version: **v0.3.12+11**.*
   `getHome()`, `HomeData`/`HomeRail` models, `Movie` extended with ratings +
   logo/trailer. Web build deployed (served at `/`). Hero trailer autoplay = Phase 2.
 - **Borderless fullscreen** on desktop: F11 + titlebar button via
-  `window_manager` (conditional import — web gets a no-op stub). Compiles clean;
-  needs a **Windows build** to actually exercise.
+  `window_manager` (conditional import — web gets a no-op stub).
+- **Roku closed out:** verified every client-side path fails on the 4K DV TrueHD
+  REMUX (TrueHD silent+freeze; EAC3 switch mid-stream = "malformed data",
+  during-buffering = wedge; still underran post-mesh). Roku = fallback for
+  lighter files only; logged to memory. Done chasing it.
+- **v0.3.13+12 Windows build deployed to ELKO** (`C:\NASCinema\renderer` via C$,
+  robocopy clean, app wasn't running). ELKO now has the carousel home +
+  fullscreen. **Next: launch it on ELKO, test ROTS via the native renderer**
+  (client=native → direct-play, TrueHD/Atmos to the Denon, DV to the C2 — the
+  lossless payoff), then build phone-remote → ELKO + XInput.
 
 ---
 
