@@ -67,6 +67,10 @@ Widget buildPlayerView(String url, bool isHls) {
   // Surface failures off-box (ELKO has no shell): log the open + any libmpv
   // error next to the exe, readable over the C$ share.
   player.stream.error.listen((e) => _diag('ERROR: $e'));
+  // Capture libmpv's own audio-output negotiation (which device, which format,
+  // did the spdif bitstream get accepted) so we can see why passthrough is
+  // silent. Read over the C$ share. Diagnostic — trim once audio is solved.
+  player.stream.log.listen((l) => _diag('mpv[${l.level}] ${l.prefix}: ${l.text}'));
   _diag('open: $url (passthrough=$_forcePassthrough)');
 
   // Lossless audio passthrough when the user has forced it: take exclusive
@@ -74,9 +78,14 @@ Widget buildPlayerView(String url, bool isHls) {
   // the AVR. Audio bypasses the Flutter texture, so it works even though video
   // is composited. Off by default (see _forcePassthrough).
   final platform = player.platform;
-  if (platform is NativePlayer && _forcePassthrough) {
-    platform.setProperty('audio-exclusive', 'yes');
-    platform.setProperty('audio-spdif', _spdifCodecs);
+  if (platform is NativePlayer) {
+    // Verbose audio-output + decoder logs so the C$ log shows the actual device
+    // and format negotiation (diagnostic).
+    platform.setProperty('msg-level', 'ao=v,ad=v,af=v');
+    if (_forcePassthrough) {
+      platform.setProperty('audio-exclusive', 'yes');
+      platform.setProperty('audio-spdif', _spdifCodecs);
+    }
   }
 
   // mpv plays HLS and plain files alike; `isHls` is irrelevant here. open()

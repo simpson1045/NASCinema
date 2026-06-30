@@ -90,7 +90,7 @@ class _FeaturedHeroState extends State<FeaturedHero> {
   Widget build(BuildContext context) {
     final m = widget.featured[_i];
     final double h =
-        (MediaQuery.of(context).size.height * 0.56).clamp(380.0, 620.0).toDouble();
+        (MediaQuery.of(context).size.height * 0.5).clamp(360.0, 560.0).toDouble();
     return SizedBox(
       height: h,
       child: Stack(
@@ -98,6 +98,12 @@ class _FeaturedHeroState extends State<FeaturedHero> {
         children: [
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 500),
+            // Expand the crossfade stack so the backdrop fills edge-to-edge
+            // instead of sizing to the image and centering (black side bars).
+            layoutBuilder: (current, previous) => Stack(
+              fit: StackFit.expand,
+              children: [...previous, ?current],
+            ),
             child: _Backdrop(
                 key: ValueKey('bd${m.id}'),
                 url: m.backdropUrl(size: 'w1280')),
