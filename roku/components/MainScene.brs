@@ -227,10 +227,12 @@ sub backToRows()
     m.video.control = "stop"
     m.video.visible = false
     m.hero.suspended = false   ' resume the hero (restarts its trailer)
-    ' Restore focus to whichever zone we launched playback from.
+    ' Restore focus + rail visibility for whichever zone we launched from.
     if m.zone = "hero" then
+        m.rows.visible = false   ' hero is fullscreen
         m.hero.setFocus(true)
     else
+        m.rows.visible = true
         m.rows.setFocus(true)
     end if
 end sub
@@ -251,12 +253,14 @@ function onKeyEvent(key as string, press as boolean) as boolean
     ' the top row and can't move further — exactly when we want to jump to hero.
     if key = "down" and m.zone = "hero" then
         m.zone = "rows"
-        m.hero.active = false   ' mute + resume cycling
+        m.hero.active = false   ' collapse to banner, mute, resume cycling
+        m.rows.visible = true
         m.rows.setFocus(true)
         return true
     else if key = "up" and m.zone = "rows" then
         m.zone = "hero"
-        m.hero.active = true    ' unmute (after dwell) + pause cycling
+        m.hero.active = true    ' go fullscreen, unmute, pause cycling
+        m.rows.visible = false  ' hide the rails behind the fullscreen hero
         m.hero.setFocus(true)
         return true
     end if

@@ -11,6 +11,7 @@ sub init()
     m.title = m.top.findNode("title")
     m.meta = m.top.findNode("meta")
     m.dotsGroup = m.top.findNode("dots")
+    m.fader = m.top.findNode("fader")
     m.timer = m.top.findNode("auto")
     m.trailerDelay = m.top.findNode("trailerDelay")
     m.fadeOut = m.top.findNode("fadeOut")
@@ -18,16 +19,38 @@ sub init()
     m.timer.observeField("fire", "onTick")
     m.trailerDelay.observeField("fire", "onTrailerDelay")
     m.trailer.observeField("state", "onTrailerState")
-    m.trailer.observeField("position", "onTrailerPos")
     m.fadeOut.observeField("state", "onFadeOutDone")
     m.index = 0
     m.items = []
     m.dots = []
     m.activeState = false
+    m.fadeReason = "advance"   ' "advance" (next item) or "mode" (banner<->fullscreen)
 
-    ' Crop the (oversized 16:9) trailer video to the banner so it fills like the
-    ' backdrop. Array field -> must be set in code, not XML.
-    m.content.clippingRect = [0, 0, 1920, 560]
+    setMode(false)   ' start collapsed (banner)
+end sub
+
+' Collapsed = the 560px banner (backdrop/trailer cropped, shifted up to keep faces).
+' Fullscreen = the trailer fills the whole 1920x1080 (no crop) when the user hovers.
+sub setMode(fs as boolean)
+    if fs then
+        m.content.clippingRect = [0, 0, 1920, 1080]
+        m.backdrop.translation = [0, 0]
+        m.trailer.translation = [0, 0]
+        m.scrim.height = 1080
+        m.fader.height = 1080
+        m.logo.translation = [90, 830]
+        m.meta.translation = [92, 990]
+        m.dotsGroup.visible = false
+    else
+        m.content.clippingRect = [0, 0, 1920, 560]
+        m.backdrop.translation = [0, -200]
+        m.trailer.translation = [0, -200]
+        m.scrim.height = 560
+        m.fader.height = 560
+        m.logo.translation = [90, 300]
+        m.meta.translation = [92, 476]
+        m.dotsGroup.visible = true
+    end if
 end sub
 
 sub onFeatured()
@@ -135,12 +158,16 @@ end sub
 sub onActiveChange()
     m.activeState = m.top.active
     if m.activeState then
-        m.timer.control = "stop"
+        m.timer.control = "stop"   ' no 25s cap while watching — let it play out
         m.trailer.mute = false
     else
         m.trailer.mute = true
-        m.timer.control = "start"
+        m.timer.control = "start"  ' 25s cap resumes for the idle cycle
     end if
+    ' Smoothly fade through black into/out of fullscreen instead of snapping.
+    m.fader.height = 1080          ' cover the whole screen during the transition
+    m.fadeReason = "mode"
+    m.fadeOut.control = "start"
 end sub
 
 ' A fullscreen movie is playing — stop everything so two videos don't fight.
@@ -236,21 +263,17 @@ sub advance(dir as integer)
     ' Fade the black overlay IN (it covers the still-playing video, which ignores
     ' opacity); onFadeOutDone then stops the trailer + swaps under the black cover,
     ' so there's no flash of the old backdrop.
+    m.fadeReason = "advance"
     m.fadeOut.control = "start"
-end sub
-
-' Advance before the trailer's tail so we never show the baked-in YouTube
-' end-card ("watch these other videos") on uploads that have one.
-sub onTrailerPos()
-    dur = m.trailer.duration
-    if dur <> invalid and dur > 30 and m.trailer.position > dur - 12 then
-        advance(1)
-    end if
 end sub
 
 sub onFadeOutDone()
     if m.fadeOut.state = "stopped" then
-        showItem()
+        if m.fadeReason = "mode" then
+            setMode(m.activeState)   ' resize banner<->fullscreen under the black
+        else
+            showItem()               ' swap to the next item under the black
+        end if
         m.fadeIn.control = "start"
     end if
 end sub

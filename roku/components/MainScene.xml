@@ -4,8 +4,6 @@
   <children>
     <Rectangle id="bg" width="1920" height="1080" color="0x0A0E27FF" />
     <FeaturedHero id="hero" visible="false" />
-    <Label id="brand" text="NASCinema" translation="[110,28]"
-        color="0xFFB020FF" font="font:LargeBoldSystemFont" />
     <Label id="status" text="Loading your library…" translation="[0,520]"
         width="1920" horizAlign="center" color="0xEEF1FFFF"
         font="font:MediumBoldSystemFont" />

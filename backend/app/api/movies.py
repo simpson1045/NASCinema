@@ -7,6 +7,7 @@ scanner and Flutter grid can be exercised end-to-end.
 from __future__ import annotations
 
 import asyncio
+import random
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -157,15 +158,14 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
         if len(gms) >= 3:
             rail(f"genre:{genre}", genre, gms)
 
-    # Featured hero — the most popular titles that have a backdrop to show.
-    featured_movies = [
-        m
-        for m in sorted(
-            (m for m in movies if m.backdrop_path and m.popularity is not None),
-            key=lambda m: m.popularity,
-            reverse=True,
-        )
-    ][:8]
+    # Featured hero — a random handful from the most popular titles that have a
+    # backdrop, so each launch surfaces a different selection (not just reordered).
+    pool = sorted(
+        (m for m in movies if m.backdrop_path and m.popularity is not None),
+        key=lambda m: m.popularity,
+        reverse=True,
+    )[:30]
+    featured_movies = random.sample(pool, min(8, len(pool)))
     featured = []
     for m in featured_movies:
         # Manual override wins; otherwise the auto-picked TMDB logo.
