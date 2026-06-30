@@ -40,6 +40,8 @@ dependencies:
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2
   web: ^1.1.1
+  # In-app YouTube preview for the trailer picker (web/desktop/mobile).
+  youtube_player_iframe: ^5.2.0
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7

@@ -44,6 +44,7 @@ def _summary(m: Movie) -> dict:
         "match_confidence": m.match_confidence,
         "locked": m.locked,
         "bluray_url": m.bluray_url,
+        "trailer_youtube": m.trailer_youtube,
         "added_at": m.added_at.isoformat() if m.added_at else None,
         "popularity": m.popularity,
         "vote_count": m.vote_count,

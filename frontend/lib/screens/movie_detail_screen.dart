@@ -13,6 +13,7 @@ import '../services/cast_actions.dart';
 import '../services/cast_controller.dart';
 import '../theme/app_theme.dart';
 import 'player_screen.dart';
+import 'trailer_picker.dart';
 
 const _extraTypes = <String>[
   'Featurette', 'Trailer', 'Deleted Scene', 'Behind the Scenes', 'Interview',
@@ -112,6 +113,18 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       _snack('Could not open the video');
     }
+  }
+
+  Future<void> _chooseTrailer() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TrailerPicker(
+        api: _api,
+        movieId: widget.movie.id,
+        title: widget.movie.title,
+        videos: _videos,
+        currentPin: widget.movie.trailerYoutube,
+      ),
+    ));
   }
 
   void _play() {
@@ -305,8 +318,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                       ],
                       if (_videos.isNotEmpty) ...[
                         _VideosSection(videos: _videos, onTap: _openVideo),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 12),
                       ],
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: _chooseTrailer,
+                          icon: const Icon(Icons.movie_filter_outlined, size: 18),
+                          label: const Text('Choose trailer'),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
                       const _SectionLabel('Files'),
                       const SizedBox(height: 10),
                       for (final f in _files) _FileCard(file: f),

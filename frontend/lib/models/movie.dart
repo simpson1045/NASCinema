@@ -15,6 +15,7 @@ class Movie {
     this.videoCodec,
     this.hdr = false,
     this.blurayUrl,
+    this.trailerYoutube,
   });
 
   final int id;
@@ -32,6 +33,7 @@ class Movie {
   final String? videoCodec;
   final bool hdr;
   final String? blurayUrl;
+  final String? trailerYoutube; // manual trailer override (YouTube URL/key)
 
   factory Movie.fromJson(Map<String, dynamic> j) => Movie(
         id: j['id'] as int,
@@ -50,6 +52,7 @@ class Movie {
         videoCodec: j['video_codec'] as String?,
         hdr: j['hdr'] == true,
         blurayUrl: j['bluray_url'] as String?,
+        trailerYoutube: j['trailer_youtube'] as String?,
       );
 
   /// TMDB CDN poster URL, or null if unmatched.

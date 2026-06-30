@@ -225,12 +225,20 @@ class ApiService {
     return jsonDecode(r.body) as Map<String, dynamic>;
   }
 
-  Future<void> updateMovie(int id, {String? blurayUrl}) async {
+  Future<void> updateMovie(
+    int id, {
+    String? blurayUrl,
+    String? trailerYoutube,
+  }) async {
+    // Send only the field(s) being changed — the backend leaves omitted ones be.
+    final body = <String, dynamic>{};
+    if (blurayUrl != null) body['bluray_url'] = blurayUrl;
+    if (trailerYoutube != null) body['trailer_youtube'] = trailerYoutube;
     final r = await http
         .patch(
           _u('/api/movies/$id'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'bluray_url': blurayUrl ?? ''}),
+          body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 10));
     if (r.statusCode != 200) {
