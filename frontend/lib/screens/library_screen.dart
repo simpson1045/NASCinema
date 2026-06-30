@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/home.dart';
 import '../services/api_service.dart';
 import '../services/cast_controller.dart';
+import '../services/fullscreen.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import 'cast_picker.dart';
@@ -131,6 +132,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ],
         ),
         actions: [
+          if (isDesktop)
+            IconButton(
+              onPressed: toggleFullscreen,
+              tooltip: 'Fullscreen (F11)',
+              icon: const Icon(Icons.fullscreen, color: NasColors.muted),
+            ),
           // Connect to the TV from here, then pick a movie. Consumer so only
           // the button repaints on cast updates, not the whole grid.
           Consumer<CastController>(

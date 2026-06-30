@@ -1,14 +1,30 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/library_screen.dart';
 import 'services/api_service.dart';
 import 'services/cast_controller.dart';
+import 'services/fullscreen.dart';
 import 'services/server_config.dart';
 import 'theme/app_theme.dart';
 
-void main() => runApp(const NasCinemaApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initWindowForDesktop();
+  // F11 toggles borderless fullscreen anywhere in the desktop app.
+  if (isDesktop) HardwareKeyboard.instance.addHandler(_handleGlobalKey);
+  runApp(const NasCinemaApp());
+}
+
+bool _handleGlobalKey(KeyEvent e) {
+  if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.f11) {
+    toggleFullscreen();
+    return true;
+  }
+  return false;
+}
 
 class NasCinemaApp extends StatelessWidget {
   const NasCinemaApp({super.key});
