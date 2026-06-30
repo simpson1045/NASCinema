@@ -267,11 +267,18 @@ sub pickAudio()
         end if
     end for
 
-    logmsg("audioTracks(" + tracks.count().toStr() + ")" + info + " -> pick " + best.toStr() + " state=" + m.video.state)
+    ' Roku's default is track 0. If it's ALREADY passthrough-friendly, leave it
+    ' be — forcing an audioTrack switch wedges/garbles some MKVs (a 4K TrueHD
+    ' REMUX never reaches 'playing' after a switch). Only override a default Roku
+    ' can't bitstream (TrueHD/DTS-HD) — and even then it may not take; such files
+    ' belong on the native renderer.
+    defName = ""
+    if tracks[0].Name <> invalid then defName = tracks[0].Name
+    defaultOk = scoreAudio(defName) > 0
 
-    ' Only switch when we found a passthrough-friendly track; if every track
-    ' scores <=0 (unlabeled), leave Roku's default alone.
-    if best >= 0 and bestScore > 0 then
+    logmsg("audioTracks(" + tracks.count().toStr() + ")" + info + " -> pick " + best.toStr() + " defaultOk=" + defaultOk.toStr() + " state=" + m.video.state)
+
+    if best >= 0 and bestScore > 0 and not defaultOk then
         m.video.audioTrack = tracks[best].Track
     end if
     m.audioPicked = true
