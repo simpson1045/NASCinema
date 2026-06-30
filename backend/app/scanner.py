@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from .config import get_settings
 from .db import SessionLocal
 from .fingerprint import fingerprint_file
-from .metadata import get_movie_metadata
+from .metadata import get_movie_metadata, get_omdb_ratings
 from .models import MediaFile, Movie
 from .probe import probe_file
 from .streaming import remove_file_cache
@@ -272,10 +272,54 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
         movie.backdrop_path = meta.get("backdrop_path")
         movie.genres = meta.get("genres")
         movie.match_confidence = meta.get("match_confidence")
+        movie.popularity = meta.get("popularity")
+        movie.vote_count = meta.get("vote_count")
+        movie.imdb_id = meta.get("imdb_id")
+        movie.collection_id = meta.get("collection_id")
+        movie.collection_name = meta.get("collection_name")
+        omdb = await get_omdb_ratings(meta.get("imdb_id") or "")
+        if omdb:
+            movie.imdb_rating = omdb.get("imdb_rating")
+            movie.rt_score = omdb.get("rt_score")
+            movie.metacritic = omdb.get("metacritic")
 
     session.add(movie)
     await session.flush()
     return movie
+
+
+async def backfill_ratings(limit: int | None = None) -> dict:
+    """Populate the ranking/grouping fields on movies scanned before this
+    existed — re-fetch TMDB by tmdb_id (popularity, votes, imdb_id, collection)
+    and OMDb by imdb_id (IMDB/RT/Metacritic). Independent of the file scan, so it
+    runs on the current library without touching the NAS.
+    """
+    from .metadata import get_movie_metadata_by_id
+
+    stats = {"updated": 0, "skipped": 0, "failed": 0}
+    async with SessionLocal() as session:
+        q = select(Movie).where(Movie.tmdb_id.isnot(None), Movie.popularity.is_(None))
+        if limit:
+            q = q.limit(limit)
+        movies = (await session.scalars(q)).all()
+        for movie in movies:
+            meta = await get_movie_metadata_by_id(movie.tmdb_id)
+            if not meta:
+                stats["failed"] += 1
+                continue
+            movie.popularity = meta.get("popularity")
+            movie.vote_count = meta.get("vote_count")
+            movie.imdb_id = meta.get("imdb_id")
+            movie.collection_id = meta.get("collection_id")
+            movie.collection_name = meta.get("collection_name")
+            omdb = await get_omdb_ratings(meta.get("imdb_id") or "")
+            if omdb:
+                movie.imdb_rating = omdb.get("imdb_rating")
+                movie.rt_score = omdb.get("rt_score")
+                movie.metacritic = omdb.get("metacritic")
+            stats["updated"] += 1
+        await session.commit()
+    return stats
 
 
 async def fingerprint_extras() -> dict:

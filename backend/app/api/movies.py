@@ -6,6 +6,8 @@ scanner and Flutter grid can be exercised end-to-end.
 
 from __future__ import annotations
 
+from collections import Counter
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -15,7 +17,8 @@ from sqlalchemy.orm import selectinload
 from ..db import get_session
 from ..metadata import get_movie_videos
 from ..models import MediaFile, Movie
-from ..scanner import scan
+from ..models.watch_progress import WatchProgress
+from ..scanner import backfill_ratings, scan
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -37,6 +40,14 @@ def _summary(m: Movie) -> dict:
         "match_confidence": m.match_confidence,
         "locked": m.locked,
         "bluray_url": m.bluray_url,
+        "added_at": m.added_at.isoformat() if m.added_at else None,
+        "popularity": m.popularity,
+        "vote_count": m.vote_count,
+        "imdb_rating": m.imdb_rating,
+        "rt_score": m.rt_score,
+        "metacritic": m.metacritic,
+        "collection_id": m.collection_id,
+        "collection_name": m.collection_name,
         "file_count": len(features),
         "resolution": (
             f"{primary.width}x{primary.height}"
@@ -54,6 +65,96 @@ async def list_movies(session: AsyncSession = Depends(get_session)) -> dict:
         select(Movie).options(selectinload(Movie.files)).order_by(Movie.title)
     )
     return {"movies": [_summary(m) for m in result.all()]}
+
+
+@router.get("/home")
+async def home(session: AsyncSession = Depends(get_session)) -> dict:
+    """The carousel home screen: server-composed rails so the TV client just
+    renders. Rails with no content are omitted, so "Popular"/"Top Rated" simply
+    don't appear until the ratings backfill has run."""
+    movies = (
+        await session.scalars(select(Movie).options(selectinload(Movie.files)))
+    ).all()
+    summ = {m.id: _summary(m) for m in movies}
+    rails: list[dict] = []
+
+    def rail(key: str, title: str, ms: list[Movie], limit: int = 25) -> None:
+        if ms:
+            rails.append(
+                {"key": key, "title": title, "movies": [summ[m.id] for m in ms[:limit]]}
+            )
+
+    # Continue Watching — in-progress feature files, most-recently-watched first.
+    prog = (
+        await session.execute(
+            select(WatchProgress, MediaFile)
+            .join(MediaFile, WatchProgress.media_file_id == MediaFile.id)
+            .order_by(WatchProgress.updated_at.desc())
+        )
+    ).all()
+    seen: set[int] = set()
+    cw: list[dict] = []
+    for wp, mf in prog:
+        if mf.movie_id is None or mf.movie_id in seen or mf.movie_id not in summ:
+            continue
+        pos = wp.position_seconds or 0.0
+        dur = mf.duration or 0.0
+        if pos < 30:
+            continue
+        if dur and pos > dur - 120:  # basically finished — don't resurface it
+            continue
+        item = dict(summ[mf.movie_id])
+        item["resume_position"] = pos
+        item["resume_file_id"] = mf.id
+        cw.append(item)
+        seen.add(mf.movie_id)
+    if cw:
+        rails.append(
+            {"key": "continue", "title": "Continue Watching", "movies": cw[:20]}
+        )
+
+    # Popular (TMDB popularity) — sparse until the backfill populates it.
+    rail(
+        "popular",
+        "Popular",
+        sorted(
+            (m for m in movies if m.popularity is not None),
+            key=lambda m: m.popularity,
+            reverse=True,
+        ),
+    )
+
+    # Recently Added.
+    rail(
+        "recent",
+        "Recently Added",
+        sorted((m for m in movies if m.added_at), key=lambda m: m.added_at, reverse=True),
+    )
+
+    # Top Rated — IMDB rating when we have it, else TMDB; ignore thin vote counts.
+    def _score(m: Movie) -> float:
+        return m.imdb_rating if m.imdb_rating is not None else (m.rating or 0.0)
+
+    rated = [
+        m
+        for m in movies
+        if (m.imdb_rating or m.rating) and (m.vote_count is None or m.vote_count >= 50)
+    ]
+    rated.sort(key=_score, reverse=True)
+    rail("toprated", "Top Rated", rated)
+
+    # Genre rails — the most-represented genres, each by popularity then title.
+    counts: Counter = Counter()
+    for m in movies:
+        for g in m.genres or []:
+            counts[g] += 1
+    for genre, _n in counts.most_common(8):
+        gms = [m for m in movies if genre in (m.genres or [])]
+        gms.sort(key=lambda m: (-(m.popularity or 0.0), m.title or ""))
+        if len(gms) >= 3:
+            rail(f"genre:{genre}", genre, gms)
+
+    return {"rails": rails}
 
 
 @router.get("/movies/{movie_id}")
@@ -157,3 +258,10 @@ async def update_extra(
 async def trigger_scan() -> dict:
     # Synchronous for the MVP; becomes a background job with live progress later.
     return await scan()
+
+
+@router.post("/backfill-ratings")
+async def trigger_backfill(limit: int | None = None) -> dict:
+    """Populate popularity / external ratings / collection on existing movies.
+    Safe to re-run — only touches movies that don't have the data yet."""
+    return await backfill_ratings(limit)

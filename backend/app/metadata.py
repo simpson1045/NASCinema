@@ -48,18 +48,96 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
         return None
 
     release = best.get("release_date") or ""
+    collection = detail.get("belongs_to_collection") or {}
     return {
         "tmdb_id": best["id"],
         "title": best.get("title") or title,
         "original_title": best.get("original_title"),
         "year": int(release[:4]) if release[:4].isdigit() else year,
         "overview": best.get("overview"),
-        "rating": best.get("vote_average"),
+        "rating": detail.get("vote_average") or best.get("vote_average"),
         "poster_path": best.get("poster_path"),
         "backdrop_path": best.get("backdrop_path"),
         "runtime": detail.get("runtime"),
         "genres": [g["name"] for g in detail.get("genres", [])],
         "match_confidence": _confidence(title, best.get("title") or ""),
+        # Ranking + grouping signals (free from the details response).
+        "popularity": detail.get("popularity") or best.get("popularity"),
+        "vote_count": detail.get("vote_count") or best.get("vote_count"),
+        "imdb_id": detail.get("imdb_id") or None,
+        "collection_id": collection.get("id"),
+        "collection_name": collection.get("name"),
+    }
+
+
+async def get_movie_metadata_by_id(tmdb_id: int) -> dict | None:
+    """Fetch the ranking/grouping signals for a known TMDB id (no search step).
+
+    Used by the ratings backfill on already-matched movies. Returns the enrichment
+    fields only — title/poster/etc. are left to the original match.
+    """
+    key = get_settings().tmdb_api_key
+    if not key or not tmdb_id:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                f"{TMDB_BASE}/movie/{tmdb_id}", params={"api_key": key}
+            )
+            r.raise_for_status()
+            detail = r.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    collection = detail.get("belongs_to_collection") or {}
+    return {
+        "popularity": detail.get("popularity"),
+        "vote_count": detail.get("vote_count"),
+        "rating": detail.get("vote_average"),
+        "imdb_id": detail.get("imdb_id") or None,
+        "collection_id": collection.get("id"),
+        "collection_name": collection.get("name"),
+    }
+
+
+async def get_omdb_ratings(imdb_id: str) -> dict | None:
+    """IMDB / Rotten Tomatoes / Metacritic scores for an IMDB id, via OMDb.
+
+    Opt-in: returns None with no OMDb key. RT coverage is partial (OMDb only has
+    it for some titles), so any of the three may be absent for a given film.
+    """
+    key = get_settings().omdb_api_key
+    if not key or not imdb_id:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                "https://www.omdbapi.com/",
+                params={"apikey": key, "i": imdb_id},
+            )
+            r.raise_for_status()
+            data = r.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    if data.get("Response") != "True":
+        return None
+
+    def _num(v: str | None) -> float | None:
+        try:
+            return float(str(v).split("/")[0])
+        except (TypeError, ValueError):
+            return None
+
+    rt: int | None = None
+    for src in data.get("Ratings", []):
+        if src.get("Source") == "Rotten Tomatoes":
+            pct = str(src.get("Value", "")).rstrip("%")
+            rt = int(pct) if pct.isdigit() else None
+
+    meta = data.get("Metascore")
+    return {
+        "imdb_rating": _num(data.get("imdbRating")),
+        "rt_score": rt,
+        "metacritic": int(meta) if str(meta).isdigit() else None,
     }
 
 

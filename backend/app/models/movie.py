@@ -30,6 +30,19 @@ class Movie(Base):
     backdrop_path: Mapped[str | None] = mapped_column(String(512))
     genres: Mapped[list | None] = mapped_column(JSON, default=list)
 
+    # Ranking signals for home-screen rails. popularity/vote_count come free with
+    # the TMDB details fetch; the external scores need an OMDb key (else null).
+    popularity: Mapped[float | None] = mapped_column(Float)  # TMDB trending score
+    vote_count: Mapped[int | None] = mapped_column(Integer)  # TMDB vote count
+    imdb_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    imdb_rating: Mapped[float | None] = mapped_column(Float)  # OMDb (0–10)
+    rt_score: Mapped[int | None] = mapped_column(Integer)  # OMDb Tomatometer (%)
+    metacritic: Mapped[int | None] = mapped_column(Integer)  # OMDb Metascore (0–100)
+
+    # TMDB collection (series) — powers "grouped by franchise" rails.
+    collection_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    collection_name: Mapped[str | None] = mapped_column(String(512))
+
     # A pinned Blu-ray.com release page (the exact pressing) — referenced when
     # naming bonus features.
     bluray_url: Mapped[str | None] = mapped_column(String(1024))

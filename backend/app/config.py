@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # Integrations
     tmdb_api_key: str = ""
     opensubtitles_api_key: str = ""
+    # OMDb (omdbapi.com) — optional; enables IMDB/Rotten Tomatoes/Metacritic
+    # scores. Free key, 1k/day. Blank = those scores stay null.
+    omdb_api_key: str = ""
 
     # FFmpeg overrides (auto-discovered when blank)
     ffmpeg: str = ""

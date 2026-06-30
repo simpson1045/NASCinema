@@ -5,8 +5,11 @@
     <field id="itemContent" type="node" onChange="onContentSet" />
   </interface>
   <children>
-    <Poster id="poster" width="240" height="360" loadDisplayMode="scaleToFill" />
-    <Label id="label" translation="[0,366]" width="240" height="48"
-        horizAlign="center" vertAlign="top" wrap="true" maxLines="2" />
+    <!-- Placeholder box so an item is visible even before/without a poster. -->
+    <Rectangle id="ph" width="200" height="300" color="0x1B2046FF" />
+    <Poster id="poster" width="200" height="300" loadDisplayMode="scaleToFill" />
+    <Label id="label" translation="[0,306]" width="200" height="44"
+        horizAlign="center" vertAlign="top" wrap="true" maxLines="2"
+        color="0xEEF1FFFF" font="font:SmallSystemFont" />
   </children>
 </component>
