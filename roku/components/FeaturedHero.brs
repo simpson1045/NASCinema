@@ -39,8 +39,8 @@ sub setMode(fs as boolean)
         m.trailer.translation = [0, 0]
         m.scrim.height = 1080
         m.fader.height = 1080
-        m.logo.translation = [90, 830]
-        m.meta.translation = [92, 990]
+        m.logo.translation = [90, 790]
+        m.meta.translation = [92, 975]   ' clears the 150px-tall logo slot + a gap
         m.dotsGroup.visible = false
     else
         m.content.clippingRect = [0, 0, 1920, 560]
@@ -49,7 +49,7 @@ sub setMode(fs as boolean)
         m.scrim.height = 560
         m.fader.height = 560
         m.logo.translation = [90, 300]
-        m.meta.translation = [92, 476]
+        m.meta.translation = [92, 488]   ' clears the 150px-tall logo slot + a gap
         m.dotsGroup.visible = true
     end if
 end sub
