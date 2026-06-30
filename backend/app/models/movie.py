@@ -47,6 +47,14 @@ class Movie(Base):
     # naming bonus features.
     bluray_url: Mapped[str | None] = mapped_column(String(1024))
 
+    # Manual clearlogo override (full image URL). TMDB can't distinguish e.g. the
+    # US "Sorcerer's" from the UK "Philosopher's" logo, so this pins the right one.
+    logo_url: Mapped[str | None] = mapped_column(String(1024))
+
+    # Manual trailer override (YouTube URL or key) when TMDB's auto-pick is a poor
+    # upload. Blank = use the auto-selected trailer.
+    trailer_youtube: Mapped[str | None] = mapped_column(String(256))
+
     # How confident the match was (for the low-confidence review queue).
     match_confidence: Mapped[float | None] = mapped_column(Float)
     # A manual match the user locked in — must survive rescans (the thing

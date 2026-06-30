@@ -50,6 +50,21 @@ def trailer_version(movie_id: int) -> int:
     return int(f.stat().st_mtime) if f.exists() else 0
 
 
+def clear_trailer(movie_id: int) -> None:
+    """Drop the cached trailer so it re-downloads (e.g. after a manual override)."""
+    trailer_file(movie_id).unlink(missing_ok=True)
+
+
+def _youtube_key(s: str) -> str | None:
+    """Pull the video key out of a YouTube URL, or pass a bare key through."""
+    s = (s or "").strip()
+    if "watch?v=" in s:
+        s = s.split("watch?v=", 1)[1].split("&", 1)[0]
+    elif "youtu.be/" in s:
+        s = s.split("youtu.be/", 1)[1].split("?", 1)[0]
+    return s or None
+
+
 async def _best_trailer_key(tmdb_id: int) -> str | None:
     if tmdb_id in _key_cache:
         return _key_cache[tmdb_id]
@@ -72,12 +87,15 @@ async def _best_trailer_key(tmdb_id: int) -> str | None:
     return key
 
 
-async def ensure_trailer(movie_id: int, tmdb_id: int | None) -> Path | None:
-    """Return the cached trailer file for a movie, downloading it first if
-    needed. Returns None if there's no trailer, no yt-dlp, or the fetch fails."""
+async def ensure_trailer(
+    movie_id: int, tmdb_id: int | None, override: str | None = None
+) -> Path | None:
+    """Return the cached trailer file for a movie, downloading it first if needed.
+    `override` is a manual YouTube URL/key that beats TMDB's auto-pick. Returns
+    None if there's no trailer, no yt-dlp, or the fetch fails."""
     if is_cached(movie_id):
         return trailer_file(movie_id)
-    if not tmdb_id:
+    if not tmdb_id and not override:
         return None
     ytdlp = yt_dlp_path()
     if not ytdlp:
@@ -88,7 +106,7 @@ async def ensure_trailer(movie_id: int, tmdb_id: int | None) -> Path | None:
         if is_cached(movie_id):  # filled while we waited on the lock
             return trailer_file(movie_id)
 
-        key = await _best_trailer_key(tmdb_id)
+        key = _youtube_key(override) if override else await _best_trailer_key(tmdb_id)
         if not key:
             return None
 

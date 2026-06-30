@@ -21,7 +21,7 @@ from ..metadata import get_movie_logo, get_movie_videos
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
 from ..scanner import backfill_ratings, scan
-from ..trailers import ensure_trailer, is_cached, trailer_version
+from ..trailers import clear_trailer, ensure_trailer, is_cached, trailer_version
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -168,15 +168,19 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
     ][:8]
     featured = []
     for m in featured_movies:
-        logo = await get_movie_logo(m.tmdb_id) if m.tmdb_id else None
+        # Manual override wins; otherwise the auto-picked TMDB logo.
+        if m.logo_url:
+            logo = m.logo_url
+        else:
+            logo = await get_movie_logo(m.tmdb_id) if m.tmdb_id else None
         item = dict(summ[m.id])
         item["logo"] = logo
         # ?v=<mtime> busts the TV's URL cache when the trailer file is re-pulled.
         item["trailer_url"] = f"/api/movies/{m.id}/trailer?v={trailer_version(m.id)}"
         featured.append(item)
         # Warm the trailer cache in the background so it's ready when scrolled to.
-        if m.tmdb_id and not is_cached(m.id):
-            asyncio.create_task(ensure_trailer(m.id, m.tmdb_id))
+        if (m.tmdb_id or m.trailer_youtube) and not is_cached(m.id):
+            asyncio.create_task(ensure_trailer(m.id, m.tmdb_id, m.trailer_youtube))
 
     return {"featured": featured, "rails": rails}
 
@@ -232,7 +236,7 @@ async def movie_trailer(
     movie = await session.scalar(select(Movie).where(Movie.id == movie_id))
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
-    path = await ensure_trailer(movie_id, movie.tmdb_id)
+    path = await ensure_trailer(movie_id, movie.tmdb_id, movie.trailer_youtube)
     if not path:
         raise HTTPException(status_code=404, detail="No trailer available")
     return FileResponse(
@@ -256,6 +260,8 @@ async def movie_videos(
 
 class MovieUpdate(BaseModel):
     bluray_url: str | None = None
+    logo_url: str | None = None
+    trailer_youtube: str | None = None
 
 
 @router.patch("/movies/{movie_id}")
@@ -269,8 +275,18 @@ async def update_movie(
         raise HTTPException(status_code=404, detail="Movie not found")
     if body.bluray_url is not None:
         movie.bluray_url = body.bluray_url.strip() or None
+    if body.logo_url is not None:
+        movie.logo_url = body.logo_url.strip() or None
+    if body.trailer_youtube is not None:
+        movie.trailer_youtube = body.trailer_youtube.strip() or None
+        clear_trailer(movie.id)  # drop the old cached file so the new pin re-pulls
     await session.commit()
-    return {"id": movie.id, "bluray_url": movie.bluray_url}
+    return {
+        "id": movie.id,
+        "bluray_url": movie.bluray_url,
+        "logo_url": movie.logo_url,
+        "trailer_youtube": movie.trailer_youtube,
+    }
 
 
 class ExtraUpdate(BaseModel):
