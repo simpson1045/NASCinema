@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/extra.dart';
+import '../models/home.dart';
 import '../models/movie.dart';
 import '../models/movie_file.dart';
 import '../models/video.dart';
@@ -59,6 +60,16 @@ class ApiService {
     return (data['movies'] as List)
         .map((e) => Movie.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Server-composed home: featured set (for the hero) + rails. This is the same
+  /// payload the Roku renders — the carousel home is just a different presenter.
+  Future<HomeData> getHome() async {
+    final r = await http.get(_u('/api/home')).timeout(const Duration(seconds: 25));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return HomeData.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
   /// Re-scan the media folders on the server: add new files, prune deleted ones.

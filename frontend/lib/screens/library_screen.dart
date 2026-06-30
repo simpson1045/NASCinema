@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/movie.dart';
+import '../models/home.dart';
 import '../services/api_service.dart';
 import '../services/cast_controller.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 import 'cast_picker.dart';
-import 'movie_detail_screen.dart';
+import 'home_widgets.dart';
 import 'remote_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -21,13 +21,13 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   late final ApiService _api = ApiService(widget.baseUrl);
-  late Future<List<Movie>> _future;
+  late Future<HomeData> _future;
   UpdateInfo? _update;
 
   @override
   void initState() {
     super.initState();
-    _future = _api.listMovies();
+    _future = _api.getHome();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
   }
 
@@ -35,7 +35,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // Re-scan the disk (add new files + prune deleted ones), then reload — so
     // Refresh actually reflects the library on disk, not just a DB re-read.
     await _api.triggerScan();
-    setState(() => _future = _api.listMovies());
+    setState(() => _future = _api.getHome());
     await _future;
   }
 
@@ -157,56 +157,38 @@ class _LibraryScreenState extends State<LibraryScreen> {
         children: [
           if (_update != null) _updateBanner(),
           Expanded(
-            child: FutureBuilder<List<Movie>>(
+            child: FutureBuilder<HomeData>(
               future: _future,
               builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: NasColors.amber),
-            );
-          }
-          if (snap.hasError) {
-            return _Message(
-              icon: Icons.error_outline,
-              color: NasColors.bad,
-              text: 'Could not load library:\n${snap.error}',
-            );
-          }
-          final movies = snap.data ?? const [];
-          if (movies.isEmpty) {
-            return const _Message(
-              icon: Icons.local_movies_outlined,
-              color: NasColors.muted,
-              text: 'No movies yet — run a library scan on the server.',
-            );
-          }
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            color: NasColors.amber,
-            backgroundColor: NasColors.surface,
-            child: GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate:
-                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 170,
-                childAspectRatio: 0.52,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 18,
-              ),
-              itemCount: movies.length,
-              itemBuilder: (context, i) => GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => MovieDetailScreen(
-                      movie: movies[i],
-                      baseUrl: widget.baseUrl,
-                    ),
-                  ),
-                ),
-                child: _PosterCard(movie: movies[i]),
-              ),
-            ),
-          );
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: NasColors.amber),
+                  );
+                }
+                if (snap.hasError) {
+                  return _Message(
+                    icon: Icons.error_outline,
+                    color: NasColors.bad,
+                    text: 'Could not load library:\n${snap.error}',
+                  );
+                }
+                final data = snap.data;
+                final empty = data == null ||
+                    (data.featured.isEmpty &&
+                        data.rails.every((r) => r.movies.isEmpty));
+                if (empty) {
+                  return const _Message(
+                    icon: Icons.local_movies_outlined,
+                    color: NasColors.muted,
+                    text: 'No movies yet — run a library scan on the server.',
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: _refresh,
+                  color: NasColors.amber,
+                  backgroundColor: NasColors.surface,
+                  child: HomeView(data: data, baseUrl: widget.baseUrl),
+                );
               },
             ),
           ),
@@ -279,115 +261,6 @@ class _NowCastingBar extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PosterCard extends StatelessWidget {
-  const _PosterCard({required this.movie});
-
-  final Movie movie;
-
-  @override
-  Widget build(BuildContext context) {
-    final badge = movie.qualityBadge;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _Poster(movie: movie),
-                if (badge != null)
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: NasColors.amber,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        badge,
-                        style: const TextStyle(
-                          color: NasColors.bg,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          movie.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: NasColors.text,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Text(
-          [
-            if (movie.year != null) '${movie.year}',
-            if (movie.rating != null) '★ ${movie.rating!.toStringAsFixed(1)}',
-          ].join('  ·  '),
-          style: const TextStyle(color: NasColors.muted, fontSize: 11),
-        ),
-      ],
-    );
-  }
-}
-
-class _Poster extends StatelessWidget {
-  const _Poster({required this.movie});
-
-  final Movie movie;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = movie.posterUrl();
-    if (url == null) return const _PosterFallback();
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => const _PosterFallback(),
-      loadingBuilder: (context, child, progress) =>
-          progress == null ? child : const _PosterFallback(loading: true),
-    );
-  }
-}
-
-class _PosterFallback extends StatelessWidget {
-  const _PosterFallback({this.loading = false});
-
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: NasColors.surfaceRaised,
-      alignment: Alignment.center,
-      child: loading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: NasColors.muted,
-              ),
-            )
-          : const Icon(Icons.movie_outlined, color: NasColors.muted, size: 28),
     );
   }
 }

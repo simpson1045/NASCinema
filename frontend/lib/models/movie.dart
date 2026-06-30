@@ -16,6 +16,14 @@ class Movie {
     this.hdr = false,
     this.blurayUrl,
     this.trailerYoutube,
+    this.imdbRating,
+    this.rtScore,
+    this.metacritic,
+    this.popularity,
+    this.collectionName,
+    this.logo,
+    this.trailerUrl,
+    this.trailerReady = false,
   });
 
   final int id;
@@ -34,6 +42,14 @@ class Movie {
   final bool hdr;
   final String? blurayUrl;
   final String? trailerYoutube; // manual trailer override (YouTube URL/key)
+  final double? imdbRating; // external ratings (OMDb), null if unknown
+  final int? rtScore; // Rotten Tomatoes %, 0–100
+  final int? metacritic; // Metacritic, 0–100
+  final double? popularity; // TMDB popularity
+  final String? collectionName; // e.g. "Harry Potter Collection"
+  final String? logo; // clearlogo URL — featured items only
+  final String? trailerUrl; // /api/movies/{id}/trailer?v=… — featured only
+  final bool trailerReady; // backend has the trailer cached
 
   factory Movie.fromJson(Map<String, dynamic> j) => Movie(
         id: j['id'] as int,
@@ -53,6 +69,14 @@ class Movie {
         hdr: j['hdr'] == true,
         blurayUrl: j['bluray_url'] as String?,
         trailerYoutube: j['trailer_youtube'] as String?,
+        imdbRating: (j['imdb_rating'] as num?)?.toDouble(),
+        rtScore: (j['rt_score'] as num?)?.toInt(),
+        metacritic: (j['metacritic'] as num?)?.toInt(),
+        popularity: (j['popularity'] as num?)?.toDouble(),
+        collectionName: j['collection_name'] as String?,
+        logo: j['logo'] as String?,
+        trailerUrl: j['trailer_url'] as String?,
+        trailerReady: j['trailer_ready'] == true,
       );
 
   /// TMDB CDN poster URL, or null if unmatched.
