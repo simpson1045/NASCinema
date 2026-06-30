@@ -39,8 +39,16 @@ _key_cache: dict[int, list] = {}
 # even 2 at once pegs the CPU and stalls the API. One at a time, low priority.
 _download_sem = asyncio.Semaphore(1)
 
-_AAC_OK = {"aac", "mp4a"}
 _MAX_CANDIDATES = 3  # try at most this many trailers before giving up
+
+
+def _audio_ok(info: dict) -> bool:
+    """Roku-playable audio as-is: stereo AAC, or AC-3/E-AC-3 (any channel count,
+    which the Roku bitstreams to the receiver for real surround)."""
+    codec = info.get("audio_codec")
+    if codec in ("ac3", "eac3"):
+        return True
+    return codec in ("aac", "mp4a") and info.get("channels", 0) <= 2
 
 
 def trailers_dir() -> Path:
@@ -137,6 +145,7 @@ def _probe_sync(path: Path) -> dict | None:
         "height": int((v or {}).get("height") or 0),
         "bitrate": br,
         "audio_codec": (a or {}).get("codec_name"),
+        "channels": int((a or {}).get("channels") or 0),
         "has_audio": a is not None,
     }
 
@@ -191,17 +200,21 @@ async def _download(movie_id: int, key: str) -> bool:
     return is_cached(movie_id)
 
 
-async def _force_aac(movie_id: int) -> None:
-    """Re-encode the audio track to AAC in place (video copied) so the Roku has
-    sound even when the source audio was Opus."""
+async def _to_ac3(movie_id: int) -> None:
+    """Re-encode the audio to AC-3 in place (video copied). Preserves the channel
+    layout (5.1 stays 5.1) — the Roku bitstreams AC-3 to the receiver for real
+    surround, and it plays where Opus / multichannel AAC went silent."""
     ff = ffmpeg_path()
     if not ff:
         return
     src = trailer_file(movie_id)
-    tmp = trailers_dir() / f"{movie_id}.aac.mkv"
+    tmp = trailers_dir() / f"{movie_id}.ac3.mkv"
+    # First video + first audio only (drop extra/data streams that can fail the
+    # remux). AC-3 at 640k carries 5.1 cleanly; channel count is preserved.
     args = [
         ff, "-y", "-i", str(src),
-        "-map", "0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+        "-map", "0:v:0", "-map", "0:a:0",
+        "-c:v", "copy", "-c:a", "ac3", "-b:a", "640k",
         str(tmp),
     ]
 
@@ -259,8 +272,11 @@ async def ensure_trailer(
                 if gated and not _good_quality(info):
                     clear_trailer(movie_id)  # potato — try the next candidate
                     continue
-                if info and info.get("audio_codec") not in _AAC_OK:
-                    await _force_aac(movie_id)
+                # Fix Roku-unplayable audio (Opus, or multichannel AAC which the
+                # 4802 silences) by transcoding to AC-3 — keeps 5.1 surround and
+                # bitstreams to the Denon.
+                if info and not _audio_ok(info):
+                    await _to_ac3(movie_id)
                 return trailer_file(movie_id)
     return None
 
