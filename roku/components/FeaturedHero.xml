@@ -32,8 +32,10 @@
           loadDisplayMode="scaleToFit" />
       <Label id="title" translation="[92,360]" width="1200"
           color="0xFFFFFFFF" font="font:LargeBoldSystemFont" visible="false" />
-      <Label id="meta" translation="[92,476]" width="1500"
-          color="0xEEF1FFFF" font="font:MediumBoldSystemFont" />
+      <!-- Built in code (buildMeta): year + IMDb logo·rating + RT logo·score +
+           quality, laid out left-to-right. itemSpacings is set in code. -->
+      <LayoutGroup id="meta" translation="[92,476]" layoutDirection="horiz"
+          vertAlignment="center" />
     </Group>
     <Group id="dots" translation="[92,524]" />
     <!-- Black overlay for fade transitions. OUTSIDE content so it isn't clipped to

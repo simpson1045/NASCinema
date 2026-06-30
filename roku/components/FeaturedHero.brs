@@ -25,6 +25,7 @@ sub init()
     m.dots = []
     m.activeState = false
     m.fadeReason = "advance"   ' "advance" (next item) or "mode" (banner<->fullscreen)
+    m.meta.itemSpacings = [18]   ' array field -> set in code, not XML
 
     setMode(false)   ' start collapsed (banner)
 end sub
@@ -103,7 +104,7 @@ sub showItem()
         m.title.visible = true
     end if
 
-    m.meta.text = metaLine(it)
+    buildMeta(it)
     updateDots()
 
     ' Fallback advance timer, always running per item: if NO trailer ends up
@@ -209,25 +210,60 @@ function firstStr(v as dynamic) as string
     return v.toStr()
 end function
 
-function metaLine(it as object) as string
-    parts = []
-    if it.year <> invalid then parts.push(it.year.toStr())
-    if it.imdb_rating <> invalid then
-        parts.push("IMDb " + it.imdb_rating.toStr())
-    else if it.rating <> invalid then
-        parts.push(it.rating.toStr())
-    end if
-    if it.rt_score <> invalid then parts.push("RT " + it.rt_score.toStr() + "%")
-    q = qualityTag(it)
-    if q <> "" then parts.push(q)
+' Build the meta row: year, IMDb logo + rating, RT logo (fresh/rotten) + score,
+' quality. Logos are pkg:/images/{imdb,rt_fresh,rt_rotten}.png.
+sub buildMeta(it as object)
+    while m.meta.getChildCount() > 0
+        m.meta.removeChildIndex(0)
+    end while
 
-    s = ""
-    for i = 0 to parts.count() - 1
-        if i > 0 then s = s + "   " + Chr(8226) + "   "
-        s = s + parts[i]
-    end for
-    return s
-end function
+    if it.year <> invalid then addMetaText(it.year.toStr())
+
+    if it.imdb_rating <> invalid then
+        ' IMDb mark is ~2:1, so render it wide, not in a square box.
+        addMetaRating("pkg:/images/imdb.png", it.imdb_rating.toStr(), 60, 30)
+    else if it.rating <> invalid then
+        addMetaText(it.rating.toStr())
+    end if
+
+    if it.rt_score <> invalid then
+        ' Approximated from score (OMDb gives no real Certified-Fresh flag):
+        ' >=75 certified, 60-74 fresh, else rotten.
+        img = "pkg:/images/rt_rotten.png"
+        if it.rt_score >= 75 then
+            img = "pkg:/images/rt_certified.png"
+        else if it.rt_score >= 60 then
+            img = "pkg:/images/rt_fresh.png"
+        end if
+        addMetaRating(img, it.rt_score.toStr() + "%", 32, 32)   ' tomato is square
+    end if
+
+    q = qualityTag(it)
+    if q <> "" then addMetaText(q)
+end sub
+
+sub addMetaText(s as string)
+    lbl = m.meta.createChild("Label")
+    lbl.text = s
+    lbl.color = "0xEEF1FFFF"
+    lbl.font = "font:MediumBoldSystemFont"
+end sub
+
+sub addMetaRating(img as string, val as string, w as integer, h as integer)
+    g = m.meta.createChild("LayoutGroup")
+    g.layoutDirection = "horiz"
+    g.vertAlignment = "center"
+    g.itemSpacings = [8]
+    p = g.createChild("Poster")
+    p.uri = img
+    p.width = w
+    p.height = h
+    p.loadDisplayMode = "scaleToFit"
+    lbl = g.createChild("Label")
+    lbl.text = val
+    lbl.color = "0xEEF1FFFF"
+    lbl.font = "font:MediumBoldSystemFont"
+end sub
 
 function qualityTag(it as object) as string
     tag = ""
