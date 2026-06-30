@@ -33,7 +33,7 @@ sub init()
     ' then AC-3), skipping TrueHD/DTS-HD and commentaries. Direct play, file
     ' untouched — we just point it at the right existing track.
     m.video.observeField("availableAudioTracks", "onAudioTracks")
-    m.desiredAudioTrack = invalid
+    m.audioPicked = false
 
     logmsg("channel init; base=" + m.base)
     loadHome()
@@ -184,7 +184,7 @@ sub onDetailLoaded()
 end sub
 
 sub playFile(file as object, title as dynamic)
-    m.desiredAudioTrack = invalid   ' recompute per movie
+    m.audioPicked = false   ' re-pick the audio track for this movie
     vc = createObject("roSGNode", "ContentNode")
     vc.url = m.base + "/api/stream/" + file.id.toStr() + "/direct"
     vc.streamFormat = streamFormatFor(file.container)
@@ -221,7 +221,7 @@ sub onVideoState()
         if si.isUnderrun <> invalid then extra = extra + " underrun=" + si.isUnderrun.toStr()
     end if
 
-    if st = "playing" then applyAudioTrack()
+    pickAudio()   ' switch off TrueHD ASAP; also covers a late-arriving track list
 
     if st = "error" then
         logmsg("video ERROR code=" + m.video.errorCode.toStr() + " msg=" + firstStr(m.video.errorMsg) + extra)
@@ -235,9 +235,18 @@ sub onVideoState()
 end sub
 
 ' Roku reports the file's audio tracks here once it has parsed the container.
-' Pick the best one Roku can actually pass through and switch to it, so we never
-' sit on the TrueHD track that produces silence + a freeze.
 sub onAudioTracks()
+    pickAudio()
+end sub
+
+' Pick the best passthrough-friendly track (EAC3/Atmos -> AC-3) and switch to it
+' ONCE, as early as possible — ideally while still buffering, before any frames
+' decode, so we never sit on (or mid-stream switch off) the TrueHD track. A
+' mid-stream switch throws "malformed data" on Roku's MKV demuxer; switching
+' before playback starts avoids it. Called from both the track-list observer and
+' onVideoState so the pick can't be missed.
+sub pickAudio()
+    if m.audioPicked = true then return
     tracks = m.video.availableAudioTracks
     if tracks = invalid or tracks.count() = 0 then return
 
@@ -258,24 +267,14 @@ sub onAudioTracks()
         end if
     end for
 
-    logmsg("audioTracks(" + tracks.count().toStr() + ")" + info + " -> pick " + best.toStr())
+    logmsg("audioTracks(" + tracks.count().toStr() + ")" + info + " -> pick " + best.toStr() + " state=" + m.video.state)
 
-    ' Only switch when we actually found a passthrough-friendly track; if every
-    ' track scores <=0 (unlabeled), leave Roku's default alone.
+    ' Only switch when we found a passthrough-friendly track; if every track
+    ' scores <=0 (unlabeled), leave Roku's default alone.
     if best >= 0 and bestScore > 0 then
-        m.desiredAudioTrack = tracks[best].Track
-        applyAudioTrack()   ' applies now if already playing, else once "playing"
+        m.video.audioTrack = tracks[best].Track
     end if
-end sub
-
-' Switch to the chosen track only once playback is actually running — switching
-' during buffering can wedge the initial buffer fill on a high-bitrate stream.
-sub applyAudioTrack()
-    if m.desiredAudioTrack = invalid then return
-    if m.video.state <> "playing" then return
-    if m.video.audioTrack <> m.desiredAudioTrack then
-        m.video.audioTrack = m.desiredAudioTrack
-    end if
+    m.audioPicked = true
 end sub
 
 ' Rank an audio track by how well the Roku/Denon chain handles it, using the
