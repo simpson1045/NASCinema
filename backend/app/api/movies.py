@@ -6,19 +6,22 @@ scanner and Flutter grid can be exercised end-to-end.
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..db import get_session
-from ..metadata import get_movie_videos
+from ..metadata import get_movie_logo, get_movie_videos
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
 from ..scanner import backfill_ratings, scan
+from ..trailers import ensure_trailer, is_cached, trailer_version
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -154,7 +157,28 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
         if len(gms) >= 3:
             rail(f"genre:{genre}", genre, gms)
 
-    return {"rails": rails}
+    # Featured hero — the most popular titles that have a backdrop to show.
+    featured_movies = [
+        m
+        for m in sorted(
+            (m for m in movies if m.backdrop_path and m.popularity is not None),
+            key=lambda m: m.popularity,
+            reverse=True,
+        )
+    ][:8]
+    featured = []
+    for m in featured_movies:
+        logo = await get_movie_logo(m.tmdb_id) if m.tmdb_id else None
+        item = dict(summ[m.id])
+        item["logo"] = logo
+        # ?v=<mtime> busts the TV's URL cache when the trailer file is re-pulled.
+        item["trailer_url"] = f"/api/movies/{m.id}/trailer?v={trailer_version(m.id)}"
+        featured.append(item)
+        # Warm the trailer cache in the background so it's ready when scrolled to.
+        if m.tmdb_id and not is_cached(m.id):
+            asyncio.create_task(ensure_trailer(m.id, m.tmdb_id))
+
+    return {"featured": featured, "rails": rails}
 
 
 @router.get("/movies/{movie_id}")
@@ -197,6 +221,25 @@ async def get_movie(
         if f.kind == "extra"
     ]
     return data
+
+
+@router.get("/movies/{movie_id}/trailer")
+async def movie_trailer(
+    movie_id: int, session: AsyncSession = Depends(get_session)
+) -> FileResponse:
+    """Serve the cached trailer MP4, downloading it via yt-dlp on first request.
+    The featured hero plays this. 404 if the movie has no usable trailer."""
+    movie = await session.scalar(select(Movie).where(Movie.id == movie_id))
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    path = await ensure_trailer(movie_id, movie.tmdb_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="No trailer available")
+    return FileResponse(
+        path,
+        media_type="video/x-matroska",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/movies/{movie_id}/videos")

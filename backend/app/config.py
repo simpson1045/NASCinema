@@ -53,6 +53,15 @@ class Settings(BaseSettings):
     # FFmpeg overrides (auto-discovered when blank)
     ffmpeg: str = ""
     ffprobe: str = ""
+    # yt-dlp for caching movie trailers (reused from NASRadio's setup).
+    # Auto-discovered (PATH / C:\ytdl / common dirs) when blank.
+    yt_dlp: str = ""
+    # Where cached trailer MP4s live. Blank = <data_dir>/trailers.
+    trailers_dir: str = ""
+    # Max trailer resolution to cache. 2160 = grab 4K when it exists, else the
+    # ladder falls to 1440p, then 1080p. VP9 (not AV1) so the Roku Ultra decodes
+    # it; cached as MKV. Lower this if storage/bandwidth is a concern.
+    trailer_max_height: int = 2160
 
     # Extras DB (crowdsourced bonus-feature naming — see EXTRAS_DB.md).
     # Opt-in: fingerprint extras so they can later be matched/contributed.

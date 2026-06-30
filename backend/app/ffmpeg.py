@@ -50,3 +50,8 @@ def ffmpeg_path() -> str | None:
 @lru_cache
 def ffprobe_path() -> str | None:
     return _resolve("ffprobe", get_settings().ffprobe)
+
+
+@lru_cache
+def yt_dlp_path() -> str | None:
+    return _resolve("yt-dlp", get_settings().yt_dlp)

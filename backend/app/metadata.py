@@ -195,7 +195,8 @@ async def get_movie_videos(tmdb_id: int) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(
-                f"{TMDB_BASE}/movie/{tmdb_id}/videos", params={"api_key": key}
+                f"{TMDB_BASE}/movie/{tmdb_id}/videos",
+                params={"api_key": key, "language": "en-US"},
             )
             r.raise_for_status()
             results = r.json().get("results", [])
@@ -208,6 +209,10 @@ async def get_movie_videos(tmdb_id: int) -> list[dict]:
             "type": v.get("type"),
             "key": v["key"],
             "url": f"https://www.youtube.com/watch?v={v['key']}",
+            # Kept so trailer selection can prefer the US/official upload.
+            "official": bool(v.get("official")),
+            "region": v.get("iso_3166_1"),
+            "size": v.get("size") or 0,
         }
         for v in results
         if v.get("site") == "YouTube" and v.get("key")

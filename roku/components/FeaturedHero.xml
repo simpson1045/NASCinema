@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Auto-advancing featured banner: backdrop + trailer video + clearlogo +
+     ratings/quality, with paging dots. Backdrop and trailer are full 16:9 shifted
+     up so the banner shows the upper-middle band (keeps faces); content's
+     clippingRect (set in code) crops them to the 560px banner. Transitions fade
+     through `fader` (a black overlay), which covers the video plane that ignores
+     opacity. Trailer plays muted while idle; audio comes on when `active`. -->
+<component name="FeaturedHero" extends="Group">
+  <script type="text/brightscript" uri="pkg:/components/FeaturedHero.brs" />
+  <interface>
+    <field id="featured" type="array" onChange="onFeatured" />
+    <field id="base" type="string" />
+    <!-- True while the user is focused on the hero: unmute + pause auto-advance. -->
+    <field id="active" type="boolean" value="false" onChange="onActiveChange" />
+    <!-- Set true while a fullscreen movie plays, so the hero stops its trailer. -->
+    <field id="suspended" type="boolean" value="false" onChange="onSuspendedChange" />
+    <!-- Set to the chosen movie id when OK is pressed on the hero. -->
+    <field id="playMovieId" type="integer" alwaysNotify="true" />
+  </interface>
+  <children>
+    <Group id="content">
+      <!-- Shifted up to keep faces in frame, but only to -200: trailers are often
+           2.39:1 with their own baked-in letterbox bars (content sits ~row 138+ of
+           the 1080 frame), so going higher would reveal the trailer's black bar. -->
+      <Poster id="backdrop" width="1920" height="1080" translation="[0,-200]"
+          loadDisplayMode="scaleToFill" />
+      <Video id="trailer" width="1920" height="1080" translation="[0,-200]"
+          mute="true" visible="false" enableUI="false" notificationInterval="1" />
+      <Poster id="scrim" width="1920" height="560" loadDisplayMode="scaleToFill"
+          uri="pkg:/images/hero_scrim.png" />
+      <Poster id="logo" translation="[90,300]" width="520" height="150"
+          loadDisplayMode="scaleToFit" />
+      <Label id="title" translation="[92,360]" width="1200"
+          color="0xFFFFFFFF" font="font:LargeBoldSystemFont" visible="false" />
+      <Label id="meta" translation="[92,476]" width="1500"
+          color="0xEEF1FFFF" font="font:MediumBoldSystemFont" />
+      <!-- Black overlay used for fade transitions (covers the video plane). -->
+      <Rectangle id="fader" width="1920" height="560" color="0x000000FF" opacity="0" />
+    </Group>
+    <Group id="dots" translation="[92,524]" />
+
+    <Timer id="auto" duration="25" repeat="true" />
+    <!-- Short delay after a backdrop appears before its trailer starts. -->
+    <Timer id="trailerDelay" duration="1.4" repeat="false" />
+
+    <!-- Fade through black: fade `fader` in, swap to the next item, fade it out. -->
+    <Animation id="fadeOut" duration="0.35" repeat="false">
+      <FloatFieldInterpolator key="[0.0,1.0]" keyValue="[0.0,1.0]"
+          fieldToInterp="fader.opacity" />
+    </Animation>
+    <Animation id="fadeIn" duration="0.35" repeat="false">
+      <FloatFieldInterpolator key="[0.0,1.0]" keyValue="[1.0,0.0]"
+          fieldToInterp="fader.opacity" />
+    </Animation>
+  </children>
+</component>

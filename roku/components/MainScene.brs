@@ -9,8 +9,10 @@ sub init()
 
     m.brand = m.top.findNode("brand")
     m.status = m.top.findNode("status")
+    m.hero = m.top.findNode("hero")
     m.rows = m.top.findNode("rows")
     m.video = m.top.findNode("video")
+    m.zone = "hero"   ' which area has focus: "hero" or "rows"
 
     ' RowList sizing (per Roku's working sample): rowItemSize = each tile's size;
     ' itemSize = the RowList's overall visible width x per-row height. WITHOUT
@@ -22,6 +24,7 @@ sub init()
     m.rows.showRowLabel = [true]
 
     m.rows.observeField("rowItemSelected", "onItemSelected")
+    m.hero.observeField("playMovieId", "onHeroPlay")
     m.video.observeField("state", "onVideoState")
 
     logmsg("channel init; base=" + m.base)
@@ -87,7 +90,24 @@ sub onHomeLoaded()
     m.rows.content = root
     m.status.visible = false
     m.rows.visible = true
-    m.rows.setFocus(true)
+
+    ' Featured hero on top. Start focus on the rails so the hero begins MUTED;
+    ' pressing up moves to the hero and brings its audio in.
+    if json.featured <> invalid and json.featured.count() > 0 then
+        m.hero.base = m.base
+        m.hero.featured = json.featured
+        m.hero.visible = true
+    end if
+
+    if root.getChildCount() > 0 then
+        m.zone = "rows"
+        m.hero.active = false
+        m.rows.setFocus(true)
+    else
+        m.zone = "hero"
+        m.hero.active = true
+        m.hero.setFocus(true)
+    end if
 end sub
 
 function firstStr(v as dynamic) as string
@@ -113,11 +133,21 @@ sub onItemSelected()
     if row = invalid then return
     item = row.getChild(sel[1])
     if item = invalid then return
+    playMovie(item.movieId)
+end sub
 
+' OK pressed on the featured hero -> play that movie.
+sub onHeroPlay()
+    id = m.hero.playMovieId
+    if id <> invalid and id > 0 then playMovie(id)
+end sub
+
+sub playMovie(movieId as dynamic)
+    if movieId = invalid then return
     m.status.text = "Loading…"
     m.status.visible = true
     m.detailTask = createObject("roSGNode", "HttpTask")
-    m.detailTask.url = m.base + "/api/movies/" + item.movieId.toStr()
+    m.detailTask.url = m.base + "/api/movies/" + movieId.toStr()
     m.detailTask.observeField("response", "onDetailLoaded")
     m.detailTask.control = "RUN"
 end sub
@@ -152,6 +182,8 @@ sub playFile(file as object, title as dynamic)
     if title <> invalid then vc.title = title
 
     logmsg("play " + vc.url + " (container=" + firstStr(file.container) + " -> " + vc.streamFormat + ")")
+
+    m.hero.suspended = true   ' stop the hero trailer so two videos don't fight
 
     m.video.content = vc
     m.status.visible = false
@@ -194,13 +226,38 @@ end sub
 sub backToRows()
     m.video.control = "stop"
     m.video.visible = false
-    m.rows.visible = true
-    m.rows.setFocus(true)
+    m.hero.suspended = false   ' resume the hero (restarts its trailer)
+    ' Restore focus to whichever zone we launched playback from.
+    if m.zone = "hero" then
+        m.hero.setFocus(true)
+    else
+        m.rows.setFocus(true)
+    end if
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
-    if press and key = "back" and m.video.visible then
-        backToRows()
+    if not press then return false
+
+    if m.video.visible then
+        if key = "back" then
+            backToRows()
+            return true
+        end if
+        return false
+    end if
+
+    ' Zone switching between the hero and the rails. The hero bubbles "down"
+    ' (its onKeyEvent returns false); the RowList only bubbles "up" when it's at
+    ' the top row and can't move further — exactly when we want to jump to hero.
+    if key = "down" and m.zone = "hero" then
+        m.zone = "rows"
+        m.hero.active = false   ' mute + resume cycling
+        m.rows.setFocus(true)
+        return true
+    else if key = "up" and m.zone = "rows" then
+        m.zone = "hero"
+        m.hero.active = true    ' unmute (after dwell) + pause cycling
+        m.hero.setFocus(true)
         return true
     end if
     return false

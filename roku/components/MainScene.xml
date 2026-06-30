@@ -3,6 +3,7 @@
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
   <children>
     <Rectangle id="bg" width="1920" height="1080" color="0x0A0E27FF" />
+    <FeaturedHero id="hero" visible="false" />
     <Label id="brand" text="NASCinema" translation="[110,28]"
         color="0xFFB020FF" font="font:LargeBoldSystemFont" />
     <Label id="status" text="Loading your library…" translation="[0,520]"
@@ -11,10 +12,10 @@
     <!-- Array-typed fields (rowItemSize, rowHeights, etc.) are set in code in
          init() — as XML attribute strings they parse to garbage silently and the
          rows collapse to ~44px wide. -->
-    <RowList id="rows" translation="[90,150]"
+    <RowList id="rows" translation="[90,600]"
         itemComponentName="MoviePoster"
-        numRows="2"
-        vertFocusAnimationStyle="fixedFocusWrap"
+        numRows="1"
+        vertFocusAnimationStyle="floatingFocus"
         rowFocusAnimationStyle="fixedFocusWrap"
         visible="false" />
     <Video id="video" width="1920" height="1080" translation="[0,0]"
