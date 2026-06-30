@@ -29,6 +29,9 @@ from .metadata import get_movie_videos
 _locks: dict[int, asyncio.Lock] = {}
 # tmdb_id -> ranked list of candidate YouTube keys. Cached per process.
 _key_cache: dict[int, list] = {}
+# Global cap on concurrent trailer work: yt-dlp + ffmpeg are heavy, and firing a
+# whole featured set at once thrashes the box (and stalls the API). Keep it small.
+_download_sem = asyncio.Semaphore(2)
 
 _AAC_OK = {"aac", "mp4a"}
 _MAX_CANDIDATES = 3  # try at most this many trailers before giving up
@@ -232,18 +235,21 @@ async def ensure_trailer(
     async with lock:
         if is_cached(movie_id):  # filled while we waited on the lock
             return trailer_file(movie_id)
-
-        for key in candidates:
-            if not key or not await _download(movie_id, key):
-                clear_trailer(movie_id)
-                continue
-            info = await _probe(trailer_file(movie_id))
-            if gated and not _good_quality(info):
-                clear_trailer(movie_id)  # potato — try the next candidate
-                continue
-            if info and info.get("audio_codec") not in _AAC_OK:
-                await _force_aac(movie_id)
-            return trailer_file(movie_id)
+        # Cap concurrency so a whole featured set doesn't thrash the box at once.
+        async with _download_sem:
+            if is_cached(movie_id):
+                return trailer_file(movie_id)
+            for key in candidates:
+                if not key or not await _download(movie_id, key):
+                    clear_trailer(movie_id)
+                    continue
+                info = await _probe(trailer_file(movie_id))
+                if gated and not _good_quality(info):
+                    clear_trailer(movie_id)  # potato — try the next candidate
+                    continue
+                if info and info.get("audio_codec") not in _AAC_OK:
+                    await _force_aac(movie_id)
+                return trailer_file(movie_id)
     return None
 
 

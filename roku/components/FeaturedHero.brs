@@ -120,6 +120,9 @@ sub playTrailer()
     if m.items = invalid or m.items.count() = 0 then return
     it = m.items[m.index]
     if it = invalid then return
+    ' Only play a trailer that's already cached on the server — never wait on a
+    ' cold download (it'd hang the video). Not ready -> just show the backdrop.
+    if it.trailer_ready <> true then return
     turl = it.trailer_url
     base = m.top.base
     if turl = invalid or turl = "" or base = invalid or base = "" then return

@@ -177,6 +177,9 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
         item["logo"] = logo
         # ?v=<mtime> busts the TV's URL cache when the trailer file is re-pulled.
         item["trailer_url"] = f"/api/movies/{m.id}/trailer?v={trailer_version(m.id)}"
+        # The banner only plays a trailer that's already cached — never waits on a
+        # cold download (which would hang the video while it pulls).
+        item["trailer_ready"] = is_cached(m.id)
         featured.append(item)
         # Warm the trailer cache in the background so it's ready when scrolled to.
         if (m.tmdb_id or m.trailer_youtube) and not is_cached(m.id):
