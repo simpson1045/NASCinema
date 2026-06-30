@@ -30,6 +30,18 @@ actually are and what's next." Current version: **v0.3.12+11**.*
 - **Direction set:** after the Roku audio verify, dev shifts to **phone + ELKO**
   native renderer as a couch appliance (auto-launch TV mode + phone-as-remote for
   lossless from the couch), plus **XInput/Xbox controller** support as a remote.
+- **Roku transcode path rejected:** transcoding video to fit the slow link =
+  "Plex 2.0"; killed the idea (see memory `never-transcode-no-plex-2.0`). The
+  Roku stays a **direct-play-only** fallback (its link is the real bottleneck:
+  ~90 Mbps via a Wi-Fi-backhauled repeater vs a ~128 Mbps REMUX peak).
+- **Desktop carousel home built:** rebuilt `library_screen` off `/api/home` —
+  featured hero (clearlogo + IMDb/RT/Metacritic chips + Play, auto-advancing
+  with arrows/dots) over horizontal rails. New `screens/home_widgets.dart`,
+  `getHome()`, `HomeData`/`HomeRail` models, `Movie` extended with ratings +
+  logo/trailer. Web build deployed (served at `/`). Hero trailer autoplay = Phase 2.
+- **Borderless fullscreen** on desktop: F11 + titlebar button via
+  `window_manager` (conditional import — web gets a no-op stub). Compiles clean;
+  needs a **Windows build** to actually exercise.
 
 ---
 
