@@ -1,9 +1,65 @@
 # NASCinema — Handoff (honest current state)
 
-*Last updated: 2026-06-30. This is the truthful state of the project for the next
+*Last updated: 2026-07-01. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
 actually are and what's next." Current version: **v0.3.13+12**.*
+
+---
+
+## Latest session (2026-07-01) — TrueHD passthrough "blip on loud peaks" SOLVED ✅
+
+- **THE FIX: `--wasapi-exclusive-buffer=100000`.** mpv's WASAPI **exclusive** buffer
+  defaults to the device's tiny **10 ms** period; a loud transient blows that deadline →
+  an audible blip. Setting it to **100 ms** gives mpv the slack VLC already uses →
+  **zero blips** confirmed by ear through the loud 13:00–17:00 ROTS stretch on ELKO.
+- **Sub-track switch re-buffer (old item 2) also GONE** — reading direct off the NAS
+  with the 1 GiB demuxer cache, toggling subs no longer pauses playback. Both HANDOFF
+  tuning items are now closed.
+- **Ruled out first (don't re-chase):** backend HTTP (mpv reading the NAS file DIRECT
+  still blipped), network cache (blip mid-playback, buffer full), WASAPI buffer
+  *starvation* (padding never dropped — the `ao` trace only shows the topped-up state),
+  seeks (blip after a full steady minute), and the codec (EAC3 JOC Atmos blipped too →
+  NOT TrueHD-specific). **Two dead ends:** the mitzsch TrueHD-patched build (2026-06-27)
+  made it WORSE (abandoned); and my early "backend is exonerated" claim was wrong — it
+  rested on a VLC-through-backend bat Matt never ran (his flawless VLC test was
+  **direct off the NAS**).
+- **Direct-NAS is the renderer's byte path.** ELKO plays from
+  `\\192.168.0.248\Totally Legal Movies_2\...` directly (VLC's flawless path). Note the
+  **`_2`** share, and that **only Matt's interactive login has NAS creds** — the MCP
+  connector's service session can't see the share (its `Test-Path` fails; a bat Matt
+  double-clicks works). The native renderer should **direct-play off the NAS**, not via
+  backend HTTP (the backend stream is the phone/remote fallback path).
+- **Reference invocation (test bat: `Desktop\Play ROTS (mpv BUF).bat` on ELKO):**
+  `--fullscreen --hwdec=auto --aid=1 --audio-spdif=truehd,dts-hd,eac3,ac3
+   --audio-exclusive=yes --wasapi-exclusive-buffer=100000 --audio-buffer=1.0
+   --cache=yes --demuxer-max-bytes=1GiB --demuxer-max-back-bytes=512MiB
+   --demuxer-readahead-secs=60`
+- **SINGLE-WINDOW EMBED + IPC CONTROL PROVEN ✅ (same session).** Matt wants the player
+  contained in the app window (no separate mpv window) — proven possible with full
+  quality via a **`--wid` native child-window embed** (mpv keeps its own d3d11/gpu-next
+  pipeline → 4K HDR DV + lossless Atmos intact; this is NOT the broken ANGLE-texture
+  path that killed media_kit). Harness: `Desktop\embed_test.ps1` + `Play ROTS (mpv
+  EMBED test).bat` on ELKO (WinForms host, panel handle → `--wid`). All verified live:
+  embedded DV render, correct fill, IPC pause/seek/sub-toggle, **amber `#FFB020` OSD
+  theming**, hover-summoned auto-hiding controls w/ cursor hide, clickable/draggable OSC.
+- **Embed gotchas (each cost a debug round — bake into the Flutter integration):**
+  (1) host must be **DPI-aware** (`SetProcessDpiAwarenessContext(-4)`, per-monitor v2)
+  or the video renders zoomed/cutoff on the 4K C2; (2) in `--wid` mode the **host owns
+  all input** — forward mouse/keys to mpv over IPC (`mouse x y`, `keydown MBTN_LEFT`,
+  `keypress`); (3) the IPC pipe MUST be opened **async/overlapped**
+  (`PipeOptions.Asynchronous`) — a sync handle serializes reads+writes and the bridge
+  goes mute after one command; (4) **drain mpv's replies** on a reader thread and queue
+  writes off the UI thread or the pipe deadlocks (froze the UI once); (5) throttle
+  mouse-move forwarding (~30/s); (6) drive OSC visibility from the host
+  (`script-message osc-visibility always/never no-osd`) — deterministic show-on-move /
+  hide-on-idle instead of trusting synthetic-event hover detection.
+- **NEXT (the keystone build):** port this proven harness into the Flutter app —
+  Play → embed mpv via `--wid` (direct-NAS path + the flag set above +
+  `--input-ipc-server`), Dart named-pipe client (async, reply-draining, queued writes),
+  input forwarding, amber-themed controls (uosc or custom `osd-overlay`), phone remote
+  driving the same IPC. See memories `mpv-exclusive-buffer-fixes-passthrough-crackle`
+  and `mpv-wid-embed-ipc-architecture`.
 
 ---
 
