@@ -50,6 +50,18 @@ actually are and what's next." Current version: **v0.3.13+12**.*
   fullscreen. **Next: launch it on ELKO, test ROTS via the native renderer**
   (client=native → direct-play, TrueHD/Atmos to the Denon, DV to the C2 — the
   lossless payoff), then build phone-remote → ELKO + XInput.
+- **BREAKTHROUGH — media_kit is out, native mpv is in.** media_kit's embedded
+  Flutter player cannot render 4K HDR Dolby Vision on ELKO (Windows/ANGLE) — GPU
+  mode fails the EGL surface, software mode never calls the render (black screen,
+  both). Ruled out everything else (file/backend/decode/layout/logging). Native
+  **mpv** (shinchiro build via winget, `C:\Program Files\MPV Player\mpv.exe`)
+  plays the 52 GB 4K HDR DV TrueHD Atmos ROTS REMUX **flawlessly** — picture +
+  **lossless Atmos to the Denon** (C2 Atmos popup too), no buffering. Flags:
+  `--fullscreen --hwdec=auto --audio-spdif=truehd,dts-hd,eac3,ac3 --audio-exclusive=yes`.
+  See memory `elko-renderer-is-native-mpv`. **Next: wire Play → launch mpv (URL +
+  HDR + passthrough + `--input-ipc-server`) instead of the media_kit Video
+  widget; app becomes browse-UI + remote; IPC drives pause/seek/stop.** Pin
+  `--aid=1` for the lossless TrueHD track (not the lossy DD+ Atmos track).
 
 ---
 
