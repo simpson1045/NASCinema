@@ -62,6 +62,23 @@ actually are and what's next." Current version: **v0.3.13+12**.*
   HDR + passthrough + `--input-ipc-server`) instead of the media_kit Video
   widget; app becomes browse-UI + remote; IPC drives pause/seek/stop.** Pin
   `--aid=1` for the lossless TrueHD track (not the lossy DD+ Atmos track).
+- **Backend streaming was the real culprit behind the stalls/glitches** (user
+  nailed it: VLC reading the NAS file *directly* = flawless; through the backend =
+  stalls). Cause: Starlette `FileResponse` reads **64 KiB** chunks → ~850k tiny
+  SMB round-trips on a 52 GB REMUX → stalls under load. Replaced
+  `/api/stream/{id}/direct` with a custom Range-aware `StreamingResponse` reading
+  **4 MiB blocks** off the loop via `to_thread`. Measured **0 B/25s → 72–78 MB/s
+  stable**. Committed. (Also: if the backend ever wedges on stale NAS reads after
+  a NAS reboot, restart it — fresh SMB session fixes it.)
+- **mpv playback state (ELKO, via desktop `Play ROTS (mpv test).bat`):** 4K HDR DV
+  picture (gpu-next, looks great) + lossless TrueHD Atmos, smooth stream. **Two
+  refinements left, both tuning not walls:** (1) **audio crackle on loud peaks** —
+  WASAPI *exclusive* passthrough thread keeps resetting (device buffer only 1920
+  samples); `--hwdec=d3d11va` made it worse, reverted to `--hwdec=auto`. Needs an
+  `ao=v` log captured during a steady loud scene (no seeking). (2) **switching sub
+  tracks re-buffers** the network stream (mpv re-reads for the new track).
+- **Next session:** nail those two, then the real integration (Play → launch mpv
+  with `--input-ipc-server` + control it for on-screen controls + phone remote).
 
 ---
 
