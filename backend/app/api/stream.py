@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -105,15 +106,75 @@ async def play_decision(
     }
 
 
+# 4 MiB reads: big sequential SMB reads stream the file at full disk speed and
+# stay stable — the way a real player reading the NAS file directly does. The
+# 64 KiB chunks Starlette's FileResponse uses fire ~850k tiny SMB round-trips on
+# a 52 GB REMUX and stall under load. (Proven: VLC opening the NAS file directly
+# plays flawlessly; the identical file through FileResponse stutters.)
+_STREAM_CHUNK = 4 * 1024 * 1024
+
+
 @router.get("/stream/{file_id}/direct")
 async def stream_direct(
-    file_id: int, session: AsyncSession = Depends(get_session)
+    file_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
 ):
     mf = await session.scalar(select(MediaFile).where(MediaFile.id == file_id))
     if not mf or not Path(mf.path).exists():
         raise HTTPException(status_code=404, detail="File not found")
-    # Starlette's FileResponse honours Range requests for seeking.
-    return FileResponse(mf.path)
+
+    path = mf.path
+    size = await asyncio.to_thread(lambda: Path(path).stat().st_size)
+    ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+
+    # Parse the Range header ourselves so we control the read block size.
+    start, end, status = 0, size - 1, 200
+    rng = request.headers.get("range")
+    if rng and rng.startswith("bytes="):
+        try:
+            s, _, e = rng.split("=", 1)[1].split(",")[0].strip().partition("-")
+            if s == "" and e:  # suffix range: last N bytes
+                start, end = max(0, size - int(e)), size - 1
+            else:
+                start = int(s) if s else 0
+                end = int(e) if e else size - 1
+        except ValueError:
+            start, end = 0, size - 1
+        if start > end or start >= size:
+            return Response(
+                status_code=416, headers={"Content-Range": f"bytes */{size}"}
+            )
+        status = 206
+
+    length = end - start + 1
+
+    async def _body():
+        # Raw (unbuffered) handle + big reads = few large SMB ops, off the event
+        # loop via to_thread so nothing else on the loop starves the stream.
+        f = await asyncio.to_thread(open, path, "rb", 0)
+        remaining = length
+        try:
+            await asyncio.to_thread(f.seek, start)
+            while remaining > 0:
+                chunk = await asyncio.to_thread(
+                    f.read, min(_STREAM_CHUNK, remaining)
+                )
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+        finally:
+            await asyncio.to_thread(f.close)
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(length),
+        "Content-Type": ctype,
+    }
+    if status == 206:
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return StreamingResponse(_body(), status_code=status, headers=headers)
 
 
 @router.get("/stream/{file_id}/master.m3u8")
