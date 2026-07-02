@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import 'cast_picker.dart';
 import 'home_widgets.dart';
 import 'remote_screen.dart';
+import 'search_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.baseUrl});
@@ -132,6 +133,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SearchScreen(baseUrl: widget.baseUrl),
+            )),
+            tooltip: 'Search',
+            icon: const Icon(Icons.search, color: NasColors.muted),
+          ),
           if (isDesktop)
             IconButton(
               onPressed: toggleFullscreen,

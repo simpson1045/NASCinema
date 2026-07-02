@@ -62,14 +62,21 @@ class _ConnectScreenState extends State<ConnectScreen> {
   );
   bool _busy = false;
   String? _error;
+  // Auto-connect: a saved server means the user already answered "where's the
+  // backend?" — don't ask again. Straight to the library; the form only shows
+  // on first run, on failure, or when backing out of the library to switch.
+  bool _autoConnecting = false;
 
   @override
   void initState() {
     super.initState();
     _config.get().then((saved) {
-      if (saved != null && saved.isNotEmpty) {
-        setState(() => _urlController.text = saved);
-      }
+      if (!mounted || saved == null || saved.isEmpty) return;
+      setState(() {
+        _urlController.text = saved;
+        _autoConnecting = true;
+      });
+      _connect();
     });
   }
 
@@ -96,8 +103,16 @@ class _ConnectScreenState extends State<ConnectScreen> {
           settings: const RouteSettings(name: 'library'),
         ),
       );
+      // Backing out of the library lands on the form (to switch servers),
+      // not a stuck splash.
+      setState(() => _autoConnecting = false);
     } catch (e) {
-      setState(() => _error = e.toString());
+      // Auto-connect failure drops back to the form (with the error shown)
+      // so an unreachable server never strands the user on a splash.
+      setState(() {
+        _error = e.toString();
+        _autoConnecting = false;
+      });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -105,6 +120,25 @@ class _ConnectScreenState extends State<ConnectScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Splash while auto-connecting — the saved-server hop to the library
+    // shouldn't flash a form the user never needs to touch.
+    if (_autoConnecting) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _Brand(),
+              SizedBox(height: 28),
+              CircularProgressIndicator(color: NasColors.amber),
+              SizedBox(height: 14),
+              Text('Connecting to your server…',
+                  style: TextStyle(color: NasColors.muted, fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(

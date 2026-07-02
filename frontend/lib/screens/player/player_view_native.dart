@@ -5,24 +5,104 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
-/// Native ELKO renderer: libmpv via media_kit. This is the flagship leg of the
-/// player seam (the web/hls.js file is the fallback). It direct-plays the
-/// original file from `/api/stream/{id}/direct`, bitstreams lossless audio to
-/// the AVR, and renders embedded/sidecar subs natively (no burn-in).
+import '../../services/mpv/mpv_controller.dart';
+import '../../theme/app_theme.dart';
+
+/// Native player seam — two legs behind one API:
 ///
-/// Every function here mirrors the web player's accessors one-for-one so
-/// `player_screen.dart` drives both legs through the same calls.
+///  * **Windows (the wired renderer, ELKO):** native `mpv.exe` driven over
+///    JSON IPC. media_kit's ANGLE texture path cannot render 4K HDR Dolby
+///    Vision there; native mpv's own d3d11/gpu-next pipeline can, plus
+///    lossless TrueHD/Atmos bitstream (proven on the C2 + Denon — memories
+///    `elko-renderer-is-native-mpv`, `mpv-wid-embed-ipc-architecture`).
+///    M1: mpv opens its own fullscreen window; M2 embeds it in the app
+///    window via `--wid`.
+///  * **Android/iOS (the phone):** media_kit/libmpv in-texture, as before.
+///
+/// Every function mirrors the web player's accessors one-for-one so
+/// `player_screen.dart` drives all legs through the same calls.
+
+bool get _useMpv => Platform.isWindows;
+
+// ---------------------------------------------------------------------------
+// shared seam state
+// ---------------------------------------------------------------------------
+
+// Opt-in lossless audio passthrough (persisted by the player screen). OFF by
+// default: exclusive WASAPI + spdif on a device that can't bitstream silences
+// audio; the user enables it on the wired renderer where the AVR decodes it.
+bool _forcePassthrough = false;
+void setForcePassthrough(bool on) => _forcePassthrough = on;
+
+// Direct-play source path (UNC) from the play decision, for native clients.
+// The renderer reads the NAS file directly — the proven flawless byte path —
+// instead of round-tripping through the backend's HTTP stream. Null → play
+// the URL the seam is handed (backend stream), which remains the fallback.
+String? _directMedia;
+void setDirectMedia(String? path) => _directMedia = path;
+
+// Where to start playback (resume point), applied at launch on the mpv leg so
+// we don't open at 0:00 and visibly jump. media_kit leg resumes via seek.
+double _startAt = 0;
+void setStartPosition(double seconds) => _startAt = seconds;
+
+/// Append a diagnostic line next to the running exe. ELKO (the renderer) has
+/// no remote shell, so this is how we read player failures — over the C$
+/// share. Best-effort; never throws into playback.
+void _diag(String line) {
+  try {
+    final dir = File(Platform.resolvedExecutable).parent.path;
+    File('$dir${Platform.pathSeparator}nascinema_player.log')
+        .writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
+  } catch (_) {}
+}
+
+Widget buildPlayerView(String url, bool isHls) =>
+    _useMpv ? _mpvBuild(url) : _mkBuild(url);
+
+// ---------------------------------------------------------------------------
+// mpv leg (Windows renderer)
+// ---------------------------------------------------------------------------
+
+MpvController? _mpv;
+String _mpvStatus = 'Starting renderer…';
+
+Widget _mpvBuild(String url) {
+  final media = _directMedia ?? url;
+  _mpvStatus = 'Starting renderer…';
+  // Fire-and-forget: the seam API is synchronous; accessors read the
+  // controller's mirrored state (zeros until mpv reports in).
+  () async {
+    final c = await MpvController.launch(
+      media: media,
+      startSeconds: _startAt,
+      passthrough: _forcePassthrough,
+      diag: _diag,
+    );
+    _mpv = c;
+    _mpvStatus = c == null
+        ? 'Renderer failed to start — see nascinema_player.log'
+        : 'Playing on the renderer';
+  }();
+
+  // M1 placeholder — mpv renders in its own fullscreen window; this fills the
+  // app's video slot behind it. M2 replaces it with the embedded video area.
+  return Container(
+    color: const Color(0xFF000000),
+    alignment: Alignment.center,
+    child: Text(
+      _mpvStatus,
+      style: const TextStyle(color: NasColors.muted, fontSize: 14),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// media_kit leg (phone/tablet)
+// ---------------------------------------------------------------------------
 
 bool _mkInit = false;
 Player? _player;
-
-// Opt-in lossless audio passthrough (set from renderer settings, persisted by
-// the player screen). OFF by default: forcing exclusive WASAPI + spdif on an
-// output device that can't bitstream silences or halts audio, so the user turns
-// it on only on the wired renderer (ELKO) where the AVR can decode it.
-const _spdifCodecs = 'ac3,dts,eac3,truehd,dts-hd,dts-hd-ma';
-bool _forcePassthrough = false;
-void setForcePassthrough(bool on) => _forcePassthrough = on;
 
 // media_kit has no mute flag; we emulate it by zeroing volume and remembering
 // the level to restore, matching the web <video>.muted semantics.
@@ -41,18 +121,7 @@ void _disposePlayer() {
   p?.dispose();
 }
 
-/// Append a diagnostic line next to the running exe. ELKO (the renderer) has no
-/// remote shell, so this is how we read libmpv failures — over the C$ share.
-/// Best-effort; never throws into playback.
-void _diag(String line) {
-  try {
-    final dir = File(Platform.resolvedExecutable).parent.path;
-    File('$dir${Platform.pathSeparator}nascinema_player.log')
-        .writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
-  } catch (_) {}
-}
-
-Widget buildPlayerView(String url, bool isHls) {
+Widget _mkBuild(String url) {
   _ensureInit();
   // New title — tear down any prior libmpv instance (and its audio device)
   // before opening the next, so we never leak an exclusive WASAPI handle.
@@ -64,29 +133,8 @@ Widget buildPlayerView(String url, bool isHls) {
   _muted = false;
   _volBeforeMute = 100;
 
-  // Surface failures off-box (ELKO has no shell): log the open + any libmpv
-  // error next to the exe, readable over the C$ share.
   player.stream.error.listen((e) => _diag('ERROR: $e'));
-  // Capture libmpv's own audio-output negotiation (which device, which format,
-  // did the spdif bitstream get accepted) so we can see why passthrough is
-  // silent. Read over the C$ share. Diagnostic — trim once audio is solved.
-  player.stream.log.listen((l) => _diag('mpv[${l.level}] ${l.prefix}: ${l.text}'));
-  _diag('open: $url (passthrough=$_forcePassthrough)');
-
-  // Lossless audio passthrough when the user has forced it: take exclusive
-  // control of the output device and bitstream the listed codecs straight to
-  // the AVR. Audio bypasses the Flutter texture, so it works even though video
-  // is composited. Off by default (see _forcePassthrough).
-  final platform = player.platform;
-  if (platform is NativePlayer) {
-    // Verbose audio-output + decoder logs so the C$ log shows the actual device
-    // and format negotiation (diagnostic).
-    platform.setProperty('msg-level', 'ao=v,ad=v,af=v');
-    if (_forcePassthrough) {
-      platform.setProperty('audio-exclusive', 'yes');
-      platform.setProperty('audio-spdif', _spdifCodecs);
-    }
-  }
+  _diag('open (media_kit): $url');
 
   // mpv plays HLS and plain files alike; `isHls` is irrelevant here. open()
   // autoplays, riding the detail-screen Play tap like the web leg.
@@ -95,42 +143,67 @@ Widget buildPlayerView(String url, bool isHls) {
   return Video(controller: controller, controls: NoVideoControls);
 }
 
-// --- accessors the Flutter control bar polls / calls ----------------------
+// ---------------------------------------------------------------------------
+// accessors the Flutter control bar polls / calls
+// ---------------------------------------------------------------------------
 
-double playerCurrentTime() =>
-    (_player?.state.position.inMilliseconds ?? 0) / 1000;
+double playerCurrentTime() => _useMpv
+    ? (_mpv?.position ?? 0)
+    : (_player?.state.position.inMilliseconds ?? 0) / 1000;
 
-double playerDuration() => (_player?.state.duration.inMilliseconds ?? 0) / 1000;
+double playerDuration() => _useMpv
+    ? (_mpv?.duration ?? 0)
+    : (_player?.state.duration.inMilliseconds ?? 0) / 1000;
 
-bool playerPaused() => !(_player?.state.playing ?? false);
+bool playerPaused() =>
+    _useMpv ? (_mpv?.paused ?? true) : !(_player?.state.playing ?? false);
 
-void playerSeek(double seconds) =>
+void playerSeek(double seconds) {
+  if (_useMpv) {
+    _mpv?.seek(seconds);
+  } else {
     _player?.seek(Duration(milliseconds: (seconds * 1000).round()));
+  }
+}
 
-void playerTogglePlay() => _player?.playOrPause();
+void playerTogglePlay() =>
+    _useMpv ? _mpv?.togglePlay() : _player?.playOrPause();
 
-/// Flat [start, end] of buffered content. libmpv exposes a single buffered
-/// duration, not disjoint ranges, so we report one span from 0.
+/// Flat [start, end] of buffered content. mpv exposes a single buffered-until
+/// position (demuxer-cache-time), not disjoint ranges — one span from 0.
 List<double> playerBuffered() {
+  if (_useMpv) {
+    final b = _mpv?.cacheTime ?? 0;
+    return b > 0 ? [0, b] : const [];
+  }
   final p = _player;
   if (p == null) return const [];
   final b = p.state.buffer.inMilliseconds / 1000;
   return b > 0 ? [0, b] : const [];
 }
 
-double playerVolume() => (_player?.state.volume ?? 100) / 100;
+double playerVolume() =>
+    _useMpv ? (_mpv?.volume ?? 100) / 100 : (_player?.state.volume ?? 100) / 100;
 
-bool playerMuted() => _muted;
+bool playerMuted() => _useMpv ? (_mpv?.muted ?? false) : _muted;
 
 void playerSetVolume(double v) {
+  final vv = v.clamp(0.0, 1.0).toDouble();
+  if (_useMpv) {
+    _mpv?.setVolume(vv);
+    return;
+  }
   final p = _player;
   if (p == null) return;
-  final vv = v.clamp(0.0, 1.0).toDouble();
   p.setVolume(vv * 100);
   if (vv > 0) _muted = false;
 }
 
 void playerToggleMute() {
+  if (_useMpv) {
+    _mpv?.toggleMute();
+    return;
+  }
   final p = _player;
   if (p == null) return;
   if (_muted) {
@@ -143,28 +216,27 @@ void playerToggleMute() {
   }
 }
 
-// Desktop renderer runs full-screen on the TV; an in-app fullscreen toggle
-// needs window_manager wiring (follow-up). No-op for now so the control-bar
-// button is harmless.
+// The renderer runs full-screen on the TV; the app-window fullscreen toggle
+// lives in the shell (window_manager). No-op here so the button is harmless.
 bool playerIsFullscreen() => false;
 void playerToggleFullscreen() {}
 
 bool _onKey(KeyEvent e) {
-  final p = _player;
-  if (p == null) return false;
   if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;
   final k = e.logicalKey;
+  if (!_useMpv && _player == null) return false;
+  if (_useMpv && _mpv == null) return false;
   if (k == LogicalKeyboardKey.space || k == LogicalKeyboardKey.keyK) {
-    p.playOrPause();
+    playerTogglePlay();
     return true;
   }
   if (k == LogicalKeyboardKey.arrowLeft) {
-    final t = p.state.position - const Duration(seconds: 10);
-    p.seek(t < Duration.zero ? Duration.zero : t);
+    final t = playerCurrentTime() - 10;
+    playerSeek(t < 0 ? 0 : t);
     return true;
   }
   if (k == LogicalKeyboardKey.arrowRight) {
-    p.seek(p.state.position + const Duration(seconds: 10));
+    playerSeek(playerCurrentTime() + 10);
     return true;
   }
   if (k == LogicalKeyboardKey.arrowUp) {
@@ -185,30 +257,44 @@ bool _onKey(KeyEvent e) {
 void installPlayerKeys() => HardwareKeyboard.instance.addHandler(_onKey);
 
 /// Also the screen's teardown hook (player_screen calls this from dispose) —
-/// release libmpv and the exclusive audio device here, not just the keys.
+/// release the player and the exclusive audio device here, not just the keys.
 void removePlayerKeys() {
   HardwareKeyboard.instance.removeHandler(_onKey);
-  _disposePlayer();
+  if (_useMpv) {
+    final c = _mpv;
+    _mpv = null;
+    c?.dispose();
+  } else {
+    _disposePlayer();
+  }
 }
 
-void playerSetSubtitle(String url) =>
-    _player?.setSubtitleTrack(SubtitleTrack.uri(url));
+void playerSetSubtitle(String url) => _useMpv
+    ? _mpv?.setSubtitleUri(url)
+    : _player?.setSubtitleTrack(SubtitleTrack.uri(url));
 
-void playerClearSubtitle() => _player?.setSubtitleTrack(SubtitleTrack.no());
+void playerClearSubtitle() => _useMpv
+    ? _mpv?.clearSubtitle()
+    : _player?.setSubtitleTrack(SubtitleTrack.no());
 
 /// Positive = subs shown later, matching the web cue-shift sign.
 void playerSetSubtitleOffset(double seconds) {
+  if (_useMpv) {
+    _mpv?.setSubDelay(seconds);
+    return;
+  }
   final p = _player?.platform;
   if (p is NativePlayer) p.setProperty('sub-delay', seconds.toString());
 }
 
-/// Runtime playback facts for the "stats for nerds" overlay — what libmpv is
-/// actually doing right now (vs the probed source the backend reports).
+/// Runtime playback facts for the "stats for nerds" overlay — what the engine
+/// is actually doing right now (vs the probed source the backend reports).
 Map<String, String> playerStats() {
+  if (_useMpv) return _mpv?.stats() ?? const {};
   final p = _player;
   if (p == null) return const {};
   final s = p.state;
-  final out = <String, String>{'Engine': 'libmpv (native, direct)'};
+  final out = <String, String>{'Engine': 'libmpv (media_kit)'};
   if ((s.width ?? 0) > 0 && (s.height ?? 0) > 0) {
     out['Video out'] = '${s.width}×${s.height}';
   }

@@ -119,6 +119,7 @@ class ApiService {
         String mode,
         String reason,
         String url,
+        String? path,
         Map<String, dynamic> source,
         String? backdrop,
         String? logo,
@@ -136,6 +137,9 @@ class ApiService {
       mode: (d['mode'] ?? 'transcode').toString(),
       reason: (d['reason'] ?? '').toString(),
       url: (d['url'] ?? '').toString(),
+      // Direct-play source path (native clients only): the wired renderer
+      // reads the file straight off the NAS — the proven flawless byte path.
+      path: d['path'] as String?,
       source: (d['source'] as Map<String, dynamic>?) ?? const {},
       backdrop: d['backdrop'] as String?,
       logo: d['logo'] as String?,

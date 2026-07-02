@@ -192,6 +192,11 @@ void playerSetSubtitleOffset(double seconds) {
 // Audio passthrough is a native-renderer concern; the browser can't bitstream.
 void setForcePassthrough(bool on) {}
 
+// Direct NAS paths and launch-time resume are native-renderer concerns too;
+// the browser always streams the backend URL and resumes via seek.
+void setDirectMedia(String? path) {}
+void setStartPosition(double seconds) {}
+
 /// Runtime facts for the "stats for nerds" overlay. The browser exposes far
 /// less than libmpv — just the decoded video dimensions and the engine.
 Map<String, String> playerStats() {

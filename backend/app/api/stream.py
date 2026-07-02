@@ -88,6 +88,10 @@ async def play_decision(
         "mode": d["mode"],
         "reason": d["reason"],
         "url": url,
+        # Native direct-play clients read the source file themselves (the
+        # wired renderer plays straight off the NAS — no backend HTTP hop).
+        # Browser/remote clients get no path; they stream the URL above.
+        "path": mf.path if (client == "native" and d["mode"] == "direct") else None,
         "backdrop": backdrop,
         "logo": logo,
         "resume_position": resume_position,

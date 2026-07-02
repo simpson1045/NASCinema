@@ -57,6 +57,9 @@ dependencies:
   path_provider: ^2.1.0
   # Desktop window control — borderless fullscreen toggle (no web impl; guarded).
   window_manager: ^0.4.3
+  # FFI helpers (Utf16, calloc) for the hand-rolled kernel32 named-pipe client
+  # that talks to the native mpv renderer (Windows only; see services/mpv/).
+  ffi: ^2.1.0
 
 dev_dependencies:
   flutter_test:

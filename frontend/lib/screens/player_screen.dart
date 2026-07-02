@@ -122,6 +122,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final passthrough = await _readPassthroughPref();
       if (!mounted) return;
       setForcePassthrough(passthrough); // applied when buildPlayerView opens
+      // Native renderer (Windows): play the source file straight off the NAS
+      // (the proven flawless byte path) and open at the resume point, instead
+      // of streaming the backend URL and visibly seeking after start.
+      setDirectMedia(p.path);
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        setStartPosition(_resumePosition);
+        _resumeApplied = true; // handled at launch; don't re-seek from _poll
+      }
       setState(() {
         _mode = p.mode;
         _reason = p.reason;

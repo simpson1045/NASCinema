@@ -54,12 +54,36 @@ actually are and what's next." Current version: **v0.3.13+12**.*
   mouse-move forwarding (~30/s); (6) drive OSC visibility from the host
   (`script-message osc-visibility always/never no-osd`) — deterministic show-on-move /
   hide-on-idle instead of trusting synthetic-event hover detection.
-- **NEXT (the keystone build):** port this proven harness into the Flutter app —
-  Play → embed mpv via `--wid` (direct-NAS path + the flag set above +
-  `--input-ipc-server`), Dart named-pipe client (async, reply-draining, queued writes),
-  input forwarding, amber-themed controls (uosc or custom `osd-overlay`), phone remote
-  driving the same IPC. See memories `mpv-exclusive-buffer-fixes-passthrough-crackle`
-  and `mpv-wid-embed-ipc-architecture`.
+- **M1 SHIPPED & VERIFIED ON ELKO ✅ — Play → native mpv works from the app.**
+  New `frontend/lib/services/mpv/`: `named_pipe.dart` (hand-rolled kernel32 FFI,
+  overlapped handle, reader/writer isolates — the six gotchas encoded),
+  `mpv_ipc.dart` (JSON IPC, request_id correlation, observe_property),
+  `mpv_controller.dart` (process launch + mirrored state + control API; mpv path
+  configurable via `mpv_path` pref). `player_view_native.dart` seam now branches:
+  **Windows → mpv, Android keeps media_kit** (phone unregressed). Backend
+  `/api/play` returns `path` (UNC) for `client=native` + direct mode → the app
+  plays straight off the NAS. Resume via `--start`. M1 = mpv's own fullscreen
+  window (native keys + stock OSC); M2 = the `--wid` embed.
+  **Verified live by Matt: movie + lossless audio play from the app's Play button.**
+  (App control bar over IPC while mpv runs: wired, not yet explicitly verified.)
+- **Gotcha #7 (cost a frozen-black-window round): a child process's PIPED
+  stdout/stderr MUST be drained** — mpv wrote its terminal status into
+  Process.start's pipes, filled them, and its core blocked mid-load. Fix:
+  `--terminal=no` (+ mpv's own `--log-file` next to the exe) and drain both
+  streams anyway. Confirmed by mpv's IPC accepting connects but never answering.
+- **QoL batch shipped same day (all verified):** 🔍 **Search** (`search_screen.dart`,
+  icon in the library bar — type-ahead over `/api/movies`, prefix-ranked);
+  🚪 **auto-connect** (saved server → splash → library; form only on first run /
+  failure / back-out); 🪟 **window size/position/maximized persistence**
+  (`fullscreen_io.dart`). Deployed to ELKO via robocopy (NOT a versioned release
+  yet — still 0.3.13+12 internally; next release should bump, it's earned).
+- **ELKO SMB note:** deploys can hit "no more connections" (client-SKU ~20-session
+  cap) — fix is `Get-SmbSession | Close-SmbSession -Force` **on ELKO**, then retry.
+- **NEXT (M2): embed mpv in the app window** — native child HWND inside the Flutter
+  window via FFI (DPI-aware), pass to `--wid`, forward input over IPC, host-driven
+  OSC visibility, amber theming (uosc or `osd-overlay`). Then the phone remote rides
+  the same `MpvController`. Open question: how Flutter's win32 window routes input
+  around a native child (expect a hardware-iterate round like the harness).
 
 ---
 
