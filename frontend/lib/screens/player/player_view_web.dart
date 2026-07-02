@@ -197,6 +197,10 @@ void setForcePassthrough(bool on) {}
 void setDirectMedia(String? path) {}
 void setStartPosition(double seconds) {}
 
+// The browser video is a real composited element — overlays draw above it.
+void playerSetOverlayOpen(bool open) {}
+bool playerToggleNativeStats() => false;
+
 /// Runtime facts for the "stats for nerds" overlay. The browser exposes far
 /// less than libmpv — just the decoded video dimensions and the engine.
 Map<String, String> playerStats() {

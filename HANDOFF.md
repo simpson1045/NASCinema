@@ -79,11 +79,49 @@ actually are and what's next." Current version: **v0.3.13+12**.*
   yet — still 0.3.13+12 internally; next release should bump, it's earned).
 - **ELKO SMB note:** deploys can hit "no more connections" (client-SKU ~20-session
   cap) — fix is `Get-SmbSession | Close-SmbSession -Force` **on ELKO**, then retry.
-- **NEXT (M2): embed mpv in the app window** — native child HWND inside the Flutter
-  window via FFI (DPI-aware), pass to `--wid`, forward input over IPC, host-driven
-  OSC visibility, amber theming (uosc or `osd-overlay`). Then the phone remote rides
-  the same `MpvController`. Open question: how Flutter's win32 window routes input
-  around a native child (expect a hardware-iterate round like the harness).
+- **M2 + M3 SHIPPED THE SAME DAY (marathon session, all verified on ELKO):**
+  single-window embed works; movie full-bleed; **uosc** (amber-themed, in
+  `<exe>\mpv-config`, staged into the Release dir on ALPINE — `flutter clean`
+  wipes it, restage from this session's recipe or commit it) is the on-video
+  control surface with back/fullscreen buttons wired to the app via
+  `client-message`/property intercepts; pointer events fall through the native
+  windows into Flutter and are forwarded to mpv over IPC (throttled); hotkeys
+  Esc/Backspace=exit C=subs I=stats P=audio F=fullscreen; modal sheets hide the
+  video while open; stats button = mpv's own stats page; **HDR passthrough**
+  (`--target-colorspace-hint=yes` + Windows "Use HDR" ON — was tone-mapping to
+  203-nit SDR before, "vibrant now"); **DPI fix** = `SetProcessDpiAwarenessContext`
+  forced in `runner/main.cpp` (manifest present but ignored → app ran
+  DPI-virtualized, 4K rendered at 2560-wide); window state persists incl.
+  fullscreen (restore must run in `waitUntilReadyToShow`, and fullscreen saves
+  immediately — debounced saves lost F11-then-quit).
+- **Hard-won pipe/process gotchas (in code comments + memory too):**
+  GetLastError is CLOBBERED by the Dart runtime between FFI calls — never branch
+  on it; pre-set OVERLAPPED.Internal=STATUS_PENDING and let
+  GetOverlappedResult(bWait) decide. `Uint8List` IS a `List` — type-check data
+  FIRST when multiplexing isolate messages (replies were routed into the error
+  path and discarded: live scrubber died). Widget-identity: hiding chrome by
+  removing children rebuilt the video subtree → **respawned mpv per toggle**
+  (multi-instance incident; audio kept playing after app close). Fixes: stable
+  children shape + GlobalKey (Matt's), serialized launches, and a **Windows Job
+  Object (kill-on-close) leash** (`job_leash.dart`) so mpv can never outlive the
+  app. Child stdout/stderr must be drained (`--terminal=no` + listeners).
+  Audio-alive check = `current-ao` (NOT `audio-params` — decoder-side, false
+  positive). **Audio fallback ladder**: exclusive 100ms → 50ms → default → PCM;
+  JP's DTS-HD hits AUDCLNT_E_ENDPOINT_CREATE_FAILED at every exclusive buffer on
+  the NVIDIA endpoint (TrueHD is fine) → lands on lossless PCM decode (Windows
+  spatial wraps it as Atmos on the Denon). DTS-HD bitstream = open quest
+  (check "allow exclusive control" on the endpoint).
+- **Library repair COMPLETE:** 48/48 zero-filled corpses restored from D: (297GB,
+  filename+size-fingerprint matching; JP renamed clean, plays, probed). Probe bug
+  fixed: `subprocess.run(text=True)` decoded ffprobe output as cp1252 → died on
+  UTF-8 tags; now `encoding="utf-8", errors="replace"` ([probe.py]). **6 true
+  orphans need re-acquisition:** Blue Collar Comedy ×2, HP KONTRAST ×4.
+- **OPEN:** uosc styling iteration (Matt: "meh" — conf-file tweaks, no rebuild);
+  embedded subtitle tracks (JP's PGS) in the subs menu; grain = film grain +
+  C2 HDR preset sharpness (TV-side); TruMotion needs input icon ≠ "PC";
+  **0.4.0+13 release**: pubspec already bumped (killed release.bat run mid-way —
+  CHANGELOG has an unfilled stub), re-run `release.bat 0.4.0 13` when stable,
+  Android build UNTESTED with all this (media_kit leg preserved by design).
 
 ---
 

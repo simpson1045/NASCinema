@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,6 +41,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   String _playUrl = '';
   bool _isHls = false;
+  // Anchors the player subtree's identity across layout changes — its state
+  // (and the native mpv process behind it) must never be recreated by a
+  // sibling appearing/disappearing.
+  final _playerHost = GlobalKey();
   // App-level Chromecast controller (survives navigation). Web → no-op stub.
   late final CastController _cast;
 
@@ -59,6 +64,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       (defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.linux);
+
+  // Native mpv leg: video is full-bleed and mpv's on-video OSC is the control
+  // surface; the Flutter chrome (bars/scrubber) stays out of the way. The
+  // Flutter-only features live on hotkeys: Esc back · C subs · I stats ·
+  // P audio settings · F fullscreen.
+  bool get _nativeVideo =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 
   double _position = 0;
   double _duration = 0;
@@ -83,11 +95,64 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _resumeApplied = false;
   Timer? _saveTimer;
 
+  // Desktop: player chrome hides after a few idle seconds (real-player feel),
+  // reappears on mouse movement, and stays put while paused. The video area
+  // Expands into the freed space — the native embed tracks the layout.
+  bool _controlsVisible = true;
+  Timer? _hideControls;
+
+  void _pokeControls([_]) {
+    if (!_isDesktop) return;
+    // Native leg: mpv's OSC handles its own show/hide; the Flutter chrome is
+    // gone entirely during playback — nothing to poke.
+    if (_nativeVideo && _player != null) return;
+    if (!_controlsVisible) setState(() => _controlsVisible = true);
+    _hideControls?.cancel();
+    _hideControls = Timer(const Duration(seconds: 3), () {
+      if (mounted && !_paused && !_syncMode) {
+        setState(() => _controlsVisible = false);
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _cast = context.read<CastController>();
+    if (_nativeVideo) HardwareKeyboard.instance.addHandler(_screenKeys);
     _load();
+  }
+
+  /// Hotkeys for the full-bleed native player (chrome is hidden; mpv's OSC
+  /// covers transport, these cover the Flutter-side features).
+  bool _screenKeys(KeyEvent e) {
+    if (e is! KeyDownEvent || !mounted) return false;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return false;
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.escape || k == LogicalKeyboardKey.backspace) {
+      Navigator.of(context).pop();
+      return true;
+    }
+    if (_player == null) return false;
+    if (k == LogicalKeyboardKey.keyC) {
+      _openSubsMenu();
+      return true;
+    }
+    if (k == LogicalKeyboardKey.keyI) {
+      if (!playerToggleNativeStats()) {
+        setState(() => _statsVisible = !_statsVisible);
+      }
+      return true;
+    }
+    if (k == LogicalKeyboardKey.keyP) {
+      _openAudioSettings();
+      return true;
+    }
+    if (k == LogicalKeyboardKey.keyF) {
+      playerToggleFullscreen();
+      return true;
+    }
+    return false;
   }
 
   @override
@@ -98,6 +163,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _offsetSave?.cancel();
     _bannerTimer?.cancel();
     _saveTimer?.cancel();
+    _hideControls?.cancel();
+    if (_nativeVideo) HardwareKeyboard.instance.removeHandler(_screenKeys);
     removePlayerKeys();
     super.dispose();
   }
@@ -148,6 +215,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _bannerTimer = Timer(const Duration(seconds: 6), () {
         if (mounted) setState(() => _bannerVisible = false);
       });
+      _pokeControls(); // arm the idle auto-hide
       _poll = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (!mounted) return;
         final d = playerDuration();
@@ -159,6 +227,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _volume = playerVolume();
           _muted = playerMuted();
           _clientStats = playerStats();
+          // Pausing (from anywhere — keyboard, remote) resurfaces the chrome.
+          if (_paused && !_controlsVisible) _controlsVisible = true;
         });
         // Resume once the player knows its duration (so the seek lands).
         if (!_resumeApplied && _resumePosition > 2 && _duration > 0) {
@@ -244,16 +314,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // swallows pointer events, so Flutter controls must sit beside it, not
       // on top, or the back/close buttons never receive taps.
       body: SafeArea(
-        child: Column(
+        child: MouseRegion(
+          cursor: _controlsVisible ? MouseCursor.defer : SystemMouseCursors.none,
+          onHover: _pokeControls,
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _pokeControls,
+            onPointerMove: _pokeControls,
+            child: Column(
           children: [
-            _topBar(),
+            // Chrome slots collapse to SizedBox.shrink instead of leaving the
+            // list — removing children SHIFTS the video subtree's position and
+            // Flutter recreates it (which relaunched mpv on every auto-hide —
+            // the multiple-players incident).
+            // Native leg playing → no Flutter chrome at all: the video is
+            // full-bleed and mpv's OSC is the control surface (hotkeys for
+            // the rest: Esc/C/I/P/F).
+            (_controlsVisible && !(_nativeVideo && _player != null))
+                ? _topBar()
+                : const SizedBox.shrink(),
             if (_syncMode) _syncBar(),
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   _player != null
-                      ? _player!
+                      ? KeyedSubtree(key: _playerHost, child: _player!)
                       : _error != null
                           ? Center(
                               child: Padding(
@@ -282,13 +368,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
               duration: const Duration(milliseconds: 350),
               switchInCurve: Curves.easeOut,
               switchOutCurve: Curves.easeIn,
-              child: (_mode != null && _bannerVisible)
+              child: (_mode != null &&
+                      _bannerVisible &&
+                      _controlsVisible &&
+                      !_nativeVideo)
                   ? KeyedSubtree(
                       key: const ValueKey('why'), child: _whyBanner())
                   : const SizedBox.shrink(),
             ),
-            if (_player != null) _controlBar(),
+            (_player != null && _controlsVisible && !_nativeVideo)
+                ? _controlBar()
+                : const SizedBox.shrink(),
           ],
+            ),
+          ),
         ),
       ),
     );
@@ -410,8 +503,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       size: 22),
                 ),
               IconButton(
-                onPressed: () =>
-                    setState(() => _statsVisible = !_statsVisible),
+                onPressed: () {
+                  // Native leg: mpv renders its own stats inside the video
+                  // (Flutter overlays can't sit above the native airspace).
+                  if (playerToggleNativeStats()) return;
+                  setState(() => _statsVisible = !_statsVisible);
+                },
                 tooltip: 'Stats for nerds',
                 icon: Icon(Icons.info_outline,
                     color: _statsVisible ? NasColors.amber : Colors.white,
@@ -431,6 +528,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _openCastSheet() {
+    playerSetOverlayOpen(true);
     showModalBottomSheet(
       context: context,
       backgroundColor: NasColors.surface,
@@ -448,7 +546,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Navigator.pop(context);
         },
       ),
-    );
+    ).whenComplete(() => playerSetOverlayOpen(false));
   }
 
   Future<void> _castTo(CastDevice device) async {
@@ -481,6 +579,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Renderer audio settings (native only): force lossless bitstream to the AVR.
   void _openAudioSettings() {
+    playerSetOverlayOpen(true);
     showModalBottomSheet(
       context: context,
       backgroundColor: NasColors.surface,
@@ -515,7 +614,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
       ),
-    );
+    ).whenComplete(() => playerSetOverlayOpen(false));
   }
 
   void _selectSub(Map<String, dynamic> sub) {
@@ -585,6 +684,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _openSubsMenu() {
+    playerSetOverlayOpen(true);
     showModalBottomSheet(
       context: context,
       backgroundColor: NasColors.surface,
@@ -618,7 +718,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Navigator.pop(context);
         },
       ),
-    );
+    ).whenComplete(() => playerSetOverlayOpen(false));
   }
 
   String _fmt(double s) {

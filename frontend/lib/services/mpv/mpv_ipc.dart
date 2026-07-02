@@ -34,8 +34,10 @@ class MpvIpc {
   static Future<MpvIpc?> connect(
     String pipeName, {
     Duration timeout = const Duration(seconds: 10),
+    void Function(String line)? onDiag,
   }) async {
-    final pipe = await NamedPipeClient.connect(pipeName, timeout: timeout);
+    final pipe = await NamedPipeClient.connect(pipeName,
+        timeout: timeout, onDiag: onDiag);
     return pipe == null ? null : MpvIpc._(pipe);
   }
 

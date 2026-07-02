@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -5,6 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../services/fullscreen.dart' as shell;
+import '../../services/mpv/embed_window.dart';
 import '../../services/mpv/mpv_controller.dart';
 import '../../theme/app_theme.dart';
 
@@ -65,36 +68,220 @@ Widget buildPlayerView(String url, bool isHls) =>
 // ---------------------------------------------------------------------------
 
 MpvController? _mpv;
-String _mpvStatus = 'Starting renderer…';
 
-Widget _mpvBuild(String url) {
-  final media = _directMedia ?? url;
-  _mpvStatus = 'Starting renderer…';
-  // Fire-and-forget: the seam API is synchronous; accessors read the
-  // controller's mirrored state (zeros until mpv reports in).
-  () async {
+Widget _mpvBuild(String url) =>
+    _MpvEmbedView(media: _directMedia ?? url, startAt: _startAt);
+
+/// The embedded video area: creates a native child window over exactly this
+/// widget's rect, launches mpv into it (`--wid`), and keeps the child glued
+/// to the rect through layout changes and window resizes. The Flutter chrome
+/// around the rect (top bar, control bar) stays fully interactive — only the
+/// video itself is native airspace.
+class _MpvEmbedView extends StatefulWidget {
+  const _MpvEmbedView({required this.media, required this.startAt});
+
+  final String media;
+  final double startAt;
+
+  @override
+  State<_MpvEmbedView> createState() => _MpvEmbedViewState();
+}
+
+// The live embed surface, reachable by the seam so player_screen can hide the
+// native airspace while a modal overlay (subs menu, cast picker...) is open.
+EmbedWindow? _embedWin;
+
+class _MpvEmbedViewState extends State<_MpvEmbedView> {
+  EmbedWindow? _win;
+  bool _launching = false;
+  bool _failed = false;
+  Timer? _track;
+
+  // mpv's on-video OSC is the player's control surface (the only overlay that
+  // can live above the native airspace). Host-driven like the harness: show
+  // on pointer activity, hide (with the cursor) after idle, stay while paused.
+  bool _oscShown = false;
+  Timer? _oscTimer;
+  int _lastMouseMs = 0;
+
+  void _pokeOsc() {
+    if (!_oscShown) {
+      _oscShown = true;
+      _mpv?.setOscVisible(true);
+      if (mounted) setState(() {});
+    }
+    _oscTimer?.cancel();
+    _oscTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (!mounted) return;
+      if (_mpv?.paused == true) {
+        _pokeOsc(); // pinned while paused; re-check in another cycle
+        return;
+      }
+      _oscShown = false;
+      _mpv?.setOscVisible(false);
+      setState(() {});
+    });
+  }
+
+  /// Forward pointer position to mpv (physical px, child-window-relative,
+  /// throttled ~30/s — unthrottled mouse spam once deadlocked the harness).
+  void _forwardMove(Offset local) {
+    _pokeOsc();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastMouseMs < 33) return;
+    _lastMouseMs = now;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    _mpv?.mouseMove((local.dx * dpr).round(), (local.dy * dpr).round());
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // The rect only exists after the first layout; create everything then.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _create());
+    // Drift guard: layout usually rebuilds us on size changes, but position
+    // shifts without a constraint change (e.g. a banner collapsing) don't.
+    // A cheap rect check twice a second keeps the video glued in place.
+    _track = Timer.periodic(
+        const Duration(milliseconds: 500), (_) => _syncBounds());
+  }
+
+  Rect? _physicalRect() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final origin = box.localToGlobal(Offset.zero);
+    return Rect.fromLTWH(origin.dx * dpr, origin.dy * dpr,
+        box.size.width * dpr, box.size.height * dpr);
+  }
+
+  Future<void> _create() async {
+    if (_launching || !mounted) return;
+    _launching = true;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final rect = _physicalRect();
+    final win = rect == null ? null : EmbedWindow.create(rect);
+    if (win == null) {
+      _diag('embed window create failed');
+      if (mounted) setState(() => _failed = true);
+      return;
+    }
+    _win = win;
+    _embedWin = win;
     final c = await MpvController.launch(
-      media: media,
-      startSeconds: _startAt,
+      media: widget.media,
+      hwnd: win.hwnd,
+      startSeconds: widget.startAt,
       passthrough: _forcePassthrough,
       diag: _diag,
     );
     _mpv = c;
-    _mpvStatus = c == null
-        ? 'Renderer failed to start — see nascinema_player.log'
-        : 'Playing on the renderer';
-  }();
+    if (c == null && mounted) setState(() => _failed = true);
+    // mpv's window steals focus as it spawns — reclaim it so the app's
+    // keyboard shortcuts (space/arrows/M) keep working.
+    if (c != null) {
+      win.focusApp();
+      // uosc's fullscreen button → the app window's fullscreen.
+      c.onFullscreenRequest = playerToggleFullscreen;
+      // uosc's custom back button (script-message nascinema-back) → leave
+      // the player screen, which tears everything down.
+      c.events?.listen((e) {
+        if (e['event'] == 'client-message' &&
+            (e['args'] as List?)?.contains('nascinema-back') == true) {
+          if (mounted) Navigator.of(context).maybePop();
+        }
+      });
+    }
+    // Geometry truth into the log (letterbox debugging): our window chain +
+    // mpv's own belief about its window/video size, at launch and settled.
+    _diag('embed create rect=${rect!.left.round()},${rect.top.round()} '
+        '${rect.width.round()}x${rect.height.round()} dpr=$dpr');
+    for (final delay in const [5, 15]) {
+      Future.delayed(Duration(seconds: delay), () async {
+        if (mounted && _win != null) {
+          final mpvView = await _mpv?.videoGeometry() ?? 'mpv gone';
+          if (!mounted) return;
+          // Flutter's own belief vs the win32 truth — if these disagree, the
+          // "video draws at 2/3 size" bug lives in the window/view plumbing.
+          final v = View.of(context);
+          final fl = 'flutter-phys=${v.physicalSize.width.round()}x'
+              '${v.physicalSize.height.round()} '
+              'logical=${MediaQuery.sizeOf(context).width.round()}x'
+              '${MediaQuery.sizeOf(context).height.round()}';
+          _diag('embed geometry t+${delay}s: ${_win!.debugGeometry()} $mpvView $fl');
+        }
+      });
+    }
+  }
 
-  // M1 placeholder — mpv renders in its own fullscreen window; this fills the
-  // app's video slot behind it. M2 replaces it with the embedded video area.
-  return Container(
-    color: const Color(0xFF000000),
-    alignment: Alignment.center,
-    child: Text(
-      _mpvStatus,
-      style: const TextStyle(color: NasColors.muted, fontSize: 14),
-    ),
-  );
+  void _syncBounds() {
+    if (!mounted) return;
+    final rect = _physicalRect();
+    if (rect != null) _win?.setBounds(rect);
+    // Also re-fit mpv's inner window: it appears a beat after launch and
+    // never resizes itself, so the tracker owns its geometry.
+    _win?.fitInner();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Keep the child aligned right after every rebuild/layout pass too.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncBounds());
+    // Pointer events over the video fall through the native windows (both
+    // hit-test transparent) and land here — forward them to mpv so its OSC
+    // is hoverable, clickable, and drag-scrubbable, exactly like the harness.
+    return MouseRegion(
+      cursor: _oscShown ? SystemMouseCursors.basic : SystemMouseCursors.none,
+      onHover: (e) => _forwardMove(e.localPosition),
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerHover: (e) => _forwardMove(e.localPosition),
+        onPointerMove: (e) => _forwardMove(e.localPosition),
+        onPointerDown: (e) {
+          _forwardMove(e.localPosition);
+          _mpv?.mouseLeftDown();
+        },
+        onPointerUp: (_) => _mpv?.mouseLeftUp(),
+        child: Container(
+          color: const Color(0xFF000000),
+          alignment: Alignment.center,
+          child: _failed
+              ? const Text(
+                  'Renderer failed to start — see nascinema_player.log',
+                  style: TextStyle(color: NasColors.muted, fontSize: 14),
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _track?.cancel();
+    _oscTimer?.cancel();
+    if (_embedWin == _win) _embedWin = null;
+    _win?.destroy();
+    _win = null;
+    super.dispose();
+  }
+}
+
+/// Modal overlays (subs sheet, cast picker, settings) can't composite above
+/// the native video window — hide the video while one is up (audio continues)
+/// and restore on dismiss. No-op on the media_kit leg (real texture, real
+/// compositing).
+void playerSetOverlayOpen(bool open) {
+  if (_useMpv) _embedWin?.setVisible(!open);
+}
+
+/// Stats overlay: Flutter's panel can't draw above the native video, so the
+/// mpv leg shows mpv's own in-video stats page instead. Returns true when
+/// handled natively (the caller skips the Flutter panel).
+bool playerToggleNativeStats() {
+  if (!_useMpv) return false;
+  _mpv?.toggleStatsOverlay();
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +403,13 @@ void playerToggleMute() {
   }
 }
 
-// The renderer runs full-screen on the TV; the app-window fullscreen toggle
-// lives in the shell (window_manager). No-op here so the button is harmless.
+// The embedded video tracks the app window, so the control-bar fullscreen
+// button just drives the window itself (same as F11). media_kit leg (phone)
+// has no window to toggle — harmless no-op there.
 bool playerIsFullscreen() => false;
-void playerToggleFullscreen() {}
+void playerToggleFullscreen() {
+  if (_useMpv) shell.toggleFullscreen();
+}
 
 bool _onKey(KeyEvent e) {
   if (e is! KeyDownEvent && e is! KeyRepeatEvent) return false;

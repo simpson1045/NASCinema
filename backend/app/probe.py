@@ -50,7 +50,17 @@ async def probe_file(path: str) -> dict | None:
     ]
 
     def _run() -> subprocess.CompletedProcess:
-        return subprocess.run(args, capture_output=True, text=True, timeout=90)
+        # ffprobe emits UTF-8; bare text=True decodes with the locale codepage
+        # (cp1252 on Windows) and DIES on files whose stream tags contain
+        # multi-byte UTF-8 — the probe then silently fails on healthy files.
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=90,
+        )
 
     try:
         proc = await asyncio.to_thread(_run)

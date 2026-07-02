@@ -15,6 +15,7 @@ import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'job_leash.dart';
 import 'mpv_ipc.dart';
 
 /// Everything is config, not constants (multi-user & topology-agnostic):
@@ -26,6 +27,19 @@ class MpvController {
   MpvController._();
 
   static MpvController? _live;
+
+  /// Emergency synchronous teardown for app shutdown: the mpv process is an
+  /// independent child and happily keeps playing to the TV after the app
+  /// window closes (happened live — phantom audio with no UI to stop it).
+  static void killSync() {
+    final c = _live;
+    _live = null;
+    if (c == null) return;
+    c._disposed = true;
+    try {
+      c._proc?.kill(ProcessSignal.sigkill);
+    } catch (_) {}
+  }
 
   Process? _proc;
   MpvIpc? _ipc;
@@ -49,6 +63,13 @@ class MpvController {
 
   bool get running => _ipc != null && !_disposed;
 
+  /// Fired when uosc's fullscreen button is clicked: embedded mpv can't
+  /// fullscreen itself meaningfully, so the app window takes the toggle.
+  void Function()? onFullscreenRequest;
+
+  /// Raw mpv events (client-message etc.) for UI hooks like the back button.
+  Stream<Map<String, dynamic>>? get events => _ipc?.events;
+
   /// Launch mpv playing [media] (UNC path or URL). If [hwnd] is given the
   /// video embeds into that native child window (`--wid`); otherwise mpv
   /// opens its own fullscreen window (the M1 stepping stone).
@@ -56,7 +77,33 @@ class MpvController {
   /// [passthrough] wires the verified lossless chain: WASAPI exclusive +
   /// spdif bitstream + the 100 ms exclusive buffer that killed the
   /// loud-peak crackle. Off = mpv's normal shared-mode PCM output.
+  // Launches are SERIALIZED: widget-tree churn once triggered overlapping
+  // launches whose dispose/spawn steps interleaved — several mpvs at once
+  // (the multi-instance incident). Each launch fully finishes (including
+  // killing its predecessor) before the next may start.
+  static Future<MpvController?>? _launchChain;
+
   static Future<MpvController?> launch({
+    required String media,
+    int? hwnd,
+    double startSeconds = 0,
+    bool passthrough = false,
+    void Function(String line)? diag,
+  }) {
+    final next = (_launchChain ?? Future<MpvController?>.value(null))
+        .catchError((_) => null)
+        .then((_) => _doLaunch(
+              media: media,
+              hwnd: hwnd,
+              startSeconds: startSeconds,
+              passthrough: passthrough,
+              diag: diag,
+            ));
+    _launchChain = next;
+    return next;
+  }
+
+  static Future<MpvController?> _doLaunch({
     required String media,
     int? hwnd,
     double startSeconds = 0,
@@ -90,10 +137,24 @@ class MpvController {
       '--force-window=yes',
       if (hwnd != null) ...[
         // Embedded: the app owns input and forwards over IPC — don't let
-        // mpv's child window grab keys and double-handle them.
+        // mpv's child window grab keys and double-handle them. On-video
+        // controls come from uosc (shipped in <exe>\mpv-config, themed
+        // NASCinema amber): the only overlay that can live above the native
+        // airspace. It shows on the forwarded mouse activity and autohides
+        // with the cursor (--cursor-autohide drives it).
         '--input-default-bindings=no',
         '--input-vo-keyboard=no',
         '--osc=no',
+        '--osd-bar=no',
+        '--cursor-autohide=2500',
+        // HDR passthrough: ask Windows to engage HDR and send the real PQ
+        // signal instead of tone-mapping to a 203-nit SDR desktop image
+        // (embedded mpv defaults to polite SDR compositing; the standalone
+        // fullscreen tests looked right because they mode-switched the TV).
+        '--target-colorspace-hint=yes',
+        if (Directory('$exeDir${Platform.pathSeparator}mpv-config')
+            .existsSync())
+          '--config-dir=$exeDir${Platform.pathSeparator}mpv-config',
       ] else ...[
         // Own-window (M1 stepping stone): mpv keeps its native keys + OSC so
         // the fullscreen window is controllable directly.
@@ -122,19 +183,31 @@ class MpvController {
       // filling up blocks the child process. Never rely on "it won't write".
       c._proc!.stdout.listen((_) {});
       c._proc!.stderr.listen((_) {});
+      // Kernel leash: if this app dies for ANY reason, Windows kills the mpv.
+      leashProcess(c._proc!.pid);
     } catch (e) {
       diag?.call('mpv spawn failed: $e');
       return null;
     }
 
-    c._ipc = await MpvIpc.connect(pipeName);
+    c._ipc = await MpvIpc.connect(pipeName, onDiag: diag);
     if (c._ipc == null) {
       diag?.call('mpv IPC connect timed out (pipe $pipeName)');
       c._proc?.kill();
       return null;
     }
+    diag?.call('mpv IPC connected (pipe $pipeName)');
+    // Prove the channel end-to-end at launch: if the pipe is healthy this
+    // round-trips; if it dies, the pipe-err diagnostics name the stage.
+    unawaited(c._ipc!
+        .get('mpv-version')
+        .then((v) => diag?.call('mpv IPC round-trip: ${v ?? "NO REPLY"}')));
 
     c._wireObservers();
+    // Exclusive-mode bitstream is endpoint-lottery (NVIDIA HDMI rejects the
+    // 100ms buffer for DTS-HD that it happily takes for TrueHD, and a dead
+    // audio device holds ALL playback hostage). Negotiate instead of freeze.
+    if (passthrough) unawaited(c._audioFallbackLadder(diag));
     // If mpv exits on its own (crash, user Alt+F4 on the window), reflect it.
     c._ipc!.done.then((_) => c._disposed = true);
     unawaited(c._proc!.exitCode.then((code) {
@@ -172,6 +245,60 @@ class MpvController {
     ipc.observe('audio-bitrate',
         (v) => audioBitrate = (v as num?)?.toDouble() ?? 0);
     ipc.observe('hwdec-current', (v) => hwdec = v?.toString() ?? '');
+    // uosc's fullscreen button flips mpv's own property — undo it and hand
+    // the intent to the app window instead.
+    ipc.observe('fullscreen', (v) {
+      if (v == true) {
+        ipc.set('fullscreen', false);
+        onFullscreenRequest?.call();
+      }
+    });
+  }
+
+  /// True once mpv's audio output actually initialized (device accepted).
+  /// MUST be `current-ao` — `audio-params` reports the DECODER's format and
+  /// is happily non-empty while the audio device is dead (false-positive
+  /// confirmed live on JP's DTS-HD).
+  Future<bool> _audioAlive() async {
+    final ao = await _ipc?.get('current-ao');
+    return ao is String && ao.isNotEmpty;
+  }
+
+  /// Drop + re-select the audio track so mpv rebuilds the whole audio chain
+  /// with whatever options are now set (also un-freezes playback stalled on a
+  /// dead audio device).
+  Future<void> _reinitAudio() async {
+    _ipc?.set('aid', 'no');
+    await Future.delayed(const Duration(milliseconds: 500));
+    _ipc?.set('aid', 'auto');
+  }
+
+  /// Bitstream-first, degrade-gracefully, always-play:
+  ///   exclusive @100ms → @50ms → @device default → lossless PCM decode.
+  /// Verified live: JP's DTS-HD hit AUDCLNT_E_ENDPOINT_CREATE_FAILED at
+  /// 100ms on the NVIDIA HDMI endpoint that runs TrueHD at 100ms fine.
+  Future<void> _audioFallbackLadder(void Function(String)? diag) async {
+    await Future.delayed(const Duration(seconds: 3)); // let first init land
+    if (_disposed) return;
+    if (await _audioAlive()) {
+      diag?.call('audio: exclusive bitstream OK (100ms buffer)');
+      return;
+    }
+    for (final buf in ['50000', 'default']) {
+      diag?.call('audio dead — retrying exclusive buffer=$buf');
+      _ipc?.set('options/wasapi-exclusive-buffer', buf);
+      await _reinitAudio();
+      await Future.delayed(const Duration(seconds: 3));
+      if (_disposed) return;
+      if (await _audioAlive()) {
+        diag?.call('audio recovered: exclusive bitstream (buffer=$buf)');
+        return;
+      }
+    }
+    diag?.call('audio: bitstream refused by endpoint — lossless PCM fallback');
+    _ipc?.set('options/audio-spdif', '');
+    _ipc?.set('options/audio-exclusive', 'no');
+    await _reinitAudio();
   }
 
   // --- controls (the seam + the phone remote both land here) ----------------
@@ -201,6 +328,35 @@ class MpvController {
   /// One-off OSD text (amber-themed later; used for connect toasts / debug).
   void showText(String text, {int ms = 2000}) =>
       _ipc?.command(['show-text', text, ms]);
+
+  // --- input forwarding (host owns input in --wid mode; harness-proven) -----
+
+  /// Pointer position in PHYSICAL pixels relative to the video child window.
+  void mouseMove(int x, int y) => _ipc?.command(['mouse', x, y]);
+
+  void mouseLeftDown() => _ipc?.command(['keydown', 'MBTN_LEFT']);
+
+  void mouseLeftUp() => _ipc?.command(['keyup', 'MBTN_LEFT']);
+
+  /// Host-driven OSC visibility — deterministic show-on-move/hide-on-idle
+  /// instead of trusting mpv's hover detection with synthetic events.
+  void setOscVisible(bool visible) => _ipc?.command(
+      ['script-message', 'osc-visibility', visible ? 'always' : 'never', 'no-osd']);
+
+  /// mpv's built-in stats page, rendered inside the video itself — the only
+  /// place an overlay can live above the native airspace.
+  void toggleStatsOverlay() =>
+      _ipc?.command(['script-binding', 'stats/display-stats-toggle']);
+
+  /// mpv's own view of its window vs the displayed video size (letterbox
+  /// debugging: our windows all agree, so ask the renderer what IT thinks).
+  Future<String> videoGeometry() async {
+    final ow = await _ipc?.get('osd-width');
+    final oh = await _ipc?.get('osd-height');
+    final dw = await _ipc?.get('dwidth');
+    final dh = await _ipc?.get('dheight');
+    return 'mpv-window=${ow}x$oh video-display=${dw}x$dh';
+  }
 
   Map<String, String> stats() {
     final out = <String, String>{'Engine': 'mpv (native, direct)'};

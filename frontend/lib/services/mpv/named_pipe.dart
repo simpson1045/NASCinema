@@ -89,12 +89,20 @@ const _genericWrite = 0x40000000;
 const _openExisting = 3;
 const _fileFlagOverlapped = 0x40000000;
 const _invalidHandle = -1;
-const _errorIoPending = 997;
+// NT "operation queued" marker for OVERLAPPED.Internal. We pre-set it before
+// each I/O call and let GetOverlappedResult(bWait=TRUE) alone decide the
+// outcome — NEVER GetLastError: the Dart runtime makes its own Win32 calls
+// between FFI invocations and clobbers the thread's last-error (confirmed
+// live: a pending ReadFile "failed" with error 0 and killed the pipe).
+const _statusPending = 0x103;
 
 // --- worker isolates ---------------------------------------------------------
 
 /// Reader: blocking overlapped-read loop; ships raw chunks to the main
-/// isolate (line assembly happens there). Sends `null` once on EOF/error.
+/// isolate (line assembly happens there). Sends `null` once on EOF/error —
+/// preceded by a `['pipe-err', stage, code]` diagnostic so failures are
+/// attributable instead of silent (this channel dying is invisible otherwise:
+/// mpv keeps playing, the app just goes deaf).
 void _readLoop(List<Object> init) {
   final send = init[0] as SendPort;
   final handle = init[1] as int;
@@ -103,20 +111,31 @@ void _readLoop(List<Object> init) {
   final ov = calloc<_Overlapped>();
   final ev = _createEventW(nullptr, 1, 0, nullptr);
   try {
+    if (ev == 0) {
+      send.send(['pipe-err', 'CreateEvent', _getLastError()]);
+      return;
+    }
     while (true) {
       _resetEvent(ev);
-      ov.ref.internal = 0;
+      ov.ref.internal = _statusPending;
       ov.ref.internalHigh = 0;
       ov.ref.offset = 0;
       ov.ref.offsetHigh = 0;
       ov.ref.hEvent = ev;
       final ok = _readFile(handle, buf, 65536, got, ov);
       if (ok == 0) {
-        if (_getLastError() != _errorIoPending) break;
-        if (_getOverlappedResult(handle, ov, got, 1) == 0) break;
+        // Pending or failed — GetOverlappedResult(bWait) resolves which
+        // without touching the unreliable last-error slot.
+        if (_getOverlappedResult(handle, ov, got, 1) == 0) {
+          send.send(['pipe-err', 'read', _getLastError()]);
+          break;
+        }
       }
       final n = got.value;
-      if (n == 0) break;
+      if (n == 0) {
+        send.send(['pipe-err', 'read', 0]); // clean EOF (mpv closed)
+        break;
+      }
       send.send(Uint8List.fromList(buf.asTypedList(n)));
     }
   } finally {
@@ -124,7 +143,7 @@ void _readLoop(List<Object> init) {
     calloc.free(buf);
     calloc.free(got);
     calloc.free(ov);
-    _closeHandle(ev);
+    if (ev != 0) _closeHandle(ev);
   }
 }
 
@@ -134,11 +153,13 @@ void _readLoop(List<Object> init) {
 void _writeLoop(List<Object> init) {
   final main = init[0] as SendPort;
   final handle = init[1] as int;
+  final errPort = init[2] as SendPort; // reader's channel doubles for errors
   final port = ReceivePort();
   main.send(port.sendPort);
   final got = calloc<Uint32>();
   final ov = calloc<_Overlapped>();
   final ev = _createEventW(nullptr, 1, 0, nullptr);
+  var reported = false;
   port.listen((msg) {
     if (msg == null) {
       calloc.free(got);
@@ -151,14 +172,17 @@ void _writeLoop(List<Object> init) {
     final p = calloc<Uint8>(bytes.length);
     p.asTypedList(bytes.length).setAll(0, bytes);
     _resetEvent(ev);
-    ov.ref.internal = 0;
+    ov.ref.internal = _statusPending;
     ov.ref.internalHigh = 0;
     ov.ref.offset = 0;
     ov.ref.offsetHigh = 0;
     ov.ref.hEvent = ev;
     final ok = _writeFile(handle, p, bytes.length, got, ov);
-    if (ok == 0 && _getLastError() == _errorIoPending) {
-      _getOverlappedResult(handle, ov, got, 1);
+    if (ok == 0 &&
+        _getOverlappedResult(handle, ov, got, 1) == 0 &&
+        !reported) {
+      reported = true;
+      errPort.send(['pipe-err', 'write', _getLastError()]);
     }
     calloc.free(p);
   });
@@ -168,9 +192,10 @@ void _writeLoop(List<Object> init) {
 
 /// Duplex line-oriented client for `\\.\pipe\<name>`.
 class NamedPipeClient {
-  NamedPipeClient._(this._handle);
+  NamedPipeClient._(this._handle, this._onDiag);
 
   final int _handle;
+  final void Function(String line)? _onDiag;
   Isolate? _reader;
   Isolate? _writer;
   SendPort? _writePort;
@@ -189,6 +214,7 @@ class NamedPipeClient {
   static Future<NamedPipeClient?> connect(
     String name, {
     Duration timeout = const Duration(seconds: 10),
+    void Function(String line)? onDiag,
   }) async {
     final path = '\\\\.\\pipe\\$name'.toNativeUtf16();
     final deadline = DateTime.now().add(timeout);
@@ -197,7 +223,7 @@ class NamedPipeClient {
         final h = _createFileW(path, _genericRead | _genericWrite, 0, nullptr,
             _openExisting, _fileFlagOverlapped, 0);
         if (h != _invalidHandle) {
-          final client = NamedPipeClient._(h);
+          final client = NamedPipeClient._(h, onDiag);
           await client._start();
           return client;
         }
@@ -217,8 +243,18 @@ class NamedPipeClient {
         _shutdown();
         return;
       }
+      // Uint8List IS a List — data MUST be matched first or every reply gets
+      // misrouted into the error path and silently discarded (happened live:
+      // "win32 error 34/114/101" were the bytes ", r, e of mpv's own JSON).
+      if (msg is! Uint8List) {
+        // ['pipe-err', stage, code] from either worker: a dying pipe must
+        // name its killer in the log.
+        final m = msg as List;
+        _onDiag?.call('pipe ${m[1]} failed, win32 error ${m[2]}');
+        return;
+      }
       // Assemble complete lines; a chunk can hold several or a partial one.
-      _pending += utf8.decode(msg as Uint8List, allowMalformed: true);
+      _pending += utf8.decode(msg, allowMalformed: true);
       int i;
       while ((i = _pending.indexOf('\n')) >= 0) {
         final line = _pending.substring(0, i).trim();
@@ -229,7 +265,8 @@ class NamedPipeClient {
     _reader = await Isolate.spawn(_readLoop, [fromRead.sendPort, _handle]);
 
     final fromWrite = ReceivePort();
-    _writer = await Isolate.spawn(_writeLoop, [fromWrite.sendPort, _handle]);
+    _writer = await Isolate.spawn(
+        _writeLoop, [fromWrite.sendPort, _handle, fromRead.sendPort]);
     _writePort = await fromWrite.first as SendPort;
     fromWrite.close();
   }

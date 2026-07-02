@@ -7,6 +7,13 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  // Force per-monitor-v2 DPI awareness BEFORE any window exists. The manifest
+  // declares this too, but the process was observed running DPI-virtualized
+  // anyway (Windows scaled a 3840-wide screen down to 2560 for us → the 4K
+  // video rendered soft). A no-op if awareness is already set; a rescue when
+  // the manifest is ignored.
+  ::SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {

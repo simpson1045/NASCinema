@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'mpv/mpv_controller.dart';
+
 /// True only on real desktop targets — window_manager is a no-op elsewhere, so
 /// every call below guards on this.
 bool get isDesktop =>
@@ -19,6 +21,7 @@ const _kWinY = 'win_y';
 const _kWinW = 'win_w';
 const _kWinH = 'win_h';
 const _kWinMax = 'win_max';
+const _kWinFull = 'win_full';
 
 /// Must run before runApp on desktop so window_manager can drive the window.
 /// Restores the last window bounds/maximized state, then starts tracking.
@@ -42,8 +45,20 @@ Future<void> initWindowForDesktop() async {
       await windowManager.center();
     }
   }
-  if (prefs.getBool(_kWinMax) ?? false) {
-    await windowManager.maximize();
+  // Maximize/fullscreen restore must wait for the window to be READY — issued
+  // earlier, the commands silently evaporate (fullscreen restore "worked" in
+  // code and never on screen). Bounds restore above is fine pre-show.
+  final maximized = prefs.getBool(_kWinMax) ?? false;
+  final fullscreen = prefs.getBool(_kWinFull) ?? false;
+  if (maximized || fullscreen) {
+    await windowManager.waitUntilReadyToShow(null, () async {
+      if (fullscreen) {
+        await windowManager.setFullScreen(true);
+      } else {
+        await windowManager.maximize();
+      }
+      await windowManager.show();
+    });
   }
 
   windowManager.addListener(_WindowStateSaver());
@@ -68,8 +83,10 @@ class _WindowStateSaver with WindowListener {
 
   Future<void> _save() async {
     try {
-      if (await windowManager.isFullScreen()) return;
       final prefs = await SharedPreferences.getInstance();
+      final fullscreen = await windowManager.isFullScreen();
+      await prefs.setBool(_kWinFull, fullscreen);
+      if (fullscreen) return; // keep the last windowed bounds untouched
       final maximized = await windowManager.isMaximized();
       await prefs.setBool(_kWinMax, maximized);
       if (!maximized) {
@@ -82,6 +99,21 @@ class _WindowStateSaver with WindowListener {
     } catch (_) {
       // best-effort — never let state-saving break the app
     }
+  }
+
+  // Fullscreen flips save IMMEDIATELY (not debounced): F11-then-quit inside
+  // the debounce window silently lost the state.
+  @override
+  void onWindowEnterFullScreen() => _save();
+
+  @override
+  void onWindowLeaveFullScreen() => _save();
+
+  @override
+  void onWindowClose() {
+    // The renderer's mpv is a separate process — it must die with the window,
+    // or playback keeps running headless on the TV (happened live).
+    MpvController.killSync();
   }
 
   @override

@@ -30,6 +30,8 @@ Map<String, String> playerStats() => const {};
 void setForcePassthrough(bool on) {}
 void setDirectMedia(String? path) {}
 void setStartPosition(double seconds) {}
+void playerSetOverlayOpen(bool open) {}
+bool playerToggleNativeStats() => false;
 void playerSetSubtitle(String url) {}
 void playerClearSubtitle() {}
 void playerSetSubtitleOffset(double seconds) {}
