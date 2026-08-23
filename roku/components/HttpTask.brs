@@ -1,5 +1,5 @@
-' Async HTTP GET off the render thread. Set `url`, observe `response` (the body
-' as a string; "" on failure).
+' Async HTTP off the render thread. Set `url` (+ optional `method`/`body`),
+' observe `response` (body as a string; "" on failure).
 sub init()
     m.top.functionName = "fetch"
 end sub
@@ -7,11 +7,20 @@ end sub
 sub fetch()
     ut = createObject("roUrlTransfer")
     ut.setUrl(m.top.url)
-    ut.setRequest("GET")
     ' HTTPS support (TMDB etc.); harmless for plain-HTTP LAN calls.
     ut.setCertificatesFile("common:/certs/ca-bundle.crt")
     ut.initClientCertificates()
-    resp = ut.getToString()
+
+    if m.top.method = "POST"
+        ut.setRequest("POST")
+        ut.addHeader("Content-Type", "application/json")
+        resp = ut.postFromString(m.top.body)
+        if type(resp) = "Integer" then resp = ""   ' postFromString returns a code
+    else
+        ut.setRequest("GET")
+        resp = ut.getToString()
+    end if
+
     if resp = invalid then resp = ""
     m.top.response = resp
 end sub
