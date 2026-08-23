@@ -58,6 +58,12 @@ final _getWindowRect = _user32.lookupFunction<
 final _setForegroundWindow = _user32.lookupFunction<Int32 Function(IntPtr),
     int Function(int)>('SetForegroundWindow');
 
+final _getSystemMetrics = _user32.lookupFunction<Int32 Function(Int32),
+    int Function(int)>('GetSystemMetrics');
+
+final _getDpiForWindow = _user32.lookupFunction<Uint32 Function(IntPtr),
+    int Function(int)>('GetDpiForWindow');
+
 const _wsChild = 0x40000000;
 const _wsVisible = 0x10000000;
 const _wsClipSiblings = 0x04000000;
@@ -65,6 +71,11 @@ const _ssBlackRect = 0x00000004;
 const _hwndTop = 0;
 const _swpNoActivate = 0x0010;
 const _swpShowWindow = 0x0040;
+// Fire-and-forget positioning: synchronous SetWindowPos on a tree containing
+// another process's window (mpv's) can deadlock against that process's
+// message pump — the app froze mid fullscreen-toggle while mpv was busy
+// mode-switching. Async posts the request instead of waiting.
+const _swpAsyncWindowPos = 0x4000;
 
 /// The video-hosting child window. Coordinates are PHYSICAL pixels relative
 /// to the root window's client area — which is exactly Flutter's logical
@@ -110,7 +121,8 @@ class EmbedWindow {
     // Above the FLUTTERVIEW sibling so the video is actually visible.
     _setWindowPos(h, _hwndTop, physicalBounds.left.round(),
         physicalBounds.top.round(), physicalBounds.width.round(),
-        physicalBounds.height.round(), _swpNoActivate | _swpShowWindow);
+        physicalBounds.height.round(),
+        _swpNoActivate | _swpShowWindow | _swpAsyncWindowPos);
     return w;
   }
 
@@ -119,9 +131,14 @@ class EmbedWindow {
   void setBounds(Rect physicalBounds) {
     if (physicalBounds == _bounds) return;
     _bounds = physicalBounds;
-    _setWindowPos(hwnd, _hwndTop, physicalBounds.left.round(),
-        physicalBounds.top.round(), physicalBounds.width.round(),
-        physicalBounds.height.round(), _swpNoActivate);
+    _setWindowPos(
+        hwnd,
+        _hwndTop,
+        physicalBounds.left.round(),
+        physicalBounds.top.round(),
+        physicalBounds.width.round(),
+        physicalBounds.height.round(),
+        _swpNoActivate | _swpAsyncWindowPos);
     fitInner();
   }
 
@@ -139,7 +156,8 @@ class EmbedWindow {
       if (_getWindowRect(inner, rc) != 0 &&
           (rc.ref.right - rc.ref.left != w ||
               rc.ref.bottom - rc.ref.top != h)) {
-        _setWindowPos(inner, 0, 0, 0, w, h, _swpNoActivate);
+        _setWindowPos(inner, 0, 0, 0, w, h,
+            _swpNoActivate | _swpAsyncWindowPos);
       }
     } finally {
       calloc.free(rc);
@@ -163,7 +181,12 @@ class EmbedWindow {
 
       final host = rect(hwnd);
       final inner = rect(_findWindowExW(hwnd, 0, nullptr, nullptr));
-      return 'host[$host] inner[$inner] wanted[${_bounds.width.round()}x${_bounds.height.round()}]';
+      // DPI truth probe: what this process believes the screen is
+      // (SM_CXSCREEN/SM_CYSCREEN) + the root window's effective DPI. A
+      // virtualized process sees a shrunken screen; an aware one sees native.
+      final scr =
+          '${_getSystemMetrics(0)}x${_getSystemMetrics(1)} dpi=${_getDpiForWindow(_root)}';
+      return 'host[$host] inner[$inner] wanted[${_bounds.width.round()}x${_bounds.height.round()}] screen[$scr]';
     } finally {
       calloc.free(rc);
     }

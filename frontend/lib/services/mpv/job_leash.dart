@@ -87,8 +87,11 @@ int _ensureJob() {
     // calloc-free zeroing via Dart: allocate + zero manually with a Pointer.
     final info = _alloc();
     info.ref.limitFlags = _jobObjectLimitKillOnClose;
-    _setInformationJobObject(job, _jobObjectExtendedLimitInformation,
-        info.cast(), sizeOf<_JobExtLimits>());
+    _killArmed = _setInformationJobObject(job,
+            _jobObjectExtendedLimitInformation,
+            info.cast(),
+            sizeOf<_JobExtLimits>()) !=
+        0;
     _free(info);
   }
   _job = job;
@@ -113,14 +116,30 @@ Pointer<Void> _k32Alloc(int bytes) => _globalAlloc(0x0040, bytes); // GPTR
 void _free(Pointer p) => _globalFree(p.cast());
 
 /// Chain [pid] to the app's lifetime. Best-effort: failure just means the old
-/// (leak-prone) behavior, never an error surfaced to playback.
-void leashProcess(int pid) {
+/// (leak-prone) behavior, never an error surfaced to playback — but every
+/// step reports to [onDiag] so a silent failure is at least a LOGGED one.
+void leashProcess(int pid, {void Function(String line)? onDiag}) {
   try {
     final job = _ensureJob();
-    if (job == 0) return;
+    if (job == 0) {
+      onDiag?.call('leash: CreateJobObject failed — mpv NOT leashed');
+      return;
+    }
     final h = _openProcess(_processSetQuota | _processTerminate, 0, pid);
-    if (h == 0) return;
-    _assignProcessToJobObject(job, h);
+    if (h == 0) {
+      onDiag?.call('leash: OpenProcess($pid) failed — mpv NOT leashed');
+      return;
+    }
+    final ok = _assignProcessToJobObject(job, h);
     _closeHandleJ(h);
-  } catch (_) {}
+    onDiag?.call(ok != 0
+        ? 'leash: mpv $pid chained to app lifetime (kill-on-close armed: $_killArmed)'
+        : 'leash: AssignProcessToJobObject($pid) failed — mpv NOT leashed');
+  } catch (e) {
+    onDiag?.call('leash: exception $e');
+  }
 }
+
+/// Whether SetInformationJobObject accepted the KILL_ON_CLOSE limit — without
+/// it the job exists but executes nothing on close (worst case: false safety).
+bool _killArmed = false;

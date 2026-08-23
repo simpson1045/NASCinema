@@ -2,6 +2,16 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.4.0 - 2026-07-01
+- **The player is now built into the app.** On Windows, Play launches a native mpv renderer embedded in the app window — full-quality 4K HDR / Dolby Vision picture and lossless TrueHD/Atmos/DTS-HD bitstream to the AVR, reading straight off the NAS. No separate player window, no transcode.
+- **On-video controls, NASCinema-styled** — amber-themed controls appear on mouse move and hide when idle; back and fullscreen buttons, subtitle/audio pickers, and a stats page are all wired in. Hotkeys: Esc/Backspace exit, C subtitles, P audio, I stats, F fullscreen.
+- **True HDR output** — the app passes HDR through to the display instead of tone-mapping it down to SDR ("vibrant now").
+- **Crisp on 4K displays** — fixed a DPI bug that rendered the app at 2560-wide on a 4K screen.
+- **No orphaned players** — mpv is chained to the app's lifetime at the kernel level, so closing (or crashing) the app can never leave audio playing in the background.
+- **Search** — a search icon in the library bar with type-ahead results.
+- **Auto-connect** — a saved server goes straight to the library; the connect form only appears on first run or failure.
+- **The window remembers itself** — size, position, maximized, and fullscreen state persist across launches.
+
 ## 0.3.12 - 2026-06-28
 - **Casting to the TV now actually plays.** The branded NASCinema now-playing screen was coming up but the movie never started — the receiver was crashing on startup (it referenced a Cast SDK event that no longer exists). Fixed: video **and** audio now play on the branded screen.
 - **Phone playback shows the honest badge** — no more false "DIRECT" on the phone; it correctly transcodes.

@@ -184,7 +184,7 @@ class MpvController {
       c._proc!.stdout.listen((_) {});
       c._proc!.stderr.listen((_) {});
       // Kernel leash: if this app dies for ANY reason, Windows kills the mpv.
-      leashProcess(c._proc!.pid);
+      leashProcess(c._proc!.pid, onDiag: diag);
     } catch (e) {
       diag?.call('mpv spawn failed: $e');
       return null;
