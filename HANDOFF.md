@@ -1,9 +1,72 @@
 # NASCinema — Handoff (honest current state)
 
-*Last updated: 2026-07-01. This is the truthful state of the project for the next
+*Last updated: 2026-08-23. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.3.13+12**.*
+actually are and what's next." Current version: **v0.4.0+13 (pubspec bumped, release
+not yet cut).*
+
+---
+
+## Latest session (2026-08-23) — un-abandoned; ELKO-only theater; theater hooks built
+
+**Context (full saga in the ADMS memory CLAUDE.md, every "2026-08-23" section):**
+the project was abandoned on a false premise (that Jellyfin could do lossless via
+Cast/Roku — nothing can; TrueHD/DTS-HD bitstream is licensing/silicon-gated to
+HDMI-input boxes). Last night proved the whole chain live: **ELKO → Denon 8K input,
+DTS:X MSTR and TrueHD both locked**, HDR + 23.976 + C2 film mode. Product
+definition now: **ELKO (this Windows app) = the theater; Cast/Roku = lossy
+convenience; phone = remote. No Shield, no Android TV client** (decision made then
+reversed same night — "I'm greedy": ELKO does 4K120 5:5 cadence + SVP option).
+
+**Done this session (committed on main, pushed — origin is current):**
+- Reconciled the long-uncommitted tree: mpv async-SetWindowPos deadlock fix +
+  leash diagnostics + Roku HttpTask POST + filled the 0.4.0 CHANGELOG stub.
+  Pushed the whole 60-commit backlog to GitHub.
+- **Theater hooks** (`frontend/lib/services/theater/`, all config-driven via
+  Settings, all off by default, all best-effort):
+  - `denon_control.dart` — telnet ZMON + SI\<input\> on Play (X3700H = .67, input 8K).
+  - `webos_control.dart` — LG SSAP client (wss:3001, pairing key persisted).
+    **C2 PC-label guard**: if the configured input's label flipped to "PC" (SPD
+    auto-relabel → kills TruMotion/Real Cinema, the "no butter" bug), rewrite it
+    via `com.webos.service.eim/setDeviceInfo`. Optional TV input switch.
+  - `refresh_rate.dart` — ChangeDisplaySettingsEx match to mpv's container-fps on
+    play, restore on stop; leaves integer multiples (4K120) alone; after a switch
+    the exclusive audio endpoint is re-checked (`ensureAudioAlive`).
+  - `settings_screen.dart` — new gear icon on the library bar; Denon/TV/display/
+    renderer sections + TV pairing flow (TV shows an accept prompt once).
+- **TrueHD bitstream now OFF by default** (decodes to lossless multichannel LPCM):
+  ffmpeg's spdif MAT packer dies at seamless-branch splices (ROTS @2:20) and the
+  upstream fix is regressed on real AVRs — our report: mpv-player/mpv#13943.
+  Settings → Renderer toggle re-enables when a fixed build lands. DTS-HD/EAC3/AC3
+  still bitstream.
+- **Backend WOL**: `POST /api/renderer/wake` sends a magic packet to
+  `NASCINEMA_RENDERER_MAC` (get ELKO's via `getmac`; not yet in .env). The
+  phone-side "wake ELKO then play on it" flow needs the Phase-3 remote channel.
+- **FeaturedHero ported from Roku to the Flutter home** (`home_widgets.dart` +
+  `hero_trailer*.dart`): shuffled order, backdrop beat → cached-trailer autoplay
+  (media_kit texture, dissolves in only after the first real frame renders),
+  25s idle cap, hover(1.2s)-to-fullscreen with unmute, fade-through-black on every
+  advance/mode change, suspend while a route covers home. Web home stays
+  backdrop-only (conditional import keeps media_kit out of the web bundle).
+
+**NOT yet verified on hardware (needs an ELKO deploy — ask Matt first):**
+everything above. Specifically test: Denon telnet fires on Play; C2 guard
+(unplug/replug or reboot ELKO to trigger the PC relabel); refresh match at 60 Hz
+desktop (**and whether Windows HDR survives the mode change** — open question from
+the RefreshSync notes; if it drops, re-assert via DisplayConfigSetDeviceInfo);
+TrueHD-decode default plays ROTS past 2:20 with the Denon showing multichannel PCM;
+hero trailers actually render on ELKO's ANGLE (first-frame gate means failure =
+backdrop-only, not black).
+
+**Deliberately NOT done (needs Matt's nod / hardware):** mpv conf parity items from
+the shim testing (`video-sync=display-resample`, `gpu-api=d3d11`, explicit
+`hwdec=d3d11va`, `audio-delay=0.100`) — the app's current flag set is the verified
+M2/M3 state and display-resample against an un-stretchable bitstream clock caused
+the pause/speed-up artifact when rates mismatched. Revisit deliberately, one flag
+at a time, on hardware. Also future: ELKO sleep + phone "Play on ELKO" (Phase-3
+remote channel), XInput controller, "Who is that?" X-Ray overlay (memory
+2026-08-23 18:10), Motion toggle (SVP/RIFE — memory 18:21).
 
 ---
 

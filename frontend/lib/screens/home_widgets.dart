@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../models/home.dart';
 import '../models/movie.dart';
 import '../theme/app_theme.dart';
+import 'hero_trailer.dart';
 import 'movie_detail_screen.dart';
 
 /// The carousel home body — featured hero over horizontal rails. Mirrors the
@@ -39,9 +41,13 @@ void _openMovie(BuildContext context, Movie m, String baseUrl) =>
 // Featured hero
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Auto-advancing featured banner: backdrop + clearlogo (or title) + ratings +
-/// a Play button, with manual arrows and paging dots. (Trailer autoplay is a
-/// Phase 2 follow-up; this is the static hero.)
+/// The featured hero, ported from the Roku FeaturedHero (the design source of
+/// truth): backdrop + clearlogo + ratings + Play over an auto-advancing,
+/// shuffled featured list — and where the platform supports it, each item's
+/// cached trailer starts after a beat and dissolves in over the backdrop.
+/// Hovering the hero expands it to fill the viewport and unmutes the trailer
+/// (the mouse equivalent of the Roku's focus-to-fullscreen); every advance
+/// and mode change goes through a fade-to-black so nothing snaps.
 class FeaturedHero extends StatefulWidget {
   const FeaturedHero({super.key, required this.featured, required this.baseUrl});
 
@@ -53,105 +59,255 @@ class FeaturedHero extends StatefulWidget {
 }
 
 class _FeaturedHeroState extends State<FeaturedHero> {
+  late List<Movie> _items;
   int _i = 0;
-  Timer? _timer;
+
+  late final TrailerPlayer _trailer = TrailerPlayer(
+    onFirstFrame: _onTrailerFrames,
+    onFinished: () => _advance(1),
+    onError: _stopTrailer,
+  );
+  bool _trailerShown = false; // first frame rendered → dissolve to video
+
+  bool _active = false; // hover-fullscreen mode (unmuted, no auto-advance cap)
+  bool _faderOpaque = false; // the black cover for advance/mode transitions
+  bool _fading = false; // debounce overlapping advances (Roku parity)
+  bool _suspended = false; // a route is pushed over home — no video underneath
+
+  Timer? _dwell; // fallback advance / idle trailer cap
+  Timer? _trailerDelay; // the backdrop "beat" before the trailer starts
+  Timer? _hoverDelay; // hover must settle before fullscreen engages
+  Timer? _routePoll; // isCurrent has no change notification — poll it
 
   @override
   void initState() {
     super.initState();
-    _start();
+    // Shuffled copy so every launch scrolls a different order (Roku parity).
+    _items = [...widget.featured]..shuffle(Random());
+    // Suspend while a pushed route (detail/player) covers home: two videos
+    // must never fight, and hero audio under a movie would be absurd.
+    _routePoll = Timer.periodic(const Duration(seconds: 1), (_) {
+      final current = ModalRoute.of(context)?.isCurrent ?? true;
+      if (current == _suspended) {
+        _suspended = !current;
+        if (_suspended) {
+          _stopTrailer();
+          _dwell?.cancel();
+        } else {
+          _showItem();
+        }
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showItem());
   }
 
-  void _start() {
-    _timer?.cancel();
-    if (widget.featured.length > 1) {
-      _timer = Timer.periodic(const Duration(seconds: 8), (_) => _go(1));
+  @override
+  void didUpdateWidget(FeaturedHero old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.featured, widget.featured)) {
+      _items = [...widget.featured]..shuffle(Random());
+      _i = 0;
+      _showItem();
     }
-  }
-
-  void _go(int dir) {
-    final n = widget.featured.length;
-    if (n == 0) return;
-    setState(() => _i = (_i + dir + n) % n);
-  }
-
-  void _manual(int dir) {
-    _go(dir);
-    _start(); // reset the dwell after a manual move
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    for (final t in [_dwell, _trailerDelay, _hoverDelay, _routePoll]) {
+      t?.cancel();
+    }
+    _trailer.dispose();
     super.dispose();
+  }
+
+  Movie get _movie => _items[_i];
+
+  /// Show the current item: backdrop first, trailer after a beat. A fallback
+  /// dwell timer always runs so a missing/broken trailer still advances us.
+  void _showItem() {
+    if (_items.isEmpty || !mounted) return;
+    _stopTrailer();
+    setState(() {});
+    _dwell?.cancel();
+    _dwell = Timer(Duration(seconds: _active ? 15 : 25), () => _advance(1));
+    _trailerDelay?.cancel();
+    if (!_suspended && _trailer.supported) {
+      _trailerDelay = Timer(const Duration(milliseconds: 2500), _playTrailer);
+    }
+  }
+
+  void _playTrailer() {
+    if (_suspended || !mounted) return;
+    final m = _movie;
+    // Only trailers already cached server-side — never wait on a download.
+    if (!m.trailerReady || m.trailerUrl == null) return;
+    _trailer.open('${widget.baseUrl}${m.trailerUrl}', muted: !_active);
+  }
+
+  void _onTrailerFrames() {
+    if (!mounted) return;
+    setState(() => _trailerShown = true);
+    _dwell?.cancel();
+    if (!_active) {
+      // Idle: a 25s cap from playback start; fullscreen lets it play out.
+      _dwell = Timer(const Duration(seconds: 25), () => _advance(1));
+    }
+  }
+
+  void _stopTrailer() {
+    _trailerDelay?.cancel();
+    _trailer.stop();
+    if (mounted && _trailerShown) setState(() => _trailerShown = false);
+  }
+
+  /// Fade to black, run [swap] under the cover, fade back — the Roku fader.
+  void _fadeThrough(VoidCallback swap) {
+    if (_fading || !mounted) return;
+    _fading = true;
+    setState(() => _faderOpaque = true);
+    Timer(const Duration(milliseconds: 280), () {
+      if (!mounted) return;
+      swap();
+      setState(() => _faderOpaque = false);
+      Timer(const Duration(milliseconds: 280), () => _fading = false);
+    });
+  }
+
+  void _advance(int dir) {
+    if (_items.isEmpty || _fading) return;
+    _fadeThrough(() {
+      _i = (_i + dir + _items.length) % _items.length;
+      _showItem();
+    });
+  }
+
+  void _jumpTo(int k) {
+    if (k == _i || _fading) return;
+    _fadeThrough(() {
+      _i = k;
+      _showItem();
+    });
+  }
+
+  void _setActive(bool active) {
+    _hoverDelay?.cancel();
+    if (active == _active) return;
+    _trailer.setMuted(!active); // unmute instantly on hover (Roku parity)
+    _fadeThrough(() {
+      _active = active;
+      _dwell?.cancel();
+      if (_active && _trailerShown) {
+        // Fullscreen: the trailer plays to its end, no cap.
+      } else {
+        _dwell = Timer(
+            Duration(seconds: _trailerShown || !_active ? 25 : 15),
+            () => _advance(1));
+      }
+    });
+  }
+
+  void _onHover(bool inside) {
+    _hoverDelay?.cancel();
+    if (inside) {
+      // Engage fullscreen only after the pointer settles on the hero — a
+      // mouse just passing through to the rails shouldn't blow it up.
+      _hoverDelay = Timer(const Duration(milliseconds: 1200), () {
+        if (mounted && _trailerShown) _setActive(true);
+      });
+    } else {
+      _setActive(false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final m = widget.featured[_i];
-    final double h =
-        (MediaQuery.of(context).size.height * 0.5).clamp(360.0, 560.0).toDouble();
-    return SizedBox(
-      height: h,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            // Expand the crossfade stack so the backdrop fills edge-to-edge
-            // instead of sizing to the image and centering (black side bars).
-            layoutBuilder: (current, previous) => Stack(
-              fit: StackFit.expand,
-              children: [...previous, ?current],
+    final m = _movie;
+    final mq = MediaQuery.of(context);
+    final double banner =
+        (mq.size.height * 0.5).clamp(360.0, 560.0).toDouble();
+    final double full =
+        max(banner, mq.size.height - mq.padding.top - kToolbarHeight);
+    final trailerView = _trailerShown ? _trailer.view() : null;
+
+    return MouseRegion(
+      onEnter: (_) => _onHover(true),
+      onExit: (_) => _onHover(false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        height: _active ? full : banner,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              // Expand the crossfade stack so the backdrop fills edge-to-edge
+              // instead of sizing to the image and centering (black side bars).
+              layoutBuilder: (current, previous) => Stack(
+                fit: StackFit.expand,
+                children: [...previous, ?current],
+              ),
+              child: _Backdrop(
+                  key: ValueKey('bd${m.id}'),
+                  url: m.backdropUrl(size: 'w1280')),
             ),
-            child: _Backdrop(
-                key: ValueKey('bd${m.id}'),
-                url: m.backdropUrl(size: 'w1280')),
-          ),
-          const _HeroScrim(),
-          Positioned(
-            left: 40,
-            right: 40,
-            bottom: 40,
-            child: AnimatedSwitcher(
+            // The trailer dissolves in over the backdrop once frames flow.
+            AnimatedOpacity(
               duration: const Duration(milliseconds: 400),
-              child: _HeroContent(
-                key: ValueKey('ct${m.id}'),
-                movie: m,
-                onPlay: () => _openMovie(context, m, widget.baseUrl),
+              opacity: trailerView == null ? 0 : 1,
+              child: trailerView ?? const SizedBox.shrink(),
+            ),
+            const _HeroScrim(),
+            Positioned(
+              left: 40,
+              right: 40,
+              bottom: 40,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                child: _HeroContent(
+                  key: ValueKey('ct${m.id}'),
+                  movie: m,
+                  onPlay: () => _openMovie(context, m, widget.baseUrl),
+                ),
               ),
             ),
-          ),
-          if (widget.featured.length > 1) ...[
-            _HeroArrow(left: true, onTap: () => _manual(-1)),
-            _HeroArrow(left: false, onTap: () => _manual(1)),
-            Positioned(
-              right: 40,
-              bottom: 18,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (int k = 0; k < widget.featured.length; k++)
-                    GestureDetector(
-                      onTap: () {
-                        setState(() => _i = k);
-                        _start();
-                      },
-                      child: Container(
-                        width: 9,
-                        height: 9,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: k == _i ? NasColors.amber : Colors.white24,
+            if (_items.length > 1 && !_active) ...[
+              _HeroArrow(left: true, onTap: () => _advance(-1)),
+              _HeroArrow(left: false, onTap: () => _advance(1)),
+              Positioned(
+                right: 40,
+                bottom: 18,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (int k = 0; k < _items.length; k++)
+                      GestureDetector(
+                        onTap: () => _jumpTo(k),
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: k == _i ? NasColors.amber : Colors.white24,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
+              ),
+            ],
+            // The black fader sits above everything: advances and
+            // banner<->fullscreen swaps happen under it, never in view.
+            IgnorePointer(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 280),
+                opacity: _faderOpaque ? 1 : 0,
+                child: const ColoredBox(color: Colors.black),
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }

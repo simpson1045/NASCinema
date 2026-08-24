@@ -15,7 +15,8 @@ import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../theater/theater_prefs.dart' show kMpvPathPref, kMpvDefaultPath;
+import '../theater/theater_prefs.dart'
+    show kMpvPathPref, kMpvDefaultPath, kTruehdBitstreamPref;
 import 'job_leash.dart';
 import 'mpv_ipc.dart';
 
@@ -162,7 +163,14 @@ class MpvController {
       ],
       '--osd-level=1',
       if (passthrough) ...[
-        '--audio-spdif=truehd,dts-hd,eac3,ac3',
+        // TrueHD bitstream is opt-in while the ffmpeg MAT-packer saga is
+        // unresolved (see kTruehdBitstreamPref) — off = mpv decodes TrueHD
+        // to lossless multichannel LPCM, which the seamless-branch splices
+        // can't kill. The other codecs bitstream as always.
+        if (prefs.getBool(kTruehdBitstreamPref) ?? false)
+          '--audio-spdif=truehd,dts-hd,eac3,ac3'
+        else
+          '--audio-spdif=dts-hd,eac3,ac3',
         '--audio-exclusive=yes',
         '--wasapi-exclusive-buffer=100000',
         '--audio-buffer=1.0',
