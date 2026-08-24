@@ -9,6 +9,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../services/fullscreen.dart' as shell;
 import '../../services/mpv/embed_window.dart';
 import '../../services/mpv/mpv_controller.dart';
+import '../../services/theater/theater_control.dart';
 import '../../theme/app_theme.dart';
 
 /// Native player seam — two legs behind one API:
@@ -158,6 +159,9 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
   Future<void> _create() async {
     if (_launching || !mounted) return;
     _launching = true;
+    // Assemble the theater in parallel with the launch: Denon input/power,
+    // C2 PC-label guard. (Refresh-rate match waits for the container fps.)
+    unawaited(TheaterControl.instance.onPlayStarted(diag: _diag));
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final rect = _physicalRect();
     final win = rect == null ? null : EmbedWindow.create(rect);
@@ -191,6 +195,7 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
           if (mounted) Navigator.of(context).maybePop();
         }
       });
+      unawaited(_matchRefreshRate(c));
     }
     // Geometry truth into the log (letterbox debugging): our window chain +
     // mpv's own belief about its window/video size, at launch and settled.
@@ -212,6 +217,26 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
         }
       });
     }
+  }
+
+  /// Poll mpv for the container fps (known once demuxing starts), then hand
+  /// it to the refresh-rate matcher. A mode change renegotiates HDMI, which
+  /// can kill the exclusive audio endpoint — verify and reinit if needed.
+  Future<void> _matchRefreshRate(MpvController c) async {
+    for (var i = 0; i < 20; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted || !c.running) return;
+      final fps = await c.containerFps();
+      if (fps == null || fps <= 0) continue;
+      final changed =
+          TheaterControl.instance.onFpsKnown(fps, diag: _diag);
+      if (changed) {
+        await Future.delayed(const Duration(seconds: 2));
+        await c.ensureAudioAlive(diag: _diag);
+      }
+      return;
+    }
+    _diag('refresh: container-fps never reported — no match attempted');
   }
 
   void _syncBounds() {
@@ -454,6 +479,8 @@ void removePlayerKeys() {
     final c = _mpv;
     _mpv = null;
     c?.dispose();
+    // Give the desktop its refresh rate back (no-op if we never switched).
+    TheaterControl.instance.onPlayStopped(diag: _diag);
   } else {
     _disposePlayer();
   }

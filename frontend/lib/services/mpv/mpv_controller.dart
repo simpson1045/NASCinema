@@ -15,13 +15,13 @@ import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../theater/theater_prefs.dart' show kMpvPathPref, kMpvDefaultPath;
 import 'job_leash.dart';
 import 'mpv_ipc.dart';
 
-/// Everything is config, not constants (multi-user & topology-agnostic):
-/// these are just the defaults a fresh renderer install starts from.
-const kMpvPathPref = 'mpv_path';
-const kMpvDefaultPath = r'C:\Program Files\MPV Player\mpv.exe';
+// kMpvPathPref/kMpvDefaultPath live in theater_prefs.dart (a pure-Dart file
+// the web-safe settings UI can import without dragging in dart:ffi).
+export '../theater/theater_prefs.dart' show kMpvPathPref, kMpvDefaultPath;
 
 class MpvController {
   MpvController._();
@@ -253,6 +253,22 @@ class MpvController {
         onFullscreenRequest?.call();
       }
     });
+  }
+
+  /// Container fps once demuxing starts (null until the file is open).
+  Future<double?> containerFps() async {
+    final v = await _ipc?.get('container-fps');
+    return v is num ? v.toDouble() : null;
+  }
+
+  /// Re-check the audio chain and rebuild it if the device died — a display
+  /// mode switch (refresh-rate match) renegotiates HDMI and can drop the
+  /// exclusive endpoint out from under mpv.
+  Future<void> ensureAudioAlive({void Function(String line)? diag}) async {
+    if (_disposed) return;
+    if (await _audioAlive()) return;
+    diag?.call('audio: dead after display change — reinitializing');
+    await _reinitAudio();
   }
 
   /// True once mpv's audio output actually initialized (device accepted).

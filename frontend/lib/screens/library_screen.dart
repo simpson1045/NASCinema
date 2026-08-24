@@ -11,6 +11,7 @@ import 'cast_picker.dart';
 import 'home_widgets.dart';
 import 'remote_screen.dart';
 import 'search_screen.dart';
+import 'settings_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.baseUrl});
@@ -165,6 +166,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
             onPressed: _refresh,
             icon: const Icon(Icons.refresh, color: NasColors.muted),
             tooltip: 'Refresh',
+          ),
+          IconButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const SettingsScreen(),
+            )),
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined, color: NasColors.muted),
           ),
         ],
       ),

@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     # it; cached as MKV. Lower this if storage/bandwidth is a concern.
     trailer_max_height: int = 2160
 
+    # Wired renderer (the theater PC). MAC enables POST /api/renderer/wake —
+    # the phone wakes the sleeping renderer before "Play on <renderer>".
+    # Blank = no wired renderer in this deployment. Get the MAC via `getmac`.
+    renderer_mac: str = ""
+    wol_broadcast: str = "255.255.255.255"
+
     # Extras DB (crowdsourced bonus-feature naming — see EXTRAS_DB.md).
     # Opt-in: fingerprint extras so they can later be matched/contributed.
     contribute_extras: bool = False

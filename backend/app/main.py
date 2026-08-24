@@ -19,6 +19,7 @@ from sqlalchemy import text
 from . import __version__
 from .api.movies import router as movies_router
 from .api.progress import router as progress_router
+from .api.renderer import router as renderer_router
 from .api.stream import router as stream_router
 from .api.subtitles import router as subtitles_router
 from .api.update import router as update_router
@@ -77,6 +78,7 @@ def create_fastapi() -> FastAPI:
     app.include_router(subtitles_router)
     app.include_router(update_router)
     app.include_router(progress_router)
+    app.include_router(renderer_router)
 
     # Cast receiver debug pipe: the branded receiver POSTs each on-screen debug
     # line here so we can read what happened on the TV without chrome://inspect.
