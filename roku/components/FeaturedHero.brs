@@ -7,6 +7,8 @@ sub init()
     m.backdrop = m.top.findNode("backdrop")
     m.trailer = m.top.findNode("trailer")
     m.scrim = m.top.findNode("scrim")
+    m.homeScrim = m.top.findNode("homeScrim")
+    m.overview = m.top.findNode("overview")
     m.logo = m.top.findNode("logo")
     m.title = m.top.findNode("title")
     m.meta = m.top.findNode("meta")
@@ -27,30 +29,25 @@ sub init()
     m.fadeReason = "advance"   ' "advance" (next item) or "mode" (banner<->fullscreen)
     m.meta.itemSpacings = [18]   ' array field -> set in code, not XML
 
-    setMode(false)   ' start collapsed (banner)
+    setMode(false)   ' start on the home layout
 end sub
 
-' Collapsed = the 560px banner (backdrop/trailer cropped, shifted up to keep faces).
-' Fullscreen = the trailer fills the whole 1920x1080 (no crop) when the user hovers.
+' Home = full-bleed behind the rails: info upper-left (logo, meta, overview,
+' dots), homeScrim fades the picture into the rails. Fullscreen (hero focused) =
+' the same picture, info moved to the lower-left, no overview or dots.
 sub setMode(fs as boolean)
+    m.homeScrim.visible = not fs
+    m.scrim.visible = fs
+    m.overview.visible = not fs
+    m.dotsGroup.visible = not fs
     if fs then
-        m.content.clippingRect = [0, 0, 1920, 1080]
-        m.backdrop.translation = [0, 0]
-        m.trailer.translation = [0, 0]
-        m.scrim.height = 1080
-        m.fader.height = 1080
         m.logo.translation = [90, 790]
+        m.title.translation = [92, 850]
         m.meta.translation = [92, 975]   ' clears the 150px-tall logo slot + a gap
-        m.dotsGroup.visible = false
     else
-        m.content.clippingRect = [0, 0, 1920, 560]
-        m.backdrop.translation = [0, -200]
-        m.trailer.translation = [0, -200]
-        m.scrim.height = 560
-        m.fader.height = 560
-        m.logo.translation = [90, 300]
-        m.meta.translation = [92, 488]   ' clears the 150px-tall logo slot + a gap
-        m.dotsGroup.visible = true
+        m.logo.translation = [90, 110]
+        m.title.translation = [92, 170]
+        m.meta.translation = [92, 288]
     end if
 end sub
 
@@ -104,6 +101,7 @@ sub showItem()
         m.title.visible = true
     end if
 
+    m.overview.text = firstStr(it.overview)
     buildMeta(it)
     updateDots()
 
@@ -293,10 +291,10 @@ sub buildDots(n as integer)
     m.dots = []
     for i = 0 to n - 1
         d = m.dotsGroup.createChild("Rectangle")
-        d.width = 16
-        d.height = 16
-        d.translation = [i * 26, 0]
-        d.color = "0x55557FFF"
+        d.width = 10
+        d.height = 10
+        d.translation = [i * 20, 0]
+        d.color = "0xFFFFFF55"
         m.dots.push(d)
     end for
 end sub
@@ -307,7 +305,7 @@ sub updateDots()
         if i = m.index then
             m.dots[i].color = "0xFFB020FF"
         else
-            m.dots[i].color = "0x55557FFF"
+            m.dots[i].color = "0xFFFFFF55"
         end if
     end for
 end sub

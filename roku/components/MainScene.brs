@@ -19,9 +19,11 @@ sub init()
     ' itemSize = the RowList's overall visible width x per-row height. WITHOUT
     ' itemSize the list collapses to ~44px wide and renders zero tiles. These are
     ' set in code so the array types are unambiguous.
+    ' Per-row sizes (rowItemSize / rowHeights) are set in onHomeLoaded, since
+    ' Continue Watching uses wide backdrop cards and the other rails use posters.
     m.rows.rowItemSize = [[200, 350]]
-    m.rows.itemSize = [1740, 410]
-    m.rows.itemSpacing = [26, 40]
+    m.rows.itemSize = [1830, 410]
+    m.rows.itemSpacing = [26, 30]
     m.rows.showRowLabel = [true]
 
     m.rows.observeField("rowItemSelected", "onItemSelected")
@@ -82,19 +84,36 @@ sub onHomeLoaded()
 
     root = createObject("roSGNode", "ContentNode")
     total = 0
+    itemSizes = []
+    heights = []
     for each rail in json.rails
+        ' A rail whose movies carry a resume point (Continue Watching) gets wide
+        ' backdrop cards with a progress bar; everything else gets posters.
+        wide = false
+        if rail.movies <> invalid and rail.movies.count() > 0 then
+            if rail.movies[0].resume_position <> invalid then wide = true
+        end if
         row = root.createChild("ContentNode")
         if rail.title <> invalid then row.title = rail.title
         if rail.movies <> invalid then
             for each mv in rail.movies
-                appendMovie(row, mv)
+                appendMovie(row, mv, wide)
                 total = total + 1
             end for
+        end if
+        if wide then
+            itemSizes.push([480, 320])   ' 480x270 card + one-line title
+            heights.push(370)
+        else
+            itemSizes.push([200, 350])   ' 200x300 poster + two-line title
+            heights.push(410)
         end if
     end for
 
     logmsg("home: " + json.rails.count().toStr() + " rails, " + total.toStr() + " tiles")
 
+    m.rows.rowItemSize = itemSizes
+    m.rows.rowHeights = heights
     m.rows.content = root
     m.status.visible = false
     m.rows.visible = true
@@ -123,15 +142,25 @@ function firstStr(v as dynamic) as string
     return v.toStr()
 end function
 
-sub appendMovie(row as object, mv as object)
+sub appendMovie(row as object, mv as object, wide as boolean)
     item = row.createChild("ContentNode")
     item.title = mv.title
-    if mv.poster_path <> invalid then
+    progress = 0.0
+    if wide then
+        if mv.backdrop_path <> invalid and mv.backdrop_path <> "" then
+            item.HDPOSTERURL = "https://image.tmdb.org/t/p/w780" + mv.backdrop_path
+        end if
+        ' resume_position is seconds, runtime is minutes.
+        if mv.resume_position <> invalid and mv.runtime <> invalid and mv.runtime > 0 then
+            progress = mv.resume_position / (mv.runtime * 60.0)
+            if progress > 1 then progress = 1.0
+        end if
+    else if mv.poster_path <> invalid then
         if mv.poster_path <> "" then
             item.HDPOSTERURL = "https://image.tmdb.org/t/p/w500" + mv.poster_path
         end if
     end if
-    item.addFields({ movieId: mv.id })
+    item.addFields({ movieId: mv.id, wide: wide, progress: progress })
 end sub
 
 sub onItemSelected()

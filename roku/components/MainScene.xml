@@ -10,9 +10,11 @@
     <!-- Array-typed fields (rowItemSize, rowHeights, etc.) are set in code in
          init() — as XML attribute strings they parse to garbage silently and the
          rows collapse to ~44px wide. -->
-    <RowList id="rows" translation="[90,600]"
+    <!-- Two rows so the next rail always peeks in under the first (Netflix-style);
+         the hero stays full-bleed behind them. Per-row sizes are set in code. -->
+    <RowList id="rows" translation="[90,540]"
         itemComponentName="MoviePoster"
-        numRows="1"
+        numRows="2"
         vertFocusAnimationStyle="floatingFocus"
         rowFocusAnimationStyle="fixedFocusWrap"
         visible="false" />

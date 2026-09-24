@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!-- One rail tile. Two shapes, picked per item in MoviePoster.brs: a 200x300
+     poster with a two-line title (most rails), or a 480x270 backdrop card with a
+     progress bar and a one-line title (Continue Watching). -->
 <component name="MoviePoster" extends="Group">
   <script type="text/brightscript" uri="pkg:/components/MoviePoster.brs" />
   <interface>
     <field id="itemContent" type="node" onChange="onContentSet" />
   </interface>
   <children>
-    <!-- Placeholder box so an item is visible even before/without a poster. -->
+    <!-- Placeholder box so an item is visible even before/without an image. -->
     <Rectangle id="ph" width="200" height="300" color="0x1B2046FF" />
     <Poster id="poster" width="200" height="300" loadDisplayMode="scaleToFill" />
+    <!-- Continue Watching progress: dark track + amber fill along the card's
+         bottom edge. Hidden on posters. -->
+    <Rectangle id="track" translation="[0,262]" width="480" height="8"
+        color="0x000000B0" visible="false" />
+    <Rectangle id="fill" translation="[0,262]" width="0" height="8"
+        color="0xFFB020FF" visible="false" />
     <Label id="label" translation="[0,306]" width="200" height="44"
         horizAlign="center" vertAlign="top" wrap="true" maxLines="2"
         color="0xEEF1FFFF" font="font:SmallSystemFont" />

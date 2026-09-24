@@ -64,6 +64,19 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   (rokudev — password is Matt's, Claude doesn't enter it). Roku has developer
   mode on.
 
+- **Roku home redesign (channel build 0.1.2) — Matt: "MUCH better" ✅.** Hero is
+  full-bleed 1920x1080 behind everything (`home_scrim1.png` fades it into the
+  rails + darkens the left); logo/meta/overview/dots upper-left on home, lower-left
+  when the hero is focused (fullscreen). Trailer scaled 1.15x (2208x1242 @
+  [-144,-159]) so 2.39:1 baked-in letterbox bars fall off-screen. RowList shows 2
+  rows from y=540 so the next rail peeks; Continue Watching (any rail whose items
+  carry `resume_position`) renders 480x270 backdrop cards + amber progress bar
+  (resume_position s / runtime min), other rails 200x300 posters. **This is the
+  design source of truth for big picture mode** — and the ELKO hero's
+  centered info column is wrong: info goes left, like here.
+  Polish noted: overview text runs into the picture's center on bright backdrops
+  (narrow it / strengthen the left scrim). Roku dev password was reset Sept 24.
+
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct
   `ssap com.webos.service.eim/setDeviceInfo` returns **401** with our pairing key
