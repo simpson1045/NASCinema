@@ -157,13 +157,16 @@ sub stopTrailer()
     m.trailerDelay.control = "stop"
     m.trailer.control = "stop"
     m.trailer.visible = false
+    m.backdrop.visible = true
 end sub
 
 sub onTrailerState()
     st = m.trailer.state
     if st = "playing" then
-        ' Real frames now — dissolve from backdrop to video.
+        ' Real frames now — dissolve from backdrop to video. Hide the still
+        ' backdrop so it can't show under a trailer slid up past its top bar.
         m.trailer.visible = true
+        m.backdrop.visible = false
         if m.activeState then
             m.timer.control = "stop"    ' fullscreen: let the trailer play to the end
         else

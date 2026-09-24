@@ -144,6 +144,7 @@ def _probe_sync(path: Path) -> dict | None:
     return {
         "height": int((v or {}).get("height") or 0),
         "width": int((v or {}).get("width") or 0),
+        "duration": dur,
         "bitrate": br,
         "audio_codec": (a or {}).get("codec_name"),
         "channels": int((a or {}).get("channels") or 0),
@@ -321,10 +322,12 @@ def _cropdetect_sync(path: Path) -> dict | None:
     if not ff or not info or not info["height"] or not info["width"]:
         return None
     width, height = info["width"], info["height"]
-    # Skip the first 20 s (studio logos on black), sample 30 s. reset=0 keeps
-    # growing the box to cover every non-black pixel seen, so a bright scene
-    # anywhere in the window defines the true picture edges.
-    for start in ("20", "0"):
+    # Skip the studio logos on black (first 20 s, or the first 15% of a short
+    # clip), sample 30 s. reset=0 keeps growing the box to cover every non-black
+    # pixel seen, so a bright scene anywhere in the window defines the edges.
+    dur = info.get("duration") or 0
+    first = 20.0 if dur <= 0 or dur > 60 else round(dur * 0.15, 1)
+    for start in (str(first), "0"):
         args = [
             ff, "-hide_banner", "-nostats", "-ss", start, "-i", str(path),
             "-t", "30", "-an", "-sn",
@@ -337,14 +340,18 @@ def _cropdetect_sync(path: Path) -> dict | None:
         except (subprocess.TimeoutExpired, OSError):
             return None
         crops = [ln for ln in proc.stderr.splitlines() if _CROP_TOKEN in ln]
-        if crops:
+        try:
+            w, h, _x, y = (
+                int(v) for v in crops[-1].rsplit(_CROP_TOKEN, 1)[1].split()[0].split(":")
+            )
+        except (IndexError, ValueError):
+            continue
+        # An all-black window reports a negative/empty box — not a letterbox.
+        # A real letterboxed picture is full width and at least ~40% tall.
+        if w >= width * 0.9 and h >= height * 0.4 and y >= 0:
             break
     else:
-        return None
-    try:
-        _w, h, _x, y = (int(v) for v in crops[-1].rsplit(_CROP_TOKEN, 1)[1].split()[0].split(":"))
-    except ValueError:
-        return None
+        return {"top": 0.0, "bottom": 0.0}  # unmeasurable -> treat as full-frame
     # Measure against the 16:9 screen the TV shows it on: a 1920x800 file gets
     # bars from the player itself, on top of any baked into the picture.
     scale = min(16 / width, 9 / height)
@@ -358,11 +365,12 @@ def _cropdetect_sync(path: Path) -> dict | None:
     }
 
 
-async def measure_bars(movie_id: int) -> None:
-    """Measure + cache the current trailer's letterbox bars (no-op if done)."""
+async def measure_bars(movie_id: int, force: bool = False) -> None:
+    """Measure + cache the current trailer's letterbox bars (no-op if done,
+    unless `force` re-measures and overwrites)."""
     if movie_id in _bars_pending or not is_cached(movie_id):
         return
-    if trailer_bars(movie_id) is not None:
+    if not force and trailer_bars(movie_id) is not None:
         return
     _bars_pending.add(movie_id)
     try:
