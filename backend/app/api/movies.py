@@ -21,7 +21,7 @@ from ..db import get_session
 from ..metadata import get_movie_logo, get_movie_videos
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
-from ..scanner import backfill_ratings, scan
+from ..scanner import backfill_ratings, reprobe, scan
 from ..trailers import clear_trailer, ensure_trailer, is_cached, trailer_version
 
 router = APIRouter(prefix="/api", tags=["library"])
@@ -328,3 +328,10 @@ async def trigger_backfill(limit: int | None = None) -> dict:
     """Populate popularity / external ratings / collection on existing movies.
     Safe to re-run — only touches movies that don't have the data yet."""
     return await backfill_ratings(limit)
+
+
+@router.post("/reprobe")
+async def trigger_reprobe(limit: int | None = None, all: bool = False) -> dict:
+    """Fill media_streams (+ edition labels) for files already in the library.
+    Default = only files with no stream rows; ?all=true re-probes everything."""
+    return await reprobe(limit, only_missing=not all)

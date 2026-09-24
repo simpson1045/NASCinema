@@ -33,6 +33,89 @@ def _is_hdr(video: dict) -> bool:
     return transfer in {"smpte2084", "arib-std-b67"}
 
 
+def _dv_profile(video: dict) -> int | None:
+    """Dolby Vision profile from the DOVI configuration side data, if any."""
+    for sd in video.get("side_data_list") or []:
+        if "dovi" in (sd.get("side_data_type") or "").lower():
+            try:
+                return int(sd.get("dv_profile"))
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _hdr_format(video: dict) -> str:
+    if _dv_profile(video) is not None:
+        return "dolby_vision"
+    transfer = (video.get("color_transfer") or "").lower()
+    if transfer == "smpte2084":
+        return "hdr10"
+    if transfer == "arib-std-b67":
+        return "hlg"
+    return "sdr"
+
+
+def _frame_rate(video: dict) -> float | None:
+    raw = video.get("avg_frame_rate") or video.get("r_frame_rate") or ""
+    num, _, den = raw.partition("/")
+    try:
+        n, d = float(num), float(den or 1)
+        return round(n / d, 3) if d else None
+    except ValueError:
+        return None
+
+
+def _flag(disp: dict, key: str) -> bool:
+    try:
+        return bool(int(disp.get(key, 0)))
+    except (TypeError, ValueError):
+        return False
+
+
+def _stream_row(s: dict) -> dict | None:
+    """Normalize one ffprobe stream into a media_streams row, or None for
+    stream types we don't keep (attachments, data)."""
+    kind = s.get("codec_type")
+    if kind not in {"video", "audio", "subtitle"}:
+        return None
+    tags = s.get("tags") or {}
+    disp = s.get("disposition") or {}
+
+    def _int(v):
+        try:
+            return int(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    row = {
+        "index": s.get("index"),
+        "kind": kind,
+        "codec": s.get("codec_name"),
+        "profile": s.get("profile"),
+        "language": tags.get("language") or tags.get("LANGUAGE"),
+        "title": tags.get("title") or tags.get("TITLE"),
+        "is_default": _flag(disp, "default"),
+        "is_forced": _flag(disp, "forced"),
+        "bit_rate": _int(s.get("bit_rate") or tags.get("BPS")),
+    }
+    if kind == "audio":
+        row.update(
+            channels=_int(s.get("channels")),
+            channel_layout=s.get("channel_layout"),
+            sample_rate=_int(s.get("sample_rate")),
+        )
+    elif kind == "video":
+        row.update(
+            width=s.get("width"),
+            height=s.get("height"),
+            bit_depth=_bit_depth(s),
+            frame_rate=_frame_rate(s),
+            hdr_format=_hdr_format(s),
+            dv_profile=_dv_profile(s),
+        )
+    return row
+
+
 async def probe_file(path: str) -> dict | None:
     """Return normalized media facts for a file, or None if ffprobe is missing
     or the file can't be read."""
@@ -96,4 +179,6 @@ async def probe_file(path: str) -> dict | None:
         "height": video.get("height") if video else None,
         "bit_depth": _bit_depth(video) if video else None,
         "hdr": _is_hdr(video) if video else False,
+        # Every video/audio/subtitle track — feeds media_streams.
+        "streams": [r for r in (_stream_row(s) for s in streams) if r],
     }

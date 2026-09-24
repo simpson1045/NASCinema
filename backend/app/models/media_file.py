@@ -44,6 +44,11 @@ class MediaFile(Base):
     extra_type: Mapped[str | None] = mapped_column(String(32))
     extra_title: Mapped[str | None] = mapped_column(String(512))
 
+    # Version label for a feature when a movie has several files ("4K77",
+    # "Harmy Despecialized", "Director's Cut"). Parsed from the filename's
+    # edition tag; None = untagged (the API builds a label from resolution/HDR).
+    edition: Mapped[str | None] = mapped_column(String(128))
+
     # Chromaprint audio fingerprint (Extras DB groundwork; opt-in).
     fingerprint: Mapped[str | None] = mapped_column(Text)
 
@@ -61,6 +66,12 @@ class MediaFile(Base):
     probed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     movie: Mapped["Movie | None"] = relationship(back_populates="files")  # noqa: F821
+    # Per-track probe rows (video/audio/subtitle), ordered by stream index.
+    streams: Mapped[list["MediaStream"]] = relationship(  # noqa: F821
+        back_populates="media_file",
+        cascade="all, delete-orphan",
+        order_by="MediaStream.index",
+    )
 
     def __repr__(self) -> str:
         return f"<MediaFile {self.path!r}>"

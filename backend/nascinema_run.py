@@ -82,6 +82,10 @@ def main() -> None:
         with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
             runner.run(_serve())
     else:
+        # Same lifespan caveat as the win32 branch: run startup work here.
+        from app.streaming import startup_cleanup
+
+        startup_cleanup()
         uvicorn.run(target, host=settings.host, port=settings.port)
 
 

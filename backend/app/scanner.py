@@ -23,6 +23,7 @@ from .fingerprint import fingerprint_file
 from .metadata import get_movie_metadata, get_omdb_ratings
 from .models import MediaFile, Movie
 from .probe import probe_file
+from .models.media_stream import MediaStream
 from .streaming import remove_file_cache
 
 VIDEO_EXTENSIONS = {
@@ -103,6 +104,47 @@ _EXTRA_NAME_TYPES = [
     ("blooper", "Blooper"), ("gag reel", "Blooper"), ("outtake", "Blooper"),
     ("featurette", "Featurette"),
 ]
+
+
+# Version labels. `{edition-Name}` is the Plex/Jellyfin convention and wins
+# outright; otherwise a known cut/fan-edit keyword anywhere in the filename or
+# its folder. Untagged files get None and the API labels them by resolution/HDR.
+_EDITION_TAG = re.compile(r"\{edition-([^}]+)\}", re.IGNORECASE)
+_EDITION_WORDS: list[tuple[str, str]] = [
+    (r"\b4k77\b", "4K77"),
+    (r"\b4k80\b", "4K80"),
+    (r"\b4k83\b", "4K83"),
+    (r"harmy|despecialized", "Harmy Despecialized"),
+    (r"director'?s?\s*cut", "Director's Cut"),
+    (r"\bextended\b", "Extended"),
+    (r"\btheatrical\b", "Theatrical"),
+    (r"\bultimate\s*(cut|edition)\b", "Ultimate Cut"),
+    (r"\bfinal\s*cut\b", "Final Cut"),
+    (r"\bspecial\s*edition\b", "Special Edition"),
+    (r"\bunrated\b", "Unrated"),
+    (r"\buncut\b", "Uncut"),
+    (r"\bremastered\b", "Remastered"),
+    (r"\bcriterion\b", "Criterion"),
+    (r"\bimax\b", "IMAX"),
+    (r"\bopen\s*matte\b", "Open Matte"),
+    (r"\bfan\s*edit\b", "Fan Edit"),
+]
+
+
+def _edition(filename: str, movie_folder: str | None) -> str | None:
+    for text in (filename, movie_folder or ""):
+        m = _EDITION_TAG.search(text)
+        if m:
+            return m.group(1).strip()
+    hay = f"{filename} {movie_folder or ''}"
+    for pat, label in _EDITION_WORDS:
+        if re.search(pat, hay, flags=re.IGNORECASE):
+            return label
+    return None
+
+
+def _stream_rows(probe: dict) -> list[MediaStream]:
+    return [MediaStream(**row) for row in probe.get("streams") or []]
 
 
 def _extra_type(filename: str, folder_key: str | None) -> str:
@@ -200,12 +242,15 @@ async def scan(limit: int | None = None) -> dict:
                             hdr=probe.get("hdr", False),
                             probed_at=datetime.now(timezone.utc),
                         )
+                        mf.streams = _stream_rows(probe)
                         if is_extra:
                             mf.kind = "extra"
                             mf.extra_type = _extra_type(name, extras_key)
                             mf.extra_title = _extra_title(name, movie.title, mf.extra_type)
                             if settings.contribute_extras:
                                 mf.fingerprint = await fingerprint_file(full)
+                        else:
+                            mf.edition = _edition(name, movie_folder)
                         session.add(mf)
                         await session.commit()
                     except Exception:
@@ -342,4 +387,50 @@ async def fingerprint_extras() -> dict:
             else:
                 stats["failed"] += 1
             await session.commit()
+    return stats
+
+
+async def reprobe(limit: int | None = None, only_missing: bool = True) -> dict:
+    """Re-run ffprobe over files already in the library and (re)write their
+    media_streams rows + edition label. The scan skips known paths, so this is
+    how the existing library gets per-track data. `only_missing` limits it to
+    files with no stream rows yet; False re-probes everything."""
+    from sqlalchemy.orm import selectinload
+
+    stats = {"checked": 0, "probed": 0, "missing": 0, "failed": 0}
+    async with SessionLocal() as session:
+        files = (
+            await session.scalars(
+                select(MediaFile).options(selectinload(MediaFile.streams)).order_by(MediaFile.id)
+            )
+        ).all()
+        for mf in files:
+            if only_missing and mf.streams:
+                continue
+            stats["checked"] += 1
+            if not os.path.exists(mf.path):
+                stats["missing"] += 1
+                continue
+            probe = await probe_file(mf.path)
+            if not probe:
+                stats["failed"] += 1
+                continue
+            try:
+                mf.streams = _stream_rows(probe)
+                for key in ("container", "video_codec", "audio_codec", "width",
+                            "height", "duration", "bit_depth", "size_bytes"):
+                    if probe.get(key) is not None:
+                        setattr(mf, key, probe[key])
+                mf.hdr = probe.get("hdr", False)
+                mf.probed_at = datetime.now(timezone.utc)
+                if mf.kind == "feature" and mf.edition is None:
+                    folder = os.path.basename(os.path.dirname(mf.path))
+                    mf.edition = _edition(os.path.basename(mf.path), folder)
+                await session.commit()
+                stats["probed"] += 1
+            except Exception:
+                await session.rollback()
+                stats["failed"] += 1
+            if limit and stats["probed"] >= limit:
+                break
     return stats

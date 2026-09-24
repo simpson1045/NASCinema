@@ -1,0 +1,51 @@
+# NASCinema on the NAS. Lives at /mnt/NAS Storage/apps/nascinema/ next to:
+#   repo/      backend/ + frontend/build/web + backend/cast (pulled by deploy.sh)
+#   data/      trailers/, hls/, subs/, runtime state (NASCINEMA_DATA_DIR)
+#   .env       secrets + settings (copy .env.example)
+# Backend is host-networked (port 8400; WOL broadcasts need it). Postgres is
+# published on 5435 for DBeaver (5433 = nasstocks, 5434 = jobs).
+services:
+  nascinema-postgres:
+    image: postgres:17
+    container_name: nascinema-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nascinema
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: nascinema
+    volumes:
+      - nascinema_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nascinema -d nascinema"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nascinema:
+    build: ./repo/backend
+    image: nascinema:latest
+    container_name: nascinema
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      nascinema-postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NASCINEMA_DATABASE_URL: postgresql+psycopg://nascinema:${POSTGRES_PASSWORD}@127.0.0.1:5435/nascinema
+      NASCINEMA_HOST: 0.0.0.0
+      NASCINEMA_PORT: "8400"
+      NASCINEMA_MEDIA_DIRS: /movies
+      NASCINEMA_DATA_DIR: /data
+      NASCINEMA_CACHE_DIR: /data/hls
+      NASCINEMA_TRAILERS_DIR: /data/trailers
+      NASCINEMA_TRANSCODE_HWACCEL: cpu
+    volumes:
+      - ./repo:/srv/nascinema
+      - ./data:/data
+      - "/mnt/NAS Storage/movies:/movies:ro"
+
+volumes:
+  nascinema_pgdata:
