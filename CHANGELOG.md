@@ -2,6 +2,15 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.4.1 - 2026-09-24
+- **Netflix-style home hero** — the featured movie at the top now works like the Roku: shuffled picks, the backdrop first, then the movie's trailer fades in over it (only once it's actually playing, so a missing trailer just leaves the backdrop). Hover the hero for a moment and it expands to fill the screen with sound on. Every change fades through black instead of snapping.
+- **TrueHD plays reliably** — TrueHD tracks now decode to lossless multichannel PCM by default instead of bitstreaming, which dropped out at seamless-branch splices (e.g. ROTS at 2:20). Same lossless audio, the Denon shows "Multi Ch In". DTS-HD, Dolby Digital Plus and Dolby Digital still bitstream. Toggle in Settings → Renderer once the upstream mpv fix lands.
+- **New Settings screen** (gear icon on the library bar) with optional theater hooks, all OFF until you turn them on:
+  - **Denon** — power on the AVR and switch to the ELKO input when you press Play.
+  - **LG TV** — pair once (accept the prompt on the TV), then optionally switch the TV input on Play. The "keep the input from being relabeled PC" option is experimental — the TV may refuse it; a fix is coming.
+  - **Refresh-rate match** — switch the display to the movie's frame rate (23.976 etc.) on Play and back on stop.
+- **Server moved to the NAS** — the backend now runs on NorthsideNAS; the app's server address is unchanged.
+
 ## 0.4.0 - 2026-07-01
 - **The player is now built into the app.** On Windows, Play launches a native mpv renderer embedded in the app window — full-quality 4K HDR / Dolby Vision picture and lossless TrueHD/Atmos/DTS-HD bitstream to the AVR, reading straight off the NAS. No separate player window, no transcode.
 - **On-video controls, NASCinema-styled** — amber-themed controls appear on mouse move and hide when idle; back and fullscreen buttons, subtitle/audio pickers, and a stats page are all wired in. Hotkeys: Esc/Backspace exit, C subtitles, P audio, I stats, F fullscreen.

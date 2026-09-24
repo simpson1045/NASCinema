@@ -1,14 +1,74 @@
 # NASCinema — Handoff (honest current state)
 
-*Last updated: 2026-08-23. This is the truthful state of the project for the next
+*Last updated: 2026-09-24. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.4.0+13 (pubspec bumped, release
-not yet cut).*
+actually are and what's next." Current version: **v0.4.1+14 (published to the NAS updater
+Sept 24; ELKO still on 0.4.0+13 until Matt clicks Update).*
 
 ---
 
-## Latest session (2026-08-23) — un-abandoned; ELKO-only theater; theater hooks built
+## Latest session (2026-09-24) — NAS backend committed, public domain restored, release pipeline fixed
+
+**Direction (Matt, Sept 24 — supersedes the Sept 13 "Roku primary, lossy OK"):**
+Matt is switching back from Jellyfin to NASCinema for real (JF desktop has HDR
+fullscreen issues + no controller support; Sonarr dropped). He loves the Roku
+client but NOT its lossy audio. **ELKO is a main client again.** Complaint: the
+ELKO app feels like the YTS website while the Roku feels like Netflix. Decision:
+keep the mouse UI AND add a **"big picture mode"** (fullscreen, controller +
+keyboard focus nav, Roku as the design source of truth, Netflix-style detail
+page with a "Versions & audio" picker tucked behind a button). **No Shield — never
+ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
+
+**Done this session:**
+- **Committed the Sept 13–14 work** (`e60ee2c`), byte-identical to what's
+  running on the NAS: backend Dockerfile/entrypoint, `deploy/nas/` (compose,
+  deploy.sh, .env.example), migration 0010 `media_streams` + `media_files.edition`,
+  `POST /api/reprobe`.
+- **NAS backend state** (`/mnt/NAS Storage/apps/nascinema/`): containers
+  `nascinema` (:8400, host net) + `nascinema-postgres` (:5435) healthy; DB at
+  migration 0010, 409 media_files, **0 media_streams rows — reprobe never run.**
+  Health still reports version "0.3.7" (backend version string never bumped).
+- **`nascinema.simpson1045.com` was DEAD since the TrueNAS move (~July):** no NPM
+  proxy host existed for it (NPM #7 was an old mcp.* host, not NASCinema). The
+  Roku (`MainScene.brs` m.base), ELKO's saved server, and the cast HTTPS base
+  all use that hostname. **Matt added NPM proxy host Sept 24** → 192.168.0.248:8400,
+  LE cert (to Dec 23), websockets on, block-exploits off, advanced:
+  read/send timeout 3600, proxy_buffering off, client_max_body_size 0.
+  Verified: public health 200, update/check 200 from ELKO, Range → 206.
+- **Release pipeline to the NAS:** `deploy.sh --updates` (installed on the NAS,
+  backup `deploy.sh.bak-20260924-preupdates`) pulls `backend/updates` +
+  `CHANGELOG.md` from ALPINE, `version.json` LAST, no restart. Full deploy uses
+  the same ordering. `CHANGELOG.md` was never deployed before → the updater
+  showed empty release notes; fixed. **Release = `backend\release.bat X.Y.Z N` on
+  ALPINE (run as an ADMS start_job on NAS that SSHes to ALPINE — Gradle outlives
+  the 300 s run_command cap), replace the CHANGELOG TODO stub, then
+  `sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" --updates` on NASHOST.**
+- ELKO was running **0.4.0+13 (Jul 1)** = the newest release on the server, so
+  the Aug 23 work (hero trailers, theater hooks, TrueHD→LPCM) never reached it.
+  **0.4.1+14 built + published Sept 24** (zip md5 abf6c6ab… verified on the NAS,
+  served at the public URL with release notes). ELKO updates when Matt opens the
+  app and accepts the prompt — first real test of the Windows self-update path.
+
+**Known broken / not verified:**
+- **C2 PC-label guard in `webos_control.dart` will likely fail:** direct
+  `ssap com.webos.service.eim/setDeviceInfo` returns **401** with our pairing key
+  (memory, Sept 23). What works: `system.notifications/createAlert` with a button
+  whose onClick = `luna://com.webos.service.eim/setDeviceInfo` — Matt presses OK
+  on the TV. Rework the guard to that.
+- Refresh-rate switching can turn Windows HDR off (Win+Alt+B) — the open
+  question from the Aug 23 notes is answered: yes, it can. Needs a re-assert.
+- Theater hooks (Denon/TV/refresh) still untested on hardware; all default OFF.
+- Denon 8K input is now labeled "ELKO" (SI8K). C2: HDMI_2 = Denon, HDMI_4 = ELKO.
+
+**Next (agreed order):** finish 0.4.1+14 → ELKO updates in-app → **big picture
+mode**: write a short plan first (entry/exit, focus/controller nav, Roku look,
+detail page), Matt approves, then build screen by screen starting with home.
+Parked: reprobe, C2 guard fix, hook hardware tests, backend version string.
+
+---
+
+## Session (2026-08-23) — un-abandoned; ELKO-only theater; theater hooks built
 
 **Context (full saga in the ADMS memory CLAUDE.md, every "2026-08-23" section):**
 the project was abandoned on a false premise (that Jellyfin could do lossless via

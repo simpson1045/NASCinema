@@ -131,7 +131,9 @@ echo   APK:     %ANDROID_SIZE% bytes  -^> %APK_DST%
 echo   ZIP:     %WIN_SIZE% bytes  -^> %WIN_DST%
 echo   Version: %VERSION% (build %BUILD%)
 echo.
-echo Next: edit CHANGELOG.md (replace the TODO), then commit.
+echo Next: edit CHANGELOG.md (replace the TODO), then publish to the NAS:
+echo   sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" --updates
+echo and commit.
 echo.
 
 endlocal
