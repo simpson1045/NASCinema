@@ -196,7 +196,9 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
         featured.append(item)
         # Warm the trailer cache in the background so it's ready when scrolled to.
         if (m.tmdb_id or m.trailer_youtube) and not is_cached(m.id):
-            asyncio.create_task(ensure_trailer(m.id, m.tmdb_id, m.trailer_youtube))
+            asyncio.create_task(
+                ensure_trailer(m.id, m.tmdb_id, m.trailer_youtube, m.title, m.year)
+            )
 
     return {"featured": featured, "rails": rails}
 
@@ -252,7 +254,9 @@ async def movie_trailer(
     movie = await session.scalar(select(Movie).where(Movie.id == movie_id))
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
-    path = await ensure_trailer(movie_id, movie.tmdb_id, movie.trailer_youtube)
+    path = await ensure_trailer(
+        movie_id, movie.tmdb_id, movie.trailer_youtube, movie.title, movie.year
+    )
     if not path:
         raise HTTPException(status_code=404, detail="No trailer available")
     return FileResponse(

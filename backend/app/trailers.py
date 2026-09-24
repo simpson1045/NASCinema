@@ -20,6 +20,7 @@ import asyncio
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 from .config import get_settings
@@ -105,8 +106,11 @@ async def _ranked_trailer_keys(tmdb_id: int) -> list:
             v.get("size") or 0,
         )
 
+    # Trailers and teasers only — TMDB also lists clips and featurettes.
     ranked = [
-        v["key"] for v in sorted(videos, key=_score, reverse=True) if v.get("key")
+        v["key"]
+        for v in sorted(videos, key=_score, reverse=True)
+        if v.get("key") and v.get("type") in ("Trailer", "Teaser")
     ]
     _key_cache[tmdb_id] = ranked
     return ranked
@@ -144,6 +148,7 @@ def _probe_sync(path: Path) -> dict | None:
     return {
         "height": int((v or {}).get("height") or 0),
         "width": int((v or {}).get("width") or 0),
+        "video_codec": (v or {}).get("codec_name"),
         "duration": dur,
         "bitrate": br,
         "audio_codec": (a or {}).get("codec_name"),
@@ -152,15 +157,27 @@ def _probe_sync(path: Path) -> dict | None:
     }
 
 
+# The quality bar. On a 77" OLED a 1-2 Mbps 1080p trailer is visible mush, so:
+# at least 1080 lines, and ~2.8 kbps per line for H.264 (1080p >= 3.0 Mbps,
+# 2160p >= 6.0). VP9 looks as good at ~70% of that bitrate, so it gets 0.7x.
+_MIN_HEIGHT = 1080
+_BPS_PER_LINE = 2800
+_VP9_FACTOR = 0.7
+
+
+def _min_bitrate(height: int, codec: str | None) -> float:
+    factor = _VP9_FACTOR if (codec or "").startswith("vp") else 1.0
+    return height * _BPS_PER_LINE * factor
+
+
 def _good_quality(info: dict | None) -> bool:
-    """Reject potato uploads: real HD height + enough bitrate that it's not mush."""
+    """Reject mush: real 1080p+ and enough bitrate for the codec."""
     if info is None or not info.get("has_audio"):
         return False
     h = info.get("height") or 0
-    if h < 720:
+    if h < _MIN_HEIGHT:
         return False
-    # ~1.5 kbps per line of resolution: 720p~1.1Mbps, 1080p~1.6Mbps, 2160p~3.2Mbps.
-    return info.get("bitrate", 0) >= h * 1500
+    return info.get("bitrate", 0) >= _min_bitrate(h, info.get("video_codec"))
 
 
 async def _download(movie_id: int, key: str) -> bool:
@@ -237,25 +254,165 @@ async def _to_ac3(movie_id: int) -> None:
         tmp.unlink(missing_ok=True)
 
 
-async def ensure_trailer(
-    movie_id: int, tmdb_id: int | None, override: str | None = None
-) -> Path | None:
-    """Cache + return a good trailer for a movie, or None. A manual `override`
-    (YouTube URL/key) is trusted and skips the quality gate; otherwise we try the
-    ranked candidates and keep the first that passes the bitrate/audio check."""
-    if is_cached(movie_id):
-        return trailer_file(movie_id)
-    if not yt_dlp_path():
+# --- Picking the best trailer ------------------------------------------------
+# TMDB lists several trailers per movie and YouTube often has 4K re-release cuts
+# TMDB doesn't. Instead of taking the first that passes, ask YouTube what each
+# candidate actually offers (no download) and pull the sharpest.
+
+_SEARCH_RESULTS = 10
+_NO_TRAILER_DAYS = 7  # after finding nothing good, don't re-search on every load
+_JUNK_WORDS = ("reaction", "review", "fan made", "fanmade", "concept", "explained",
+               "honest trailer", "parody", "breakdown", "recap", "scene", "clip",
+               # AI upscales / frame interpolation look plasticky — official only
+               "enhanced", "upscale", "remastered by", "60fps", "interpolat")
+
+
+def _none_file(movie_id: int) -> Path:
+    return trailers_dir() / f"{movie_id}.none.json"
+
+
+def _recently_found_nothing(movie_id: int) -> bool:
+    f = _none_file(movie_id)
+    try:
+        return (time.time() - f.stat().st_mtime) < _NO_TRAILER_DAYS * 86400
+    except OSError:
+        return False
+
+
+def _ytdlp_json(ref: str, flat: bool = False) -> dict | None:
+    ytdlp = yt_dlp_path()
+    if not ytdlp:
+        return None
+    args = [ytdlp, "--ignore-config", "-J", "--skip-download", "--no-warnings"]
+    if flat:
+        args.append("--flat-playlist")
+    args.append(ref)
+    try:
+        proc = subprocess.run(
+            args, capture_output=True, text=True, timeout=90, creationflags=_LOWPRI
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
         return None
 
-    if override:
-        key = _youtube_key(override)
-        candidates, gated = ([key] if key else []), False
-    elif tmdb_id:
-        candidates, gated = (await _ranked_trailer_keys(tmdb_id))[:_MAX_CANDIDATES], True
-    else:
+
+def _offer_sync(key: str) -> dict | None:
+    """What a YouTube video offers, without downloading: the best non-AV1 video
+    height (capped) and that format's bitrate. None if unavailable."""
+    info = _ytdlp_json(f"https://www.youtube.com/watch?v={key}")
+    if not info:
         return None
-    if not candidates:
+    cap = max(480, get_settings().trailer_max_height)
+    best = (0, 0.0)
+    for f in info.get("formats") or []:
+        vc = f.get("vcodec") or "none"
+        h = f.get("height") or 0
+        if vc == "none" or vc.startswith("av01") or not (0 < h <= cap):
+            continue
+        # tbr is kbps; VP9 counts for more per bit, same as the quality gate.
+        tbr = float(f.get("tbr") or f.get("vbr") or 0)
+        if vc.startswith("vp"):
+            tbr /= _VP9_FACTOR
+        best = max(best, (h, tbr))
+    if best[0] == 0:
+        return None
+    return {"key": key, "height": best[0], "kbps": best[1],
+            "title": info.get("title") or ""}
+
+
+_SEQUEL_WORDS = {"2", "3", "4", "5", "6", "7", "8", "9", "ii", "iii", "iv", "v"}
+
+
+def _words(text: str) -> list[str]:
+    return "".join(c if c.isalnum() else " " for c in text.lower()).split()
+
+
+def _names_this_movie(name: list[str], title: list[str]) -> bool:
+    """The upload's name contains the title's words in order, and the next word
+    isn't a sequel number ("Spider-Man 2" is not "Spider-Man"; "Terminator 2
+    ... 35th Anniversary" and "(2002)" are fine)."""
+    n = len(title)
+    if n == 0:
+        return False
+    for i in range(len(name) - n + 1):
+        if name[i:i + n] == title:
+            nxt = name[i + n] if i + n < len(name) else ""
+            return nxt not in _SEQUEL_WORDS
+    return False
+
+
+def _search_keys_sync(title: str, year: int | None) -> list[str]:
+    """YouTube search for the movie's trailer, filtered to plausible official
+    uploads: trailer-length, the title in the name, no reactions/reviews."""
+    q = f"{title} {year or ''} official trailer 4K".strip()
+    data = _ytdlp_json(f"ytsearch{_SEARCH_RESULTS}:{q}", flat=True)
+    if not data:
+        return []
+    want = _words(title)
+    keys = []
+    for e in data.get("entries") or []:
+        name = (e.get("title") or "").lower()
+        dur = e.get("duration") or 0
+        if not e.get("id") or not (45 <= dur <= 300):
+            continue
+        if "trailer" not in name or any(w in name for w in _JUNK_WORDS):
+            continue
+        if not _names_this_movie(_words(name), want):
+            continue
+        # Another film's year in the name (a remake, a sequel) — skip it.
+        years = {int(w) for w in _words(name)
+                 if w.isdigit() and len(w) == 4 and 1900 <= int(w) <= 2100}
+        if year and years and year not in years:
+            continue
+        keys.append(e["id"])
+    return keys
+
+
+async def _ranked_offers(
+    tmdb_id: int | None, title: str | None, year: int | None, override: str | None
+) -> list[dict]:
+    """Every candidate (manual pick, TMDB's trailers, a YouTube search), probed
+    and sorted sharpest first. A manual pick wins unless another candidate is
+    clearly better: higher resolution, or 1.5x the bitrate at the same one."""
+    keys: list[str] = []
+    manual = _youtube_key(override) if override else None
+    if manual:
+        keys.append(manual)
+    if tmdb_id:
+        keys += (await _ranked_trailer_keys(tmdb_id))[:_MAX_CANDIDATES + 3]
+    if title:
+        keys += await asyncio.to_thread(_search_keys_sync, title, year)
+    seen: set[str] = set()
+    unique = [k for k in keys if k and not (k in seen or seen.add(k))]
+    offers = [o for o in await asyncio.gather(
+        *(asyncio.to_thread(_offer_sync, k) for k in unique)) if o]
+
+    def score(o: dict) -> tuple:
+        bonus = 1.5 if o["key"] == manual else 1.0
+        return (o["height"], o["kbps"] * bonus)
+
+    return sorted(offers, key=score, reverse=True)
+
+
+async def ensure_trailer(
+    movie_id: int,
+    tmdb_id: int | None,
+    override: str | None = None,
+    title: str | None = None,
+    year: int | None = None,
+) -> Path | None:
+    """Cache + return the sharpest good trailer for a movie, or None (the hero
+    then shows the backdrop — a crisp still beats a smeared trailer)."""
+    if is_cached(movie_id):
+        return trailer_file(movie_id)
+    if not yt_dlp_path() or not (tmdb_id or override or title):
+        return None
+    if not override and _recently_found_nothing(movie_id):
         return None
 
     lock = _locks.setdefault(movie_id, asyncio.Lock())
@@ -266,21 +423,28 @@ async def ensure_trailer(
         async with _download_sem:
             if is_cached(movie_id):
                 return trailer_file(movie_id)
-            for key in candidates:
-                if not key or not await _download(movie_id, key):
+            offers = await _ranked_offers(tmdb_id, title, year, override)
+            manual = _youtube_key(override) if override else None
+            for offer in offers[:_MAX_CANDIDATES + 1]:
+                key = offer["key"]
+                if not await _download(movie_id, key):
                     clear_trailer(movie_id)
                     continue
                 info = await _probe(trailer_file(movie_id))
-                if gated and not _good_quality(info):
-                    clear_trailer(movie_id)  # potato — try the next candidate
+                # A manual pick is trusted even under the bar — but only after
+                # every sharper candidate lost.
+                if not _good_quality(info) and key != manual:
+                    clear_trailer(movie_id)  # mush — try the next candidate
                     continue
                 # Fix Roku-unplayable audio (Opus, or multichannel AAC which the
                 # 4802 silences) by transcoding to AC-3 — keeps 5.1 surround and
                 # bitstreams to the Denon.
                 if info and not _audio_ok(info):
                     await _to_ac3(movie_id)
+                _none_file(movie_id).unlink(missing_ok=True)
                 asyncio.create_task(measure_bars(movie_id))
                 return trailer_file(movie_id)
+            _none_file(movie_id).write_text(json.dumps({"offers": len(offers)}))
     return None
 
 
