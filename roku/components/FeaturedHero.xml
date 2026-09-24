@@ -22,9 +22,14 @@
     <Group id="content">
       <Poster id="backdrop" width="1920" height="1080"
           loadDisplayMode="scaleToFill" />
-      <!-- Never zoomed or cropped (that chopped titles/text off). A letterboxed
-           trailer is slid up by its top bar (playTrailer, from the server's
-           trailer_bars) so the picture starts at the screen's top edge. -->
+      <!-- Solid black behind a playing trailer, so no backdrop or app background
+           ever shows around a letterboxed picture. -->
+      <Rectangle id="videoBg" width="1920" height="1080" color="0x000000FF"
+          visible="false" />
+      <!-- Never zoomed or cropped (that chopped titles/text off). Home: a
+           letterboxed trailer slides up by its top bar (server's trailer_bars) so
+           the picture starts at the top edge; its bottom sits under the rails.
+           Fullscreen: centered, bars top and bottom, like a movie. -->
       <Video id="trailer" width="1920" height="1080"
           mute="true" visible="false" enableUI="false" />
       <!-- Home: fade into the rails + darken the left. Fullscreen: the original

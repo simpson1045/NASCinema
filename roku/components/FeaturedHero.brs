@@ -6,6 +6,8 @@ sub init()
     m.content = m.top.findNode("content")
     m.backdrop = m.top.findNode("backdrop")
     m.trailer = m.top.findNode("trailer")
+    m.videoBg = m.top.findNode("videoBg")
+    m.shift = 0   ' current trailer's top letterbox bar, px (home mode only)
     m.scrim = m.top.findNode("scrim")
     m.homeScrim = m.top.findNode("homeScrim")
     m.overview = m.top.findNode("overview")
@@ -40,6 +42,12 @@ sub setMode(fs as boolean)
     m.scrim.visible = fs
     m.overview.visible = not fs
     m.dotsGroup.visible = not fs
+    ' Slide a letterboxed trailer up on home only; fullscreen centers it.
+    if fs then
+        m.trailer.translation = [0, 0]
+    else
+        m.trailer.translation = [0, -m.shift]
+    end if
     if fs then
         m.logo.translation = [90, 790]
         m.title.translation = [92, 850]
@@ -139,14 +147,18 @@ sub playTrailer()
     vc = createObject("roSGNode", "ContentNode")
     vc.url = base + turl
     vc.streamFormat = "mkv"
-    ' Slide (never zoom) a letterboxed trailer up so its top bar is off-screen:
-    ' the picture starts at the top edge and the bottom bar lands under the
-    ' scrim. trailer_bars is measured by the server; missing = full-frame.
-    shift = 0
+    ' Home: slide (never zoom) a letterboxed trailer up so its top bar is
+    ' off-screen and the bottom bar lands under the rails. Fullscreen: centered.
+    ' trailer_bars is measured by the server; missing = full-frame.
+    m.shift = 0
     if it.trailer_bars <> invalid and it.trailer_bars.top <> invalid then
-        shift = Int(it.trailer_bars.top * 1080)
+        m.shift = Int(it.trailer_bars.top * 1080)
     end if
-    m.trailer.translation = [0, -shift]
+    if m.activeState then
+        m.trailer.translation = [0, 0]
+    else
+        m.trailer.translation = [0, -m.shift]
+    end if
     m.trailer.content = vc
     m.trailer.mute = not m.activeState   ' audio only when the hero is active
     ' Stay hidden (backdrop showing) until real frames flow — see onTrailerState.
@@ -157,6 +169,7 @@ sub stopTrailer()
     m.trailerDelay.control = "stop"
     m.trailer.control = "stop"
     m.trailer.visible = false
+    m.videoBg.visible = false
     m.backdrop.visible = true
 end sub
 
@@ -166,6 +179,7 @@ sub onTrailerState()
         ' Real frames now — dissolve from backdrop to video. Hide the still
         ' backdrop so it can't show under a trailer slid up past its top bar.
         m.trailer.visible = true
+        m.videoBg.visible = true
         m.backdrop.visible = false
         if m.activeState then
             m.timer.control = "stop"    ' fullscreen: let the trailer play to the end
