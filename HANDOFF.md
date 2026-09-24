@@ -3,8 +3,8 @@
 *Last updated: 2026-09-24. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.4.1+14 (published to the NAS updater
-Sept 24; ELKO still on 0.4.0+13 until Matt clicks Update).*
+actually are and what's next." Current version: **v0.4.2+15 (published Sept 24; ELKO updated
+to 0.4.1 in-app, 0.4.2 offered).*
 
 ---
 
@@ -49,6 +49,20 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   **0.4.1+14 built + published Sept 24** (zip md5 abf6c6ab… verified on the NAS,
   served at the public URL with release notes). ELKO updates when Matt opens the
   app and accepts the prompt — first real test of the Windows self-update path.
+
+- **ELKO updated 0.4.0 → 0.4.1 in-app (Sept 24) ✅** but the old .bat helper
+  hung: a detached cmd has no console, so `tasklist|find` each got their own
+  console window and `find` blocked on that window's keyboard until Matt hit
+  Ctrl+C. **0.4.2 replaces it with a hidden PowerShell helper** (Wait-Process on
+  the app PID → hidden robocopy → relaunch → deletes extract dir, zip, itself);
+  dry-run tested on ELKO. 0.4.2 itself still installs via 0.4.1's old helper
+  (one last Ctrl+C); silent from then on.
+- ELKO had **no shortcut** to NASCinema (only `C:\NASCinema\renderer\nascinema.exe`);
+  added Desktop (OneDrive) + Start Menu shortcuts Sept 24.
+- Roku channel repackaged (`roku/roku-channel.zip`, no Thumbs.db) and copied to
+  ELKO `Downloads\NASCinema-roku.zip`; Matt sideloads via http://192.168.0.78
+  (rokudev — password is Matt's, Claude doesn't enter it). Roku has developer
+  mode on.
 
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct

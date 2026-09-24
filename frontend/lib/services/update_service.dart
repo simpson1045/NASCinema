@@ -142,7 +142,6 @@ class UpdateService {
     final installDir = File(exePath).parent.path;
     final tempDir = (await getTemporaryDirectory()).path;
     final extractDir = '$tempDir\\nascinema-update-extracted';
-    final exeName = File(exePath).uri.pathSegments.last;
 
     // Extract the zip.
     final archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
@@ -160,42 +159,50 @@ class UpdateService {
       }
     }
 
-    // A running .exe holds an exclusive lock, so wait for it to exit before
-    // copying (robocopy /R:30 /W:1 also rides out transient locks). Then relaunch.
-    final batPath = '$tempDir\\nascinema-update.bat';
-    final logPath = '$tempDir\\nascinema-update.log';
-    final bat = '''@echo off
-setlocal enabledelayedexpansion
-echo === NASCinema update started at %DATE% %TIME% === > "$logPath"
-set /a _waited=0
-:wait_for_exit
-tasklist /FI "IMAGENAME eq $exeName" 2>nul | find /I "$exeName" >nul
-if errorlevel 1 goto exit_done
-if !_waited! GEQ 30 goto exit_done
-timeout /t 1 /nobreak >nul
-set /a _waited+=1
-goto wait_for_exit
-:exit_done
-echo Exit-wait done after !_waited!s >> "$logPath"
-robocopy "$extractDir" "$installDir" /E /NFL /NDL /NP /R:30 /W:1 ^
-  /XF "nascinema-update.bat" "nascinema-update.log" >> "$logPath" 2>&1
-set _rc=!errorlevel!
-echo robocopy exit code: !_rc! >> "$logPath"
-if !_rc! GEQ 8 (
-  echo === UPDATE FAILED — see "$logPath" === >> "$logPath"
-  echo NASCinema update FAILED — see "$logPath".
-  pause >nul
-  goto cleanup
-)
-echo === UPDATE OK === >> "$logPath"
-start "" "$installDir\\$exeName"
-:cleanup
-rmdir /S /Q "$extractDir" 2>nul
-del "$batPath"
+    // Hand off to a hidden PowerShell helper that waits for this process to
+    // exit (a running .exe holds an exclusive lock), copies the new files in,
+    // relaunches, and cleans up. It used to be a .bat, but a detached cmd has
+    // no console: every console tool it ran (tasklist/find) opened its own
+    // window and `find` sat reading that window's keyboard until Ctrl+C.
+    // PowerShell needs no console, and robocopy runs with a hidden window.
+    final ps1Path = '$tempDir\\nascinema-update.ps1';
+    String psq(String s) => "'${s.replaceAll("'", "''")}'";
+    final vars = [
+      '\$AppPid = $pid',
+      '\$Exe = ${psq(exePath)}',
+      '\$InstallDir = ${psq(installDir)}',
+      '\$Extract = ${psq(extractDir)}',
+      '\$Zip = ${psq(zipPath)}',
+      '\$LogPath = ${psq('$tempDir\\nascinema-update.log')}',
+    ].join('\r\n');
+    const body = r'''
+function Log($m) { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format s)  $m" }
+Set-Content -LiteralPath $LogPath -Value "=== NASCinema update started $(Get-Date -Format s) ==="
+Wait-Process -Id $AppPid -Timeout 30 -ErrorAction SilentlyContinue
+Log "app exited; copying"
+# robocopy /R:30 /W:1 rides out transient locks; exit codes >= 8 are failures.
+$rcArgs = @("`"$Extract`"", "`"$InstallDir`"", '/E', '/NFL', '/NDL', '/NP', '/R:30', '/W:1', "/LOG+:`"$LogPath`"")
+$p = Start-Process robocopy -ArgumentList $rcArgs -WindowStyle Hidden -Wait -PassThru
+if ($p.ExitCode -lt 8) { Log "=== UPDATE OK (robocopy $($p.ExitCode)) ===" } else { Log "=== UPDATE FAILED (robocopy $($p.ExitCode)) ===" }
+Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
+Remove-Item -LiteralPath $Extract -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 ''';
 
-    await File(batPath).writeAsString(bat);
-    await Process.start('cmd', ['/c', batPath],
+    await File(ps1Path).writeAsString('$vars\r\n$body');
+    await Process.start(
+        'powershell',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-WindowStyle',
+          'Hidden',
+          '-File',
+          ps1Path,
+        ],
         mode: ProcessStartMode.detached);
     exit(0);
   }

@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.4.2 - 2026-09-24
+- **Updates install silently on Windows** — no more black command window that hangs until you press Ctrl+C. The app closes, updates in the background, reopens itself, and cleans up the downloaded files.
+- **Heads-up for THIS update only:** it's still installed by the old updater, so the black window may appear one last time — press Ctrl+C in it and the update finishes. Every update after this one is silent.
+
 ## 0.4.1 - 2026-09-24
 - **Netflix-style home hero** — the featured movie at the top now works like the Roku: shuffled picks, the backdrop first, then the movie's trailer fades in over it (only once it's actually playing, so a missing trailer just leaves the backdrop). Hover the hero for a moment and it expands to fill the screen with sound on. Every change fades through black instead of snapping.
 - **TrueHD plays reliably** — TrueHD tracks now decode to lossless multichannel PCM by default instead of bitstreaming, which dropped out at seamless-branch splices (e.g. ROTS at 2:20). Same lossless audio, the Denon shows "Multi Ch In". DTS-HD, Dolby Digital Plus and Dolby Digital still bitstream. Toggle in Settings → Renderer once the upstream mpv fix lands.
