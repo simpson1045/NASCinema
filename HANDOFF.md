@@ -103,6 +103,21 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   on the Mac (`~/development/flutter`). NEXT: step 2 XInput controller, step 3
   big-picture movie page, step 4 Versions & audio (+ reprobe), step 5 player.
 
+- **Trailer quality overhaul (Sept 24) ✅ (backend only, verified by numbers).**
+  Picker now probes every candidate (manual + TMDB Trailer/Teaser + YouTube
+  search "<title> <year> official trailer 4K") with `yt-dlp -J` and downloads
+  the sharpest (res, then bitrate; no AV1, no HLS/m3u8 — TS won't merge to
+  MKV). Bar: >=1080p, 2.8 kbps/line H.264 (0.7x VP9); nothing good -> backdrop,
+  `<id>.none.json` for 7 days. Search guard is word-based (sequel numbers,
+  other years, reactions/clips/AI upscales rejected). Re-pull: 12 trailers
+  1-2.7 Mbps -> 4K 6-15 Mbps; Terminator 1.1 -> 2.8 H.264 (manual pick);
+  Crystal Skull 3.9. **Chamber of Secrets (#100) still 1.3 Mbps** — its manual
+  YouTube pick is gone and nothing on YouTube clears the bar. #125 is an orphan
+  trailer (no movie row). Leftovers in data/trailers NOT deleted (need Matt's
+  yes): `*.prequality.mkv` / `*.prequality2.mkv` backups, and unmerged
+  `100.f270.mp4`, `100.f140-drc.m4a`, `112.f270.mp4`, `112.f140.m4a`,
+  `112.temp.mkv`.
+
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct
   `ssap com.webos.service.eim/setDeviceInfo` returns **401** with our pairing key
