@@ -186,16 +186,18 @@ async def _download(movie_id: int, key: str) -> bool:
     if not ytdlp:
         return False
     cap = max(480, get_settings().trailer_max_height)
-    # Highest VP9 in [720, cap] (exclude AV1 — the 4802 can't decode it), AAC audio
-    # preferred. -S res picks 4K over 1080 when a real 4K upload exists.
-    fmt = (
-        f"bv*[height>=720][height<={cap}][vcodec!*=av01]+ba[ext=m4a]/"
-        f"bv*[height>=720][height<={cap}][vcodec!*=av01]+ba/"
-        f"b[height>=720][height<={cap}][vcodec!*=av01]/b[height>=720][height<={cap}]"
-    )
+    # Highest resolution in [720, cap], then the highest-bitrate stream at it
+    # (exclude AV1 — the 4802 can't decode it), AAC audio preferred. At 1080p
+    # YouTube's H.264 stream is often ~4x the VP9 one, so bitrate — not codec —
+    # breaks the tie (matches how _offer_sync ranks candidates).
+    # No HLS (m3u8) formats: they arrive as MPEG-TS whose timestamps the MKV
+    # merge rejects ("Error muxing a packet") — the DASH copy of the same
+    # stream merges cleanly.
+    v = f"[height>=720][height<={cap}][vcodec!*=av01][protocol!*=m3u8]"
+    fmt = f"bv*{v}+ba[ext=m4a]/bv*{v}+ba/b{v}"
     args = [
         ytdlp, "--ignore-config",
-        "-f", fmt, "-S", "res,vcodec:vp9",
+        "-f", fmt, "-S", "res,br",
         "--no-playlist",
         "--merge-output-format", "mkv", "--remux-video", "mkv",
         "-o", str(trailers_dir() / f"{movie_id}.%(ext)s"),
@@ -314,6 +316,8 @@ def _offer_sync(key: str) -> dict | None:
         h = f.get("height") or 0
         if vc == "none" or vc.startswith("av01") or not (0 < h <= cap):
             continue
+        if "m3u8" in (f.get("protocol") or ""):
+            continue  # the downloader skips HLS too (see _download)
         # tbr is kbps; VP9 counts for more per bit, same as the quality gate.
         tbr = float(f.get("tbr") or f.get("vbr") or 0)
         if vc.startswith("vp"):
@@ -425,7 +429,10 @@ async def ensure_trailer(
                 return trailer_file(movie_id)
             offers = await _ranked_offers(tmdb_id, title, year, override)
             manual = _youtube_key(override) if override else None
-            for offer in offers[:_MAX_CANDIDATES + 1]:
+            tries = offers[:_MAX_CANDIDATES + 1]
+            # The manual pick always gets a turn, even if it ranked lower.
+            tries += [o for o in offers[_MAX_CANDIDATES + 1:] if o["key"] == manual]
+            for offer in tries:
                 key = offer["key"]
                 if not await _download(movie_id, key):
                     clear_trailer(movie_id)
