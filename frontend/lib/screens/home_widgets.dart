@@ -264,6 +264,12 @@ class _FeaturedHeroState extends State<FeaturedHero> {
               bottom: 40,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 400),
+                // The default layout CENTERS the child — the info must hug
+                // the left edge like the Roku, not float mid-picture.
+                layoutBuilder: (cur, prev) => Stack(
+                  alignment: Alignment.bottomLeft,
+                  children: [...prev, ?cur],
+                ),
                 child: _HeroContent(
                   key: ValueKey('ct${m.id}'),
                   movie: m,

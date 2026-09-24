@@ -72,13 +72,15 @@ class TrailerPlayer {
     await p?.dispose();
   }
 
-  Widget? view() {
+  /// [fit] cover fills the box (the mouse hero); contain never crops (big
+  /// picture, whose trailers must keep every pixel — titles, on-screen text).
+  Widget? view({BoxFit fit = BoxFit.cover}) {
     final c = _controller;
     if (c == null) return null;
     return Video(
       controller: c,
       controls: NoVideoControls,
-      fit: BoxFit.cover,
+      fit: fit,
       fill: const Color(0x00000000),
     );
   }

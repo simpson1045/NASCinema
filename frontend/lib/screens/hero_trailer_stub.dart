@@ -22,7 +22,7 @@ class TrailerPlayer {
 
   Future<void> stop() async {}
 
-  Widget? view() => null;
+  Widget? view({BoxFit fit = BoxFit.cover}) => null;
 
   void dispose() {}
 }

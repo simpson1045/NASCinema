@@ -24,6 +24,8 @@ class Movie {
     this.logo,
     this.trailerUrl,
     this.trailerReady = false,
+    this.trailerBars,
+    this.resumePosition,
   });
 
   final int id;
@@ -50,6 +52,10 @@ class Movie {
   final String? logo; // clearlogo URL — featured items only
   final String? trailerUrl; // /api/movies/{id}/trailer?v=… — featured only
   final bool trailerReady; // backend has the trailer cached
+  /// Letterbox bars baked into the cached trailer, as fractions of a 16:9
+  /// screen (null = not measured yet / full-frame). Featured items only.
+  final TrailerBars? trailerBars;
+  final double? resumePosition; // seconds — Continue Watching items only
 
   factory Movie.fromJson(Map<String, dynamic> j) => Movie(
         id: j['id'] as int,
@@ -77,7 +83,18 @@ class Movie {
         logo: j['logo'] as String?,
         trailerUrl: j['trailer_url'] as String?,
         trailerReady: j['trailer_ready'] == true,
+        trailerBars: j['trailer_bars'] is Map
+            ? TrailerBars.fromJson(j['trailer_bars'] as Map<String, dynamic>)
+            : null,
+        resumePosition: (j['resume_position'] as num?)?.toDouble(),
       );
+
+  /// How far into the movie the resume point is, 0..1 (null if not started).
+  double? get progress {
+    final pos = resumePosition;
+    if (pos == null || runtime == null || runtime == 0) return null;
+    return (pos / (runtime! * 60)).clamp(0.0, 1.0);
+  }
 
   /// TMDB CDN poster URL, or null if unmatched.
   String? posterUrl({String size = 'w342'}) =>
@@ -124,4 +141,17 @@ class Movie {
     }
     return hdr ? '$label HDR' : label;
   }
+}
+
+/// Black bars baked into a trailer, as fractions of a 16:9 screen's height.
+class TrailerBars {
+  const TrailerBars({required this.top, required this.bottom});
+
+  final double top;
+  final double bottom;
+
+  factory TrailerBars.fromJson(Map<String, dynamic> j) => TrailerBars(
+        top: (j['top'] as num?)?.toDouble() ?? 0,
+        bottom: (j['bottom'] as num?)?.toDouble() ?? 0,
+      );
 }

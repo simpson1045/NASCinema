@@ -3,8 +3,7 @@
 *Last updated: 2026-09-24. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.4.2+15 (published Sept 24; ELKO updated
-to 0.4.1 in-app, 0.4.2 offered).*
+actually are and what's next." Current version: **v0.5.0+16 (big picture mode, published Sept 24).*
 
 ---
 
@@ -88,6 +87,21 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   wide over a darker left gradient (`home_scrim2.png`). Unexplained once: a
   Goblet of Fire trailer shown shrunk with side bars during the 0.1.4 slide — not
   seen since the fullscreen slide was removed.
+
+- **Big picture mode step 1 — 0.5.0+16 published Sept 24 (NOT yet seen on ELKO).**
+  `lib/screens/big_picture/` (`big_picture_screen.dart` + `bp_hero.dart`): fixed
+  1920x1080 canvas in a FittedBox, Roku-parity layout (hero full-bleed, info
+  upper-left, rails from y=540 with fixed-focus scrolling, wide Continue
+  Watching cards, trailer slide/center via `Movie.trailerBars`, trailer view
+  `BoxFit.contain` — never crops). One nav model in `_onKey` (arrows / Enter /
+  Esc) that the controller will feed next. Boot: `ConnectScreen` → BigPicture
+  when `startInBigPicture()` (pref `big_picture_start`, default ON, desktop
+  only; Settings → Display toggle). Back on home → menu (Exit / Settings /
+  Quit). Pushed pages (detail/settings) get Esc→pop via CallbackShortcuts.
+  Mouse layout fix: hero info was centered by AnimatedSwitcher's default
+  layout → now bottomLeft. `flutter analyze` runs clean from a local rsync copy
+  on the Mac (`~/development/flutter`). NEXT: step 2 XInput controller, step 3
+  big-picture movie page, step 4 Versions & audio (+ reprobe), step 5 player.
 
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct

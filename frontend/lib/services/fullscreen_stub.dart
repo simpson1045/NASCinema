@@ -5,3 +5,7 @@ bool get isDesktop => false;
 Future<void> initWindowForDesktop() async {}
 
 Future<void> toggleFullscreen() async {}
+
+Future<void> setFullscreen(bool on) async {}
+
+Future<void> quitApp() async {}

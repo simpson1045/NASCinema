@@ -71,6 +71,20 @@ Future<void> toggleFullscreen() async {
   await windowManager.setFullScreen(!full);
 }
 
+/// Force borderless fullscreen on or off (big picture mode enters/leaves it).
+Future<void> setFullscreen(bool on) async {
+  if (!isDesktop) return;
+  if (await windowManager.isFullScreen() != on) {
+    await windowManager.setFullScreen(on);
+  }
+}
+
+/// Close the app window (big picture's Quit). The close listener kills mpv.
+Future<void> quitApp() async {
+  if (!isDesktop) return;
+  await windowManager.close();
+}
+
 /// Saves bounds/maximized on change, debounced so a drag doesn't write a
 /// hundred times. Fullscreen (F11) is transient and never saved.
 class _WindowStateSaver with WindowListener {

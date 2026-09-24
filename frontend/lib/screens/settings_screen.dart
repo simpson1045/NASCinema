@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/big_picture_prefs.dart';
 import '../services/theater/theater_prefs.dart';
 import '../services/theater/webos_control.dart';
 import '../theme/app_theme.dart';
@@ -40,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Display
   bool _refreshMatch = false;
+  bool _bigPicture = true;
 
   // Renderer
   bool _truehdBitstream = false;
@@ -58,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _prefs = p;
+      _bigPicture = p.getBool(kBigPicturePref) ?? true;
       _denonEnabled = p.getBool(kDenonEnabledPref) ?? false;
       _denonPower = p.getBool(kDenonPowerPref) ?? true;
       _denonHost.text = p.getString(kDenonHostPref) ?? '';
@@ -236,6 +239,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ]),
             _section('DISPLAY', [
+              _toggle(
+                  'Start in Big Picture',
+                  'Open straight into the fullscreen TV layout (controller / '
+                      'keyboard). Leave it any time from its Back menu.',
+                  _bigPicture, (v) {
+                setState(() => _bigPicture = v);
+                _prefs?.setBool(kBigPicturePref, v);
+              }),
               _toggle(
                   'Match display refresh rate to the movie',
                   'Switch the desktop to the film\'s cadence (e.g. 23.976 Hz) '

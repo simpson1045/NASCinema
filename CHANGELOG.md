@@ -2,6 +2,15 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.0 - 2026-09-24
+- **Big Picture mode** — a fullscreen TV layout built to match the Roku channel. NASCinema now opens straight into it on this PC (turn that off in Settings → Display → "Start in Big Picture").
+  - The featured movie fills the whole screen with its trailer; logo, ratings and description sit on the left. Letterboxed trailers are never zoomed or cropped.
+  - Two rails visible at once; the rail you're on stays in place and the rest scroll under it. Continue Watching shows wide cards with a progress bar.
+  - **Keyboard:** arrows move, Enter opens, Esc goes back. Up from the first rail makes the featured trailer fullscreen with sound; Left/Right changes the featured movie. Esc on the home screen opens a menu: Exit Big Picture / Settings / Quit.
+  - Xbox controller support is next.
+- **Big Picture button** (TV icon) in the regular app bar to switch back in.
+- **Featured info no longer floats mid-screen** in the regular layout — it's on the left, like the Roku.
+
 ## 0.4.2 - 2026-09-24
 - **Updates install silently on Windows** — no more black command window that hangs until you press Ctrl+C. The app closes, updates in the background, reopens itself, and cleans up the downloaded files.
 - **Heads-up for THIS update only:** it's still installed by the old updater, so the black window may appear one last time — press Ctrl+C in it and the update finishes. Every update after this one is silent.

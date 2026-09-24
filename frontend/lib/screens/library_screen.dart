@@ -7,6 +7,7 @@ import '../services/cast_controller.dart';
 import '../services/fullscreen.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
+import 'big_picture/big_picture_screen.dart';
 import 'cast_picker.dart';
 import 'home_widgets.dart';
 import 'remote_screen.dart';
@@ -77,7 +78,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       child: InkWell(
         onTap: () => showDialog(
           context: context,
-          builder: (_) => _UpdateDialog(baseUrl: widget.baseUrl, info: u),
+          builder: (_) => UpdateDialog(baseUrl: widget.baseUrl, info: u),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 6, 10),
@@ -141,6 +142,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
             tooltip: 'Search',
             icon: const Icon(Icons.search, color: NasColors.muted),
           ),
+          if (isDesktop)
+            IconButton(
+              onPressed: () => Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => BigPictureScreen(baseUrl: widget.baseUrl),
+                  settings: const RouteSettings(name: 'library'),
+                ),
+              ),
+              tooltip: 'Big Picture',
+              icon: const Icon(Icons.tv, color: NasColors.muted),
+            ),
           if (isDesktop)
             IconButton(
               onPressed: toggleFullscreen,
@@ -318,17 +330,17 @@ class _Message extends StatelessWidget {
 }
 
 /// Update prompt: shows the changelog + size, downloads with progress, installs.
-class _UpdateDialog extends StatefulWidget {
-  const _UpdateDialog({required this.baseUrl, required this.info});
+class UpdateDialog extends StatefulWidget {
+  const UpdateDialog({super.key, required this.baseUrl, required this.info});
 
   final String baseUrl;
   final UpdateInfo info;
 
   @override
-  State<_UpdateDialog> createState() => _UpdateDialogState();
+  State<UpdateDialog> createState() => UpdateDialogState();
 }
 
-class _UpdateDialogState extends State<_UpdateDialog> {
+class UpdateDialogState extends State<UpdateDialog> {
   double? _progress;
   bool _busy = false;
   String? _error;
@@ -413,6 +425,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           child: const Text('Later', style: TextStyle(color: NasColors.muted)),
         ),
         TextButton(
+          autofocus: true, // big picture: Enter installs straight away
           onPressed: _busy ? null : _start,
           child: Text(_busy ? 'Downloading…' : 'Download & install',
               style: const TextStyle(color: NasColors.amber)),

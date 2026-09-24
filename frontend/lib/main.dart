@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import 'screens/big_picture/big_picture_screen.dart';
 import 'screens/library_screen.dart';
 import 'services/api_service.dart';
+import 'services/big_picture_prefs.dart';
 import 'services/cast_controller.dart';
 import 'services/fullscreen.dart';
 import 'services/server_config.dart';
@@ -95,10 +97,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
     try {
       await ApiService(url).health(); // validate reachability
       await _config.set(url);
+      final bigPicture = await startInBigPicture();
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => LibraryScreen(baseUrl: url),
+          builder: (_) => bigPicture
+              ? BigPictureScreen(baseUrl: url)
+              : LibraryScreen(baseUrl: url),
           // Named so the cast remote can pop straight back to the library.
           settings: const RouteSettings(name: 'library'),
         ),
