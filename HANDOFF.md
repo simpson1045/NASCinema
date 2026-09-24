@@ -74,8 +74,20 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   (resume_position s / runtime min), other rails 200x300 posters. **This is the
   design source of truth for big picture mode** — and the ELKO hero's
   centered info column is wrong: info goes left, like here.
-  Polish noted: overview text runs into the picture's center on bright backdrops
-  (narrow it / strengthen the left scrim). Roku dev password was reset Sept 24.
+  Roku dev password was reset Sept 24. **Roku zips go to the Mac's
+  `~/Downloads/NASCinema-roku.zip`** (not ELKO — input switching).
+- **Trailer letterbox handling (Roku 0.1.6, Matt: fullscreen "looks right") ✅.**
+  Zooming trailers was REJECTED (chops titles/text) — never zoom or crop. Server
+  measures each trailer's bars once (ffmpeg cropdetect → `<id>.bars.json`,
+  `trailer_bars {top,bottom}` as fractions of a 16:9 screen, in `/api/home`
+  featured items; short clips sampled from 15%, implausible readings = 0). Home:
+  trailer slides up by its top bar, bottom lands under the rails. Fullscreen:
+  centered, bars top and bottom. Black rect behind every playing trailer;
+  backdrop hidden while it plays. Rails use RowList `fixedFocus` (focused rail
+  stays in the top slot; floatingFocus left it half off-screen). Overview 760px
+  wide over a darker left gradient (`home_scrim2.png`). Unexplained once: a
+  Goblet of Fire trailer shown shrunk with side bars during the 0.1.4 slide — not
+  seen since the fullscreen slide was removed.
 
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct
