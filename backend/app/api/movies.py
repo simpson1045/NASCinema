@@ -22,7 +22,14 @@ from ..metadata import get_movie_logo, get_movie_videos
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
 from ..scanner import backfill_ratings, reprobe, scan
-from ..trailers import clear_trailer, ensure_trailer, is_cached, trailer_version
+from ..trailers import (
+    clear_trailer,
+    ensure_trailer,
+    is_cached,
+    measure_bars,
+    trailer_bars,
+    trailer_version,
+)
 
 router = APIRouter(prefix="/api", tags=["library"])
 
@@ -181,6 +188,11 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
         # The banner only plays a trailer that's already cached — never waits on a
         # cold download (which would hang the video while it pulls).
         item["trailer_ready"] = is_cached(m.id)
+        # Letterbox bars baked into the trailer ({"top","bottom"} fractions), so
+        # the TV can slide it instead of cropping; measured once in the background.
+        item["trailer_bars"] = trailer_bars(m.id)
+        if item["trailer_ready"] and item["trailer_bars"] is None:
+            asyncio.create_task(measure_bars(m.id))
         featured.append(item)
         # Warm the trailer cache in the background so it's ready when scrolled to.
         if (m.tmdb_id or m.trailer_youtube) and not is_cached(m.id):

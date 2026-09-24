@@ -139,6 +139,14 @@ sub playTrailer()
     vc = createObject("roSGNode", "ContentNode")
     vc.url = base + turl
     vc.streamFormat = "mkv"
+    ' Slide (never zoom) a letterboxed trailer up so its top bar is off-screen:
+    ' the picture starts at the top edge and the bottom bar lands under the
+    ' scrim. trailer_bars is measured by the server; missing = full-frame.
+    shift = 0
+    if it.trailer_bars <> invalid and it.trailer_bars.top <> invalid then
+        shift = Int(it.trailer_bars.top * 1080)
+    end if
+    m.trailer.translation = [0, -shift]
     m.trailer.content = vc
     m.trailer.mute = not m.activeState   ' audio only when the hero is active
     ' Stay hidden (backdrop showing) until real frames flow — see onTrailerState.

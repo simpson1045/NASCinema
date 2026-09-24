@@ -143,6 +143,7 @@ def _probe_sync(path: Path) -> dict | None:
         br = size * 8 / dur
     return {
         "height": int((v or {}).get("height") or 0),
+        "width": int((v or {}).get("width") or 0),
         "bitrate": br,
         "audio_codec": (a or {}).get("codec_name"),
         "channels": int((a or {}).get("channels") or 0),
@@ -277,9 +278,98 @@ async def ensure_trailer(
                 # bitstreams to the Denon.
                 if info and not _audio_ok(info):
                     await _to_ac3(movie_id)
+                asyncio.create_task(measure_bars(movie_id))
                 return trailer_file(movie_id)
     return None
 
 
 async def _probe(path: Path) -> dict | None:
     return await asyncio.to_thread(_probe_sync, path)
+
+
+# --- Letterbox detection -----------------------------------------------------
+# Many trailers are 2.39:1 with black bars baked into a 16:9 frame. The TV never
+# zooms or crops a trailer; it slides the video up so the top bar goes off-screen
+# and the bottom bar sits under its own gradient. For that it needs the bar
+# sizes, measured once per cached file with ffmpeg's cropdetect and kept in a
+# <id>.bars.json sidecar tagged with the trailer's version (mtime).
+
+_bars_pending: set[int] = set()
+_bars_sem = asyncio.Semaphore(1)
+_CROP_TOKEN = "crop="
+
+
+def _bars_file(movie_id: int) -> Path:
+    return trailers_dir() / f"{movie_id}.bars.json"
+
+
+def trailer_bars(movie_id: int) -> dict | None:
+    """{"top", "bottom"} bar heights as fractions of the frame height, or None if
+    the current trailer file hasn't been measured yet."""
+    try:
+        data = json.loads(_bars_file(movie_id).read_text())
+    except (OSError, ValueError):
+        return None
+    if data.get("version") != trailer_version(movie_id):
+        return None
+    return {"top": data.get("top", 0.0), "bottom": data.get("bottom", 0.0)}
+
+
+def _cropdetect_sync(path: Path) -> dict | None:
+    ff = ffmpeg_path()
+    info = _probe_sync(path)
+    if not ff or not info or not info["height"] or not info["width"]:
+        return None
+    width, height = info["width"], info["height"]
+    # Skip the first 20 s (studio logos on black), sample 30 s. reset=0 keeps
+    # growing the box to cover every non-black pixel seen, so a bright scene
+    # anywhere in the window defines the true picture edges.
+    for start in ("20", "0"):
+        args = [
+            ff, "-hide_banner", "-nostats", "-ss", start, "-i", str(path),
+            "-t", "30", "-an", "-sn",
+            "-vf", "cropdetect=limit=24:round=2:reset=0", "-f", "null", "-",
+        ]
+        try:
+            proc = subprocess.run(
+                args, capture_output=True, text=True, timeout=120, creationflags=_LOWPRI
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+        crops = [ln for ln in proc.stderr.splitlines() if _CROP_TOKEN in ln]
+        if crops:
+            break
+    else:
+        return None
+    try:
+        _w, h, _x, y = (int(v) for v in crops[-1].rsplit(_CROP_TOKEN, 1)[1].split()[0].split(":"))
+    except ValueError:
+        return None
+    # Measure against the 16:9 screen the TV shows it on: a 1920x800 file gets
+    # bars from the player itself, on top of any baked into the picture.
+    scale = min(16 / width, 9 / height)
+    pad = (9 - height * scale) / 2
+    top = max(0.0, (pad + y * scale) / 9)
+    bottom = max(0.0, (pad + (height - y - h) * scale) / 9)
+    # Under 2% is encoder noise / a thin edge, not a letterbox.
+    return {
+        "top": round(top, 4) if top >= 0.02 else 0.0,
+        "bottom": round(bottom, 4) if bottom >= 0.02 else 0.0,
+    }
+
+
+async def measure_bars(movie_id: int) -> None:
+    """Measure + cache the current trailer's letterbox bars (no-op if done)."""
+    if movie_id in _bars_pending or not is_cached(movie_id):
+        return
+    if trailer_bars(movie_id) is not None:
+        return
+    _bars_pending.add(movie_id)
+    try:
+        async with _bars_sem:
+            version = trailer_version(movie_id)
+            bars = await asyncio.to_thread(_cropdetect_sync, trailer_file(movie_id))
+            if bars is not None and version == trailer_version(movie_id):
+                _bars_file(movie_id).write_text(json.dumps({"version": version, **bars}))
+    finally:
+        _bars_pending.discard(movie_id)

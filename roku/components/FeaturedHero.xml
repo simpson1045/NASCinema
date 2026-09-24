@@ -3,8 +3,7 @@
      ratings/quality, with paging dots. It always fills the whole 1920x1080 behind
      the home screen (Netflix-style): on home, `homeScrim` fades it into the rails
      at the bottom and darkens the left for the logo + overview; focused, it goes
-     fullscreen with the info in the lower-left. The trailer is scaled up a touch
-     so the black bars baked into 2.39:1 trailers fall off-screen. Transitions
+     fullscreen with the info in the lower-left. Transitions
      fade through `fader` (a black overlay), which covers the video plane that
      ignores opacity. Trailer plays muted while idle; audio comes on when `active`. -->
 <component name="FeaturedHero" extends="Group">
@@ -23,15 +22,15 @@
     <Group id="content">
       <Poster id="backdrop" width="1920" height="1080"
           loadDisplayMode="scaleToFill" />
-      <!-- 1.15x, shifted so a 2.39:1 trailer's top bar (rows 0-138 of its 1080
-           frame) lands above the screen; the bottom bar sits under the scrim.
-           16:9 trailers just lose ~7% off each edge. -->
-      <Video id="trailer" width="2208" height="1242" translation="[-144,-159]"
+      <!-- Never zoomed or cropped (that chopped titles/text off). A letterboxed
+           trailer is slid up by its top bar (playTrailer, from the server's
+           trailer_bars) so the picture starts at the screen's top edge. -->
+      <Video id="trailer" width="1920" height="1080"
           mute="true" visible="false" enableUI="false" />
       <!-- Home: fade into the rails + darken the left. Fullscreen: the original
            lower-left scrim. Only one is visible at a time (setMode). -->
       <Poster id="homeScrim" width="1920" height="1080" loadDisplayMode="scaleToFill"
-          uri="pkg:/images/home_scrim1.png" />
+          uri="pkg:/images/home_scrim2.png" />
       <Poster id="scrim" width="1920" height="1080" loadDisplayMode="scaleToFill"
           uri="pkg:/images/hero_scrim.png" visible="false" />
       <Poster id="logo" translation="[90,110]" width="520" height="150"
@@ -42,7 +41,7 @@
            quality, laid out left-to-right. itemSpacings is set in code. -->
       <LayoutGroup id="meta" translation="[92,288]" layoutDirection="horiz"
           vertAlignment="center" />
-      <Label id="overview" translation="[92,338]" width="860" wrap="true"
+      <Label id="overview" translation="[92,338]" width="760" wrap="true"
           maxLines="3" lineSpacing="4" color="0xDDE2F5FF"
           font="font:SmallSystemFont" />
     </Group>
