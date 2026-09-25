@@ -12,6 +12,7 @@ import 'services/fullscreen.dart';
 import 'services/gamepad/pad_dispatch.dart';
 import 'services/server_config.dart';
 import 'theme/app_theme.dart';
+import 'widgets/cursor_auto_hide.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +45,8 @@ class NasCinemaApp extends StatelessWidget {
         title: 'NASCinema',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,
+        // Cursor hides while the controller/keyboard drives the app.
+        builder: (_, child) => CursorAutoHide(child: child!),
         home: const ConnectScreen(),
       ),
     );

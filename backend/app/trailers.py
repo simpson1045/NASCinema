@@ -204,7 +204,7 @@ async def _download(movie_id: int, key: str) -> bool:
     fmt = f"bv*{v}+ba[ext=m4a]/bv*{v}+ba/b{v}"
     args = [
         ytdlp, "--ignore-config",
-        "-f", fmt, "-S", "res,br",
+        "-f", fmt, "-S", "lang,res,br",
         "--no-playlist",
         "--merge-output-format", "mkv", "--remux-video", "mkv",
         "-o", str(trailers_dir() / f"{movie_id}.%(ext)s"),
