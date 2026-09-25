@@ -3,7 +3,7 @@
 *Last updated: 2026-09-24. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.5.4+20 (installed on ELKO Sept 25).*
+actually are and what's next." Current version: **v0.5.5+21 published; ELKO on 0.5.4 (Sept 25).*
 
 ---
 
@@ -177,6 +177,25 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
 - Trailer backfill for all movies running (`/tmp/alltrailers.py` in the
   container); after it finishes: home hero picks featured from ALL movies with
   a cached trailer (needs a backend deploy = restart, so wait).
+
+- **Trailer identity audit (Sept 25) ✅.** YouTube-search picks put WRONG
+  content in the hero (Sorcerer's Stone = the HBO Max series teaser; Jurassic
+  World = Dominion; Ride Along = a lowrider car show; fan frames, burned-in
+  subs, SBS 3D, someone filming their TV). Auto picks are now OFFICIAL ONLY
+  (manual + TMDB list; best that clears the bar, else best official 1080p+,
+  else backdrop); `search_offers()` is for a human-verified hunt — pull frames
+  and LOOK before pinning. Every trailer has `<id>.source.json`. Audit: 67
+  matched an official trailer by length, 85 suspects frame-reviewed by Claude
+  (68 fine, 17 bad -> replaced with official; Bruce Almighty + Django have no
+  watchable official = backdrop). Sorcerer's Stone: title renamed to US, US
+  poster (/lz1qjw1wDbE2Kj76iTXpGKQSPKD.jpg), genuine trailer q4ist4jH6uU;
+  Chamber pinned to oQtgBqXMgv0 (both are SD originals upscaled — no real HD
+  exists; idea: build previews from the movie's own 4K file). Frame-check
+  recipe: yt-dlp -g + ffmpeg -ss 30/60/90 -> hstack strips -> transfer to
+  ALPINE D:\Temp -> Read the jpgs. 20 movies carry old .none.json markers
+  (expire in 7 days). 0.5.5 published (one persistent hero trailer player =
+  crash fix; hero follows highlighted movie); not yet installed on ELKO —
+  it's the first real test of the NASRadio updater.
 
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct
