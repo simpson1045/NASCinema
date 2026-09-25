@@ -54,7 +54,14 @@ class TrailerPlayer {
     }
     final player = Player();
     _player = player;
-    _controller = VideoController(player);
+    // Software decoding: every trailer showed a dotted patch in the middle
+    // every few frames on ELKO (RTX 3070) while the files decode clean on the
+    // NAS — hardware VP9 decode is the suspect. Trailers are small; the CPU
+    // handles 4K VP9 easily. (Movies use the separate mpv renderer.)
+    _controller = VideoController(
+      player,
+      configuration: const VideoControllerConfiguration(hwdec: 'no'),
+    );
     _subs.add(player.stream.completed.listen((done) {
       if (done && _active) {
         _active = false;

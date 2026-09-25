@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.6 - 2026-09-25
+- **Trailers decode in software** to get rid of the dotted patch that flickered in the middle of every trailer (the graphics card's video decoder is the suspect). Movies are unaffected.
+- Trailers across the library were checked: wrong ones (other movies, TV teasers, fan edits, foreign dubs) were replaced with official English trailers. Terminator 2 now has its original 1991 trailer.
+
 ## 0.5.5 - 2026-09-25
 - **Fixed the crash when flipping through trailers** — the featured area now keeps one video player instead of creating and destroying one per trailer.
 - **The top of the screen follows what you highlight** — as you move through the rows, the backdrop, title and (after a moment) the trailer switch to the highlighted movie. Press Up to get back to the featured rotation.
