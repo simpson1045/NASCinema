@@ -388,8 +388,8 @@ def _search_keys_sync(title: str, year: int | None) -> list[str]:
 
 async def _ranked_offers(tmdb_id: int | None, override: str | None) -> list[dict]:
     """OFFICIAL candidates only — the manual pick and TMDB's trailer list for
-    this exact movie — probed and sorted sharpest first (a manual pick wins
-    unless another is clearly better). YouTube search is NOT used here: an
+    this exact movie — probed and sorted: the manual pick first, then
+    sharpest first. YouTube search is NOT used here: an
     upload's title proves nothing (Chamber of Secrets got the HBO series
     teaser titled "Chamber of Secrets 2002 Trailer 4K"). Search results are
     for a human-verified hunt only (search_offers)."""
@@ -404,9 +404,10 @@ async def _ranked_offers(tmdb_id: int | None, override: str | None) -> list[dict
     offers = [o for o in await asyncio.gather(
         *(asyncio.to_thread(_offer_sync, k) for k in unique)) if o]
 
+    # A manual pick is Matt's explicit choice: it always goes first (a 4K
+    # re-release trailer must not beat the original he pinned).
     def score(o: dict) -> tuple:
-        bonus = 1.5 if o["key"] == manual else 1.0
-        return (o["height"], o["kbps"] * bonus)
+        return (o["key"] == manual, o["height"], o["kbps"])
 
     return sorted(offers, key=score, reverse=True)
 
