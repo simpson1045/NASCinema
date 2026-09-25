@@ -127,8 +127,8 @@ class UpdateService {
 
   /// Apply the downloaded update.
   /// - Android: hand the APK to the system installer.
-  /// - Windows: extract the zip, write a script that waits for the exe to
-  ///   release its locks, robocopies the new files in, and relaunches.
+  /// - Windows: extract, hand off to an update script (robocopy with
+  ///   retries), relaunch — see [_applyWindowsUpdate].
   static Future<void> applyUpdate(String filePath) async {
     if (Platform.isAndroid) {
       await OpenFilex.open(filePath);
@@ -137,79 +137,138 @@ class UpdateService {
     }
   }
 
+  /// Lifted verbatim (names aside) from NASRadio's updater, which already
+  /// updates on Matt's machines. NASCinema's earlier copies (a detached
+  /// .bat, then a PowerShell helper, then conhost --headless) all failed on
+  /// ELKO for the reason NASRadio's comments below record: a console-less
+  /// child can't run the script. Keep the two apps in sync.
+  /// Windows-specific update: extract zip, write batch script, relaunch.
+  ///
+  /// The hard part of a Windows in-place update is overwriting the
+  /// running .exe and its locked DLLs. Windows holds an exclusive
+  /// lock on a running executable, so any copy attempt before the
+  /// process has fully released its handles silently skips those
+  /// files — and the restart launches the OLD binary unchanged
+  /// (which is exactly the "update banner stays after install" bug
+  /// Matt was hitting).
+  ///
+  /// The old script used `xcopy /Y` with a 2-second `timeout` before
+  /// the copy. That was too short on a typical desktop with audio
+  /// services + several Flutter plugin DLLs to tear down, and
+  /// xcopy's exit code doesn't reliably surface "couldn't open
+  /// destination" — it returned 0 and the restart launched the
+  /// stale build. Replaced with `robocopy /R:30 /W:1` (30 retries,
+  /// 1s wait — handles transient locks for up to 30s), a longer
+  /// initial wait, and a log file so the next "update didn't take"
+  /// can be diagnosed by looking at %TEMP%\\nascinema-update.log.
   static Future<void> _applyWindowsUpdate(String zipPath) async {
     final exePath = Platform.resolvedExecutable;
     final installDir = File(exePath).parent.path;
     final tempDir = (await getTemporaryDirectory()).path;
     final extractDir = '$tempDir\\nascinema-update-extracted';
 
-    // Extract the zip.
-    final archive = ZipDecoder().decodeBytes(await File(zipPath).readAsBytes());
-    final extractObj = Directory(extractDir);
-    if (await extractObj.exists()) await extractObj.delete(recursive: true);
-    await extractObj.create(recursive: true);
-    for (final f in archive) {
-      final outPath = '$extractDir\\${f.name}';
-      if (f.isFile) {
-        final out = File(outPath);
-        await out.parent.create(recursive: true);
-        await out.writeAsBytes(f.content as List<int>);
+    // Extract zip
+    final zipBytes = await File(zipPath).readAsBytes();
+    final archive = ZipDecoder().decodeBytes(zipBytes);
+
+    final extractDirObj = Directory(extractDir);
+    if (await extractDirObj.exists()) {
+      await extractDirObj.delete(recursive: true);
+    }
+    await extractDirObj.create(recursive: true);
+
+    for (final file in archive) {
+      final outPath = '$extractDir\\${file.name}';
+      if (file.isFile) {
+        final outFile = File(outPath);
+        await outFile.parent.create(recursive: true);
+        await outFile.writeAsBytes(file.content as List<int>);
       } else {
         await Directory(outPath).create(recursive: true);
       }
     }
 
-    // Hand off to a hidden PowerShell helper that waits for this process to
-    // exit (a running .exe holds an exclusive lock), copies the new files in,
-    // relaunches, and cleans up. It used to be a .bat, but a detached cmd has
-    // no console: every console tool it ran (tasklist/find) opened its own
-    // window and `find` sat reading that window's keyboard until Ctrl+C.
-    // PowerShell needs no console, and robocopy runs with a hidden window.
-    final ps1Path = '$tempDir\\nascinema-update.ps1';
-    String psq(String s) => "'${s.replaceAll("'", "''")}'";
-    final vars = [
-      '\$AppPid = $pid',
-      '\$Exe = ${psq(exePath)}',
-      '\$InstallDir = ${psq(installDir)}',
-      '\$Extract = ${psq(extractDir)}',
-      '\$Zip = ${psq(zipPath)}',
-      '\$LogPath = ${psq('$tempDir\\nascinema-update.log')}',
-    ].join('\r\n');
-    const body = r'''
-function Log($m) { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format s)  $m" }
-Set-Content -LiteralPath $LogPath -Value "=== NASCinema update started $(Get-Date -Format s) ==="
-Wait-Process -Id $AppPid -Timeout 30 -ErrorAction SilentlyContinue
-Log "app exited; copying"
-# robocopy /R:30 /W:1 rides out transient locks; exit codes >= 8 are failures.
-$rcArgs = @("`"$Extract`"", "`"$InstallDir`"", '/E', '/NFL', '/NDL', '/NP', '/R:30', '/W:1', "/LOG+:`"$LogPath`"")
-$p = Start-Process robocopy -ArgumentList $rcArgs -WindowStyle Hidden -Wait -PassThru
-if ($p.ExitCode -lt 8) { Log "=== UPDATE OK (robocopy $($p.ExitCode)) ===" } else { Log "=== UPDATE FAILED (robocopy $($p.ExitCode)) ===" }
-Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
-Remove-Item -LiteralPath $Extract -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+    // Write update batch script.
+    //
+    // robocopy notes:
+    //   /E  — copy subdirs including empty
+    //   /NFL /NDL /NP — suppress per-file/dir/percent spam in the log
+    //   /R:30 /W:1 — 30 retries with 1s between (handles "running
+    //                exe still has the .exe file locked" by simply
+    //                waiting it out; total worst-case wait ~30s)
+    //   /XF nascinema-update.bat nascinema-update.log — don't try to
+    //                copy our own running script/log over itself
+    // robocopy exit codes 0..7 are success (0=nothing copied, 1=files
+    // copied OK, 2-7=harmless extras); 8+ are real errors. The bat
+    // checks `if errorlevel 8` so a partial-failure surfaces.
+    final batPath = '$tempDir\\nascinema-update.bat';
+    final logPath = '$tempDir\\nascinema-update.log';
+    final exeName = File(exePath).uri.pathSegments.last;
+    final batContent = '''@echo off
+setlocal enabledelayedexpansion
+echo === NASCinema update started at %DATE% %TIME% === > "$logPath"
+echo Updating NASCinema...
+echo Waiting for nascinema.exe to fully exit and release file locks...
+echo Wait phase starting >> "$logPath"
+REM Poll for the process exiting. tasklist is cheap (~10ms) and lets
+REM us proceed the instant the lock is released instead of guessing
+REM with a fixed sleep. Cap at 30s so a wedged process can't hang
+REM the update forever.
+set /a _waited=0
+:wait_for_exit
+tasklist /FI "IMAGENAME eq $exeName" 2>nul | find /I "$exeName" >nul
+if errorlevel 1 goto exit_done
+if !_waited! GEQ 30 goto exit_timeout
+timeout /t 1 /nobreak >nul
+set /a _waited+=1
+goto wait_for_exit
+:exit_timeout
+echo WARN: $exeName still running after 30s, attempting copy anyway >> "$logPath"
+:exit_done
+echo Exit-wait done after !_waited!s >> "$logPath"
+
+echo Copying new files from "$extractDir" to "$installDir" ...
+echo robocopy starting >> "$logPath"
+robocopy "$extractDir" "$installDir" /E /NFL /NDL /NP /R:30 /W:1 ^
+  /XF "nascinema-update.bat" "nascinema-update.log" >> "$logPath" 2>&1
+set _rc=!errorlevel!
+echo robocopy exit code: !_rc! >> "$logPath"
+
+REM robocopy: 0..7 success, 8+ failure.
+if !_rc! GEQ 8 (
+  echo === UPDATE FAILED — see "$logPath" === >> "$logPath"
+  echo NASCinema update FAILED — see "$logPath" for details.
+  echo Press any key to close...
+  pause >nul
+  goto cleanup
+)
+
+echo === UPDATE OK === >> "$logPath"
+echo Launching updated NASCinema...
+start "" "$installDir\\$exeName"
+
+:cleanup
+rmdir /S /Q "$extractDir" 2>nul
+REM Intentionally NOT deleting "$logPath" — kept so the user can
+REM inspect the most recent update attempt if anything looked off.
+del "$batPath"
 ''';
 
-    await File(ps1Path).writeAsString('$vars\r\n$body');
-    // Through `conhost --headless`: Dart's detached mode starts the child with
-    // NO console, and powershell.exe silently exits without one — the 0.4.2
-    // helper never ran (verified on ELKO: detached = didn't run, conhost
-    // --headless = ran). conhost gives it a hidden console; nothing shows.
+    await File(batPath).writeAsString(batContent);
+
+    // Launch the batch script through `start` so it gets a REAL console.
+    // ProcessStartMode.detached spawns cmd console-less, and in that
+    // state the script's `tasklist | find` pipeline wedges forever —
+    // find never sees EOF, the window sits empty until the user
+    // Ctrl+C's it (which killed find, faked "app exited", and let the
+    // update proceed — the bug every desktop update showed for months).
+    // `start` allocates a fresh console: pipelines work, the user can
+    // actually see the progress echoes, and the window closes itself.
     await Process.start(
-        'conhost.exe',
-        [
-          '--headless',
-          'powershell',
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-WindowStyle',
-          'Hidden',
-          '-File',
-          ps1Path,
-        ],
-        mode: ProcessStartMode.detached);
+      'cmd',
+      ['/c', 'start', 'NASCinema Update', 'cmd', '/c', batPath],
+      mode: ProcessStartMode.detached,
+    );
     exit(0);
   }
 }

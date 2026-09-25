@@ -3,7 +3,7 @@
 *Last updated: 2026-09-24. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.5.2+18 (installed on ELKO Sept 25).*
+actually are and what's next." Current version: **v0.5.4+20 (installed on ELKO Sept 25).*
 
 ---
 
@@ -154,7 +154,15 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   (3) then step 2: Xbox controller. Later: series/franchise pages (TMDB
   collection_id is stored; Marvel/DC/Star Wars need companies/keywords + manual).
 
-- **UPDATER WAS BROKEN 0.4.2 -> 0.5.1; fixed in 0.5.2 (Sept 25).** Dart's
+- **UPDATER (final, 0.5.4): NASRadio's updater lifted verbatim** — `cmd /c start
+  "NASCinema Update" cmd /c <bat>` (start gives the bat a REAL console; robocopy
+  /R:30 /W:1; log %TEMP%\nascinema-update.log). 0.5.2's conhost --headless ALSO
+  failed from the GUI app (it only worked from a console parent in my test), and
+  an in-process rename-swap was built then dropped for the proven code. ELKO
+  hand-installed to 0.5.4 (backups renderer.bak-0.4.2 / .bak-0.5.2). The NEXT
+  release is the first real in-app update test. LESSON: check NASRadio/KYLIE
+  before writing app infrastructure.
+- (history) **UPDATER WAS BROKEN 0.4.2 -> 0.5.1; 0.5.2's fix didn't hold.** Dart's
   detached Process.start gives the child NO console and powershell.exe exits
   instantly — the helper never ran, the app just closed ("crashed") on every
   update, so ELKO sat on 0.4.2 and never got big picture. Verified on ELKO via

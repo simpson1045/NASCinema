@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.4 - 2026-09-25
+- **Updates install for real now** — NASCinema uses NASRadio's proven updater. When you update, a small "NASCinema Update" window shows progress, closes itself, and the new version opens.
+- Includes 0.5.3: the new Big Picture movie page with in-app trailers and playable extras, and right-stick scrolling.
+
 ## 0.5.3 - 2026-09-25
 - **New Big Picture movie page** — full backdrop, logo, ratings and description, big **Play / Resume** and **Trailer** buttons (the trailer plays right here, fullscreen), and the movie's **extras** as a row you can play. Left/Right move, Up/Down switch between the buttons and the extras, A plays, B goes back.
 - **Extras play** — they used to say "coming soon".
