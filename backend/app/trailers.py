@@ -353,13 +353,20 @@ def _names_this_movie(name: list[str], title: list[str]) -> bool:
 def _search_keys_sync(title: str, year: int | None) -> list[str]:
     """YouTube search for the movie's trailer, filtered to plausible official
     uploads: trailer-length, the title in the name, no reactions/reviews."""
-    q = f"{title} {year or ''} official trailer 4K".strip()
-    data = _ytdlp_json(f"ytsearch{_SEARCH_RESULTS}:{q}", flat=True)
-    if not data:
-        return []
+    # One search's top 10 misses a lot (Chamber of Secrets' 4K uploads never
+    # made it), so a few phrasings are merged.
+    queries = [
+        f"{title} {year or ''} official trailer 4K",
+        f"{title} trailer 4K",
+        f"{title} {year or ''} trailer",
+    ]
+    entries: list[dict] = []
+    for q in queries:
+        data = _ytdlp_json(f"ytsearch{_SEARCH_RESULTS}:{' '.join(q.split())}", flat=True)
+        entries += (data or {}).get("entries") or []
     want = _words(title)
     keys = []
-    for e in data.get("entries") or []:
+    for e in entries:
         name = (e.get("title") or "").lower()
         dur = e.get("duration") or 0
         if not e.get("id") or not (45 <= dur <= 300):
