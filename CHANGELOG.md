@@ -2,6 +2,9 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.7 - 2026-09-25
+- **Correct quality labels.** Widescreen movies stored without their black bars (1920x800) showed "720p" and 4K ones (3840x1600) showed "1080p" — about half the library. Labels now go by the real picture size.
+
 ## 0.5.6 - 2026-09-25
 - **Trailers decode in software** to get rid of the dotted patch that flickered in the middle of every trailer (the graphics card's video decoder is the suspect). Movies are unaffected.
 - Trailers across the library were checked: wrong ones (other movies, TV teasers, fan edits, foreign dubs) were replaced with official English trailers. Terminator 2 now has its original 1991 trailer.
