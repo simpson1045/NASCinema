@@ -1,13 +1,50 @@
 # NASCinema — Handoff (honest current state)
 
-*Last updated: 2026-09-24. This is the truthful state of the project for the next
+*Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.5.5+21 published; ELKO on 0.5.4 (Sept 25).*
+actually are and what's next." Current version: **v0.5.7+23 published (in-app updater); ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest session (2026-09-24) — NAS backend committed, public domain restored, release pipeline fixed
+## Latest session (2026-09-25, late) — trailer decode, quality labels, trailer identity
+
+**Shipped:**
+- **0.5.6+22 — trailers decode in software** (`hero_trailer_native.dart`,
+  `hwdec: 'no'`). Matt saw a dotted "golf ball" patch mid-frame every few
+  frames on ELKO (RTX 3070); the cached files decode clean on the NAS, so
+  hardware VP9 decode is the suspect. **Awaiting Matt's check** — if it
+  persists, look at the texture handoff next.
+- **0.5.7+23 + Roku 0.1.7 — quality labels judged by 16:9-equivalent lines**
+  (`max(h, w*9/16)`), not raw height. Cropped scope files (1920x816) showed
+  "720p"; 102/210 files were mislabeled. Same `_lines()` fix in the trailer
+  quality bar (it was rejecting cropped widescreen trailers). Test:
+  `frontend/test/quality_badge_test.dart`.
+- **Manual trailer pick always wins** (`1d03173`) — T2's 4K re-release
+  trailer was beating the pinned original.
+- **Library quality/YIFY report** for the other Claude:
+  `D:\Temp\library_quality.json` on ALPINE (near-full rebuild territory).
+
+**Trailer hunt (manual pins, frames checked by eye + audio language checked):**
+- The Running Man (id 224) → `b6rbNlkWscI` (4K Cinema Trailer, English). The
+  old one was German audio — frame checks can't catch audio; always check
+  the audio language on search finds.
+- European Vacation (id 148) → `A3OzNWTU2h4` (Trailer World, clean digital).
+  The old one was a dusty 35mm print scan with rounded corners.
+- `_fetch` now records `"pinned": true` / `"official": false` in
+  `<id>.source.json` for manual picks (it wrote `official: true` for
+  everything). **Code change needs a backend restart to take effect** — not
+  done; rides along with the next deploy. The two files above were corrected
+  by hand.
+
+**Still open:** 13 movies on search-picked trailers (Land Before Time, Big
+Daddy, Big Fat Liar, Coming to America, Home Alone 2, Lethal Weapon 2 & 3,
+Miracle on 34th St, Christmas Vacation, Osmosis Jones, Space Jam, Santa
+Clause 2, Waterboy) — worth an audio-language re-check; Bruce Almighty +
+Django are backdrop-only; 20 stale `.none.json` markers; 6 unprobed files
+(DH1, DH2, HBP, PoA, two Blue Collar specials). Nothing pushed to GitHub.
+
+## Session (2026-09-24) — NAS backend committed, public domain restored, release pipeline fixed
 
 **Direction (Matt, Sept 24 — supersedes the Sept 13 "Roku primary, lossy OK"):**
 Matt is switching back from Jellyfin to NASCinema for real (JF desktop has HDR

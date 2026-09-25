@@ -475,7 +475,8 @@ async def ensure_trailer(
             # The manual pick always gets a turn, even if it ranked lower.
             tries += [o for o in offers[_MAX_CANDIDATES + 1:] if o["key"] == manual]
             for offer in tries:
-                if await _fetch(movie_id, offer, require_bar=offer["key"] != manual):
+                pinned = offer["key"] == manual
+                if await _fetch(movie_id, offer, require_bar=not pinned, pinned=pinned):
                     return trailer_file(movie_id)
             # Nothing cleared the bar: the sharpest official 1080p+ trailer.
             best = next((o for o in offers if o["height"] >= _MIN_HEIGHT), None)
@@ -485,7 +486,8 @@ async def ensure_trailer(
     return None
 
 
-async def _fetch(movie_id: int, offer: dict, require_bar: bool) -> bool:
+async def _fetch(movie_id: int, offer: dict, require_bar: bool,
+                 pinned: bool = False) -> bool:
     """Download one candidate; keep it if it passes (or the bar is waived)."""
     if not await _download(movie_id, offer["key"]):
         clear_trailer(movie_id)
@@ -502,7 +504,9 @@ async def _fetch(movie_id: int, offer: dict, require_bar: bool) -> bool:
     _source_file(movie_id).write_text(json.dumps({
         "version": trailer_version(movie_id), "key": offer["key"],
         "title": offer.get("title"), "channel": offer.get("channel"),
-        "official": True,
+        # A pin is Matt's hand-checked pick (often a search find), not
+        # necessarily from TMDB's official list — say which, for audits.
+        "official": not pinned, "pinned": pinned,
     }))
     asyncio.create_task(measure_bars(movie_id))
     return True
