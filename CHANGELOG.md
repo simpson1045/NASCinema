@@ -2,6 +2,12 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.1 - 2026-09-25
+- **Xbox controller support** in Big Picture: D-pad or left stick to move (hold to keep moving), **A** to open, **B** to go back, **Start** for the menu. Up from the first row makes the featured trailer fullscreen with sound; Left/Right there changes the movie.
+- The controller also works in menus, the update prompt and the movie page: D-pad moves between buttons, A presses, B goes back.
+- **Your library is fixed:** Jurassic World, Fallen Kingdom and Dominion are back as their own movies (they were filed under Rebirth), Deathly Hallows Part 2 is no longer filed under Part 1, and ~118 blank "Bonus Features" tiles are gone — those files are now extras on their real movies.
+- **Sharper trailers** across the library, and trailers are being fetched for every movie.
+
 ## 0.5.0 - 2026-09-24
 - **Big Picture mode** — a fullscreen TV layout built to match the Roku channel. NASCinema now opens straight into it on this PC (turn that off in Settings → Display → "Start in Big Picture").
   - The featured movie fills the whole screen with its trailer; logo, ratings and description sit on the left. Letterboxed trailers are never zoomed or cropped.

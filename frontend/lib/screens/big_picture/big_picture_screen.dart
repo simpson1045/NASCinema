@@ -6,6 +6,7 @@ import '../../models/home.dart';
 import '../../models/movie.dart';
 import '../../services/api_service.dart';
 import '../../services/fullscreen.dart';
+import '../../services/gamepad/pad_dispatch.dart';
 import '../../services/update_service.dart';
 import '../../theme/app_theme.dart';
 import '../library_screen.dart';
@@ -18,13 +19,18 @@ import 'bp_hero.dart';
 /// on a fixed 1920x1080 canvas and scaled to the screen, so positions and
 /// sizes are the Roku's exactly.
 ///
-/// Navigation is one model for keyboard now and the controller next: arrows
-/// move, Enter/Space selects, Esc/Backspace goes back. Up from the first rail
-/// focuses the hero (fullscreen, sound on); Back on home opens the menu.
+/// One navigation model for keyboard and Xbox controller: arrows / D-pad /
+/// left stick move, Enter / A selects, Esc / B goes back, Start opens the
+/// menu. Up from the first rail focuses the hero (fullscreen, sound on); Back
+/// on home opens the menu.
 class BigPictureScreen extends StatefulWidget {
-  const BigPictureScreen({super.key, required this.baseUrl});
+  const BigPictureScreen({super.key, required this.baseUrl, this.initialData});
 
   final String baseUrl;
+
+  /// Tests only: start from this home instead of fetching it from the server.
+  @visibleForTesting
+  final HomeData? initialData;
 
   @override
   State<BigPictureScreen> createState() => _BigPictureScreenState();
@@ -57,19 +63,23 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   void initState() {
     super.initState();
     setFullscreen(true);
+    PadDispatch.add(_onPad);
     _load();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
+    if (widget.initialData == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
+    }
   }
 
   @override
   void dispose() {
+    PadDispatch.remove(_onPad);
     _focus.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final data = await _api.getHome();
+      final data = widget.initialData ?? await _api.getHome();
       if (!mounted) return;
       setState(() {
         _data = data;
@@ -148,6 +158,33 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       return KeyEventResult.ignored;
     }
     return KeyEventResult.handled;
+  }
+
+  /// The controller, while big picture itself has focus (a menu, dialog or
+  /// pushed page above it gets ordinary focus navigation from PadDispatch).
+  /// D-pad/stick move, A selects, B/View back, Start opens the menu.
+  bool _onPad(PadButton b) {
+    if (!_focus.hasPrimaryFocus || _data == null) return false;
+    switch (b) {
+      case PadButton.up:
+        _up();
+      case PadButton.down:
+        _down();
+      case PadButton.left:
+        _sideways(-1);
+      case PadButton.right:
+        _sideways(1);
+      case PadButton.a:
+        _select();
+      case PadButton.b:
+      case PadButton.view:
+        _back();
+      case PadButton.start:
+        _openMenu();
+      default:
+        return false;
+    }
+    return true;
   }
 
   void _up() {

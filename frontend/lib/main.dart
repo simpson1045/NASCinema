@@ -9,6 +9,7 @@ import 'services/api_service.dart';
 import 'services/big_picture_prefs.dart';
 import 'services/cast_controller.dart';
 import 'services/fullscreen.dart';
+import 'services/gamepad/pad_dispatch.dart';
 import 'services/server_config.dart';
 import 'theme/app_theme.dart';
 
@@ -17,6 +18,7 @@ void main() async {
   await initWindowForDesktop();
   // F11 toggles borderless fullscreen anywhere in the desktop app.
   if (isDesktop) HardwareKeyboard.instance.addHandler(_handleGlobalKey);
+  PadDispatch.start(); // Xbox controller on Windows; no-op elsewhere
   runApp(const NasCinemaApp());
 }
 
