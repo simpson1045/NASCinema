@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.2 - 2026-09-25
+- **Updates actually install now.** Since 0.4.2 the app closed to update and then nothing happened — the background installer never started (Windows gave it no console, so it quit instantly). It now runs hidden and reliably: the app closes, updates, and reopens by itself.
+- Includes everything from 0.5.0 and 0.5.1: Big Picture mode, Xbox controller support, the fixed library, and sharper trailers.
+
 ## 0.5.1 - 2026-09-25
 - **Xbox controller support** in Big Picture: D-pad or left stick to move (hold to keep moving), **A** to open, **B** to go back, **Start** for the menu. Up from the first row makes the featured trailer fullscreen with sound; Left/Right there changes the movie.
 - The controller also works in menus, the update prompt and the movie page: D-pad moves between buttons, A presses, B goes back.

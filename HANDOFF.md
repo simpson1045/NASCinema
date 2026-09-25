@@ -3,7 +3,7 @@
 *Last updated: 2026-09-24. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.5.0+16 (big picture mode, published Sept 24).*
+actually are and what's next." Current version: **v0.5.2+18 (installed on ELKO Sept 25).*
 
 ---
 
@@ -153,6 +153,22 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   Remove the debug prints before committing.
   (3) then step 2: Xbox controller. Later: series/franchise pages (TMDB
   collection_id is stored; Marvel/DC/Star Wars need companies/keywords + manual).
+
+- **UPDATER WAS BROKEN 0.4.2 -> 0.5.1; fixed in 0.5.2 (Sept 25).** Dart's
+  detached Process.start gives the child NO console and powershell.exe exits
+  instantly — the helper never ran, the app just closed ("crashed") on every
+  update, so ELKO sat on 0.4.2 and never got big picture. Verified on ELKO via
+  CreateProcessW with Dart's flags (didn't run) vs `conhost.exe --headless
+  powershell ...` (ran). update_service now launches through conhost
+  --headless. ELKO bootstrapped to 0.5.2 by hand over ADMS (backup
+  `C:\NASCinema\renderer.bak-0.4.2`); future updates should self-install —
+  first real proof will be the next release. The WER "crash" at 13:51 Sept 25
+  was the queued 0.4.1 report from Sept 24, not a new one.
+- Controller (0.5.1): `lib/services/gamepad/` XInput FFI + PadDispatch; Back
+  menu verified by widget test (web-preview Back quirk is browser-only).
+- Trailer backfill for all movies running (`/tmp/alltrailers.py` in the
+  container); after it finishes: home hero picks featured from ALL movies with
+  a cached trailer (needs a backend deploy = restart, so wait).
 
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct

@@ -191,9 +191,15 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
 ''';
 
     await File(ps1Path).writeAsString('$vars\r\n$body');
+    // Through `conhost --headless`: Dart's detached mode starts the child with
+    // NO console, and powershell.exe silently exits without one — the 0.4.2
+    // helper never ran (verified on ELKO: detached = didn't run, conhost
+    // --headless = ran). conhost gives it a hidden console; nothing shows.
     await Process.start(
-        'powershell',
+        'conhost.exe',
         [
+          '--headless',
+          'powershell',
           '-NoProfile',
           '-NonInteractive',
           '-ExecutionPolicy',
