@@ -2,6 +2,11 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.3 - 2026-09-25
+- **New Big Picture movie page** — full backdrop, logo, ratings and description, big **Play / Resume** and **Trailer** buttons (the trailer plays right here, fullscreen), and the movie's **extras** as a row you can play. Left/Right move, Up/Down switch between the buttons and the extras, A plays, B goes back.
+- **Extras play** — they used to say "coming soon".
+- **Right stick scrolls** any page.
+
 ## 0.5.2 - 2026-09-25
 - **Updates actually install now.** Since 0.4.2 the app closed to update and then nothing happened — the background installer never started (Windows gave it no console, so it quit instantly). It now runs hidden and reliably: the app closes, updates, and reopens by itself.
 - Includes everything from 0.5.0 and 0.5.1: Big Picture mode, Xbox controller support, the fixed library, and sharper trailers.

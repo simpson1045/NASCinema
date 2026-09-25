@@ -82,7 +82,8 @@ class ApiService {
     }
   }
 
-  Future<({List<MovieFile> files, List<Extra> extras})> getMovieDetail(
+  Future<({List<MovieFile> files, List<Extra> extras, String? logo})>
+      getMovieDetail(
       int id) async {
     final r =
         await http.get(_u('/api/movies/$id')).timeout(const Duration(seconds: 15));
@@ -96,7 +97,7 @@ class ApiService {
     final extras = ((data['extras'] ?? []) as List)
         .map((e) => Extra.fromJson(e as Map<String, dynamic>))
         .toList();
-    return (files: files, extras: extras);
+    return (files: files, extras: extras, logo: data['logo'] as String?);
   }
 
   Future<List<Video>> getMovieVideos(int id) async {

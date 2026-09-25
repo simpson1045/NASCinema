@@ -23,6 +23,41 @@ class PadDispatch {
     _started = true;
     Gamepad.instance.start();
     Gamepad.instance.presses.listen(_dispatch);
+    Gamepad.instance.scroll.listen(_scrollPage);
+  }
+
+  /// Right stick: scroll whatever vertical list the focused page has — the
+  /// one around the focus, else the first one inside it. Up to ~1700 px/s.
+  static void _scrollPage(double v) {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    if (ctx == null) return;
+    final s = _verticalScrollable(ctx);
+    if (s == null) return;
+    final p = s.position;
+    final to = (p.pixels - v * 28).clamp(p.minScrollExtent, p.maxScrollExtent);
+    if (to != p.pixels) p.jumpTo(to);
+  }
+
+  static ScrollableState? _verticalScrollable(BuildContext ctx) {
+    bool vertical(ScrollableState s) =>
+        axisDirectionToAxis(s.axisDirection) == Axis.vertical;
+    final up = Scrollable.maybeOf(ctx);
+    if (up != null && vertical(up)) return up;
+    ScrollableState? found;
+    void visit(Element e) {
+      if (found != null) return;
+      if (e is StatefulElement && e.state is ScrollableState) {
+        final s = e.state as ScrollableState;
+        if (vertical(s)) {
+          found = s;
+          return;
+        }
+      }
+      e.visitChildren(visit);
+    }
+
+    (ctx as Element).visitChildren(visit);
+    return found;
   }
 
   static void add(PadHandler h) => _handlers.add(h);

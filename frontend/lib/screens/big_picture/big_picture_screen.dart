@@ -10,9 +10,9 @@ import '../../services/gamepad/pad_dispatch.dart';
 import '../../services/update_service.dart';
 import '../../theme/app_theme.dart';
 import '../library_screen.dart';
-import '../movie_detail_screen.dart';
 import '../settings_screen.dart';
 import 'bp_hero.dart';
+import 'bp_movie_screen.dart';
 
 /// Big picture mode: the 10-foot, fullscreen home for the couch PC, built to
 /// match the Roku channel (the design source of truth). Everything is laid out
@@ -250,8 +250,13 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     if (mounted) _focus.requestFocus();
   }
 
-  void _openMovie(Movie m) =>
-      _push(MovieDetailScreen(movie: m, baseUrl: widget.baseUrl));
+  // The big picture movie page handles its own keys/controller and focus.
+  Future<void> _openMovie(Movie m) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => BpMovieScreen(movie: m, baseUrl: widget.baseUrl),
+    ));
+    if (mounted) _focus.requestFocus();
+  }
 
   Future<void> _openMenu() async {
     final choice = await showDialog<String>(

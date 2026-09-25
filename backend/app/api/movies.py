@@ -242,6 +242,10 @@ async def get_movie(
         for f in movie.files
         if f.kind == "extra"
     ]
+    # Clearlogo for the big picture movie page (manual override wins).
+    data["logo"] = movie.logo_url or (
+        await get_movie_logo(movie.tmdb_id) if movie.tmdb_id else None
+    )
     return data
 
 

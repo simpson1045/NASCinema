@@ -9,5 +9,7 @@ class Gamepad {
 
   Stream<PadButton> get presses => const Stream.empty();
 
+  Stream<double> get scroll => const Stream.empty();
+
   void start() {}
 }

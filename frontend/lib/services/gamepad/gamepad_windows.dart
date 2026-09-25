@@ -27,6 +27,7 @@ const _lb = 0x0100, _rb = 0x0200;
 const _a = 0x1000, _b = 0x2000, _x = 0x4000, _y = 0x8000;
 
 const _stickDeadzone = 16000; // of ±32767 — firm push, not a resting drift
+const _scrollDeadzone = 8000; // right stick scrolls, so it can start gentler
 const _repeatDelay = Duration(milliseconds: 400);
 const _repeatEvery = Duration(milliseconds: 110);
 
@@ -36,6 +37,11 @@ class Gamepad {
 
   final _controller = StreamController<PadButton>.broadcast();
   Stream<PadButton> get presses => _controller.stream;
+
+  /// Right stick Y each tick it's pushed past the deadzone, -1..1 (up = +),
+  /// scaled from the deadzone edge so a light push scrolls slowly.
+  final _scroll = StreamController<double>.broadcast();
+  Stream<double> get scroll => _scroll.stream;
 
   _GetStateDart? _getState;
   Pointer<Uint8>? _state;
@@ -86,7 +92,11 @@ class Gamepad {
       final v = bytes[lo] | (bytes[lo + 1] << 8);
       return v >= 0x8000 ? v - 0x10000 : v;
     }
-    final lx = s16(8), ly = s16(10);
+    final lx = s16(8), ly = s16(10), ry = s16(14);
+    if (ry.abs() > _scrollDeadzone) {
+      final v = (ry.abs() - _scrollDeadzone) / (32767 - _scrollDeadzone);
+      _scroll.add(ry > 0 ? v : -v);
+    }
 
     final down = <PadButton>{
       if (buttons & _dpadUp != 0 || ly > _stickDeadzone) PadButton.up,
