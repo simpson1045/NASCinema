@@ -293,10 +293,20 @@ function qualityTag(it as object) as string
     tag = ""
     res = it.resolution
     if res <> invalid and res <> "" then
-        if Instr(1, res, "3840") > 0 or Instr(1, res, "2160") > 0 then
-            tag = "4K"
-        else if Instr(1, res, "1920") > 0 or Instr(1, res, "1080") > 0 then
-            tag = "1080p"
+        ' 16:9-equivalent lines: 1920x800 (cropped scope) is 1080p, 3840x1600 4K.
+        parts = res.split("x")
+        if parts.count() = 2 then
+            w = parts[0].toInt()
+            h = parts[1].toInt()
+            lines = h
+            if Int(w * 9 / 16) > lines then lines = Int(w * 9 / 16)
+            if lines >= 2000 then
+                tag = "4K"
+            else if lines >= 1060 then
+                tag = "1080p"
+            else if lines >= 700 then
+                tag = "720p"
+            end if
         end if
     end if
     if it.hdr = true then

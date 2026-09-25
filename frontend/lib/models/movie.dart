@@ -124,9 +124,18 @@ class Movie {
   }
 
   /// A short quality badge from the primary file, e.g. "4K HDR" / "1080p".
+  ///
+  /// Judged by the picture's 16:9-equivalent height, not the raw height: a
+  /// scope film stored cropped at 1920x800 is 1080p (not "720p"), 3840x1600
+  /// is 4K, and a 4:3 2880x2160 special is 4K too.
   String? get qualityBadge {
     if (resolution == null) return null;
-    final h = int.tryParse(resolution!.split('x').last);
+    final parts = resolution!.split('x');
+    final w = parts.length == 2 ? int.tryParse(parts.first) : null;
+    final raw = int.tryParse(parts.last);
+    final h = (w == null || raw == null)
+        ? raw
+        : (w * 9 / 16).round() > raw ? (w * 9 / 16).round() : raw;
     String label;
     if (h == null) {
       label = resolution!;

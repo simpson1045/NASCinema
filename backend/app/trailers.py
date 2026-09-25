@@ -170,11 +170,18 @@ def _min_bitrate(height: int, codec: str | None) -> float:
     return height * _BPS_PER_LINE * factor
 
 
+def _lines(width: int | None, height: int | None) -> int:
+    """16:9-equivalent lines: a scope trailer stored cropped at 1920x800 is
+    1080p, not 800p (judging by raw height rejected good widescreen ones)."""
+    w, h = width or 0, height or 0
+    return max(h, round(w * 9 / 16))
+
+
 def _good_quality(info: dict | None) -> bool:
     """Reject mush: real 1080p+ and enough bitrate for the codec."""
     if info is None or not info.get("has_audio"):
         return False
-    h = info.get("height") or 0
+    h = _lines(info.get("width"), info.get("height"))
     if h < _MIN_HEIGHT:
         return False
     return info.get("bitrate", 0) >= _min_bitrate(h, info.get("video_codec"))
@@ -313,7 +320,7 @@ def _offer_sync(key: str) -> dict | None:
     best = (0, 0.0)
     for f in info.get("formats") or []:
         vc = f.get("vcodec") or "none"
-        h = f.get("height") or 0
+        h = _lines(f.get("width"), f.get("height"))
         if vc == "none" or vc.startswith("av01") or not (0 < h <= cap):
             continue
         if "m3u8" in (f.get("protocol") or ""):
