@@ -118,6 +118,26 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   `100.f270.mp4`, `100.f140-drc.m4a`, `112.f270.mp4`, `112.f140.m4a`,
   `112.temp.mkv`.
 
+- **Library repair (Sept 25) ✅.** Scanner: extras folders matched by pattern at
+  any depth (`_is_extras_dir`: "bonus", "special feature", "production photo"…),
+  movie = folder above the OUTERMOST one; a top-level "… Bonus Disc" belongs to
+  the film it names. No-year folders keep their full name (guessit had cut
+  "Jurassic World - Dominion" to "Jurassic World"). TMDB `_pick`: exact title,
+  then year, then TMDB order (was results[0] -> JW/FK/Dominion all filed under
+  Rebirth, DH Part 2 under Part 1, Lost World -> a 1960 film). Repaired IN
+  PLACE (files re-pointed, no file rows deleted, watch progress kept): 126
+  files moved, 118 fake movies removed; library = 206 movies, 0 extras-only.
+  Backup: `/mnt/NAS Storage/apps/nascinema/nascinema-20260925-prerepair.dump`.
+- **Big picture web preview ✅:** `http://192.168.0.248:8400/?bp=1` (auto-
+  connects; no trailers on web). `&keys=down,down,right,up,back,enter` replays
+  presses after load, so Claude checks layout from screenshots — the browser
+  pane PROMPTS on every click/typed key (no always-allow), so never type into
+  it. Web builds on the Mac (`flutter build web --pwa-strategy=none` in a local
+  rsync copy) -> copy to ALPINE `frontend/build/web` -> `deploy.sh --web` (no
+  restart). Verified: home layout, rail scrolling, hero fullscreen. **OPEN: Back
+  on home closes big picture in the browser instead of opening the menu** —
+  suspected web-only (dialog vs browser history), unproven.
+
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct
   `ssap com.webos.service.eim/setDeviceInfo` returns **401** with our pairing key

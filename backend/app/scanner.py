@@ -62,10 +62,35 @@ def _classify(full: str, media_dir: str) -> tuple[bool, str | None, str | None]:
     except ValueError:
         rel = full
     dirs = rel.split(os.sep)[:-1]  # drop the filename
+    # The OUTERMOST extras-looking folder decides: everything inside it, at any
+    # depth, is an extra of the folder above it ("Movie/Bonus Features/
+    # Storyboard Art/x.mkv" belongs to "Movie", not to "Bonus Features").
     for i, d in enumerate(dirs):
-        if d.lower() in EXTRAS_DIRS:
-            return True, (dirs[i - 1] if i >= 1 else None), d.lower()
+        if _is_extras_dir(d):
+            if i >= 1:
+                return True, dirs[i - 1], d.lower()
+            # A top-level bonus disc ("Back to the Future Trilogy Bonus Disc")
+            # belongs to the film it names.
+            return True, _strip_bonus_words(d), d.lower()
     return False, (dirs[-1] if dirs else None), None
+
+
+# Folder-name fragments that mark bonus content even when the exact name isn't
+# in EXTRAS_DIRS ("Bonus Features", "Special Features", "Production Photos"...).
+_EXTRAS_HINTS = ("bonus", "special feature", "featurette", "extras",
+                 "production photo", "storyboard", "deleted scene",
+                 "behind the scene")
+_BONUS_WORDS = re.compile(
+    r"\b(trilogy|collection|bonus|disc|features?|special|extras)\b", re.IGNORECASE)
+
+
+def _is_extras_dir(name: str) -> bool:
+    low = name.lower()
+    return low in EXTRAS_DIRS or any(h in low for h in _EXTRAS_HINTS)
+
+
+def _strip_bonus_words(name: str) -> str:
+    return " ".join(_BONUS_WORDS.sub(" ", name).split()) or name
 
 
 _FOLDER_TITLE = re.compile(r"^(.*?)\s*\((\d{4})\)")
@@ -90,8 +115,15 @@ def _derive_title(movie_folder: str | None, filename: str) -> tuple[str, int | N
         return str(finfo["title"]), finfo.get("year")
     if ninfo.get("year") and ninfo.get("title"):
         return str(ninfo["title"]), ninfo.get("year")
-    title = finfo.get("title") or ninfo.get("title") or Path(filename).stem
-    return str(title), (finfo.get("year") or ninfo.get("year"))
+    # No year anywhere: trust the folder name as written. guessit reads
+    # "Jurassic World - Dominion" as title "Jurassic World" + an episode name,
+    # which then matched the wrong film.
+    if movie_folder:
+        clean = " ".join(re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", movie_folder).split())
+        if clean:
+            return clean, (finfo.get("year") or ninfo.get("year"))
+    title = ninfo.get("title") or Path(filename).stem
+    return str(title), ninfo.get("year")
 
 
 # Keyword -> extra type, matched against the filename (more specific than the

@@ -1,11 +1,12 @@
 #!/bin/bash
 # Deploy NASCinema to the NAS. Run ON NASHOST:
-#   sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" [--build | --updates]
+#   sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" [--build | --updates | --web]
 # Pulls backend + cast + built web app from ALPINE's D: over SSH (Windows'
 # built-in tar streams it), drops them in repo/, then restarts the container.
 # --build also rebuilds the image (needed after requirements.txt/Dockerfile
 # changes). --updates publishes an app release only (backend/updates +
-# CHANGELOG.md from backend\release.bat) with no restart. Nothing on ALPINE
+# CHANGELOG.md from backend\release.bat) with no restart; --web publishes
+# frontend/build/web only, no restart. Nothing on ALPINE
 # is modified.
 set -euo pipefail
 
@@ -29,6 +30,13 @@ pull_updates() {
 }
 
 mkdir -p "$APP/repo" "$APP/data"
+
+if [[ "${1:-}" == "--web" ]]; then
+  echo "[deploy] publishing the web app from ALPINE…"
+  pull frontend/build/web
+  chown -R 3000:3000 "$APP/repo/frontend/build/web" 2>/dev/null || true
+  exit 0
+fi
 
 if [[ "${1:-}" == "--updates" ]]; then
   echo "[deploy] publishing app release from ALPINE…"

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -75,6 +76,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
         _rails = data.rails.where((r) => r.movies.isNotEmpty).toList();
         _zone = _rails.isEmpty ? _Zone.hero : _Zone.rails;
       });
+      _replayScriptedKeys();
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -88,6 +90,29 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       builder: (_) => UpdateDialog(baseUrl: widget.baseUrl, info: info),
     );
     _focus.requestFocus();
+  }
+
+  /// Web preview only: `?bp=1&keys=down,down,right,up,back` replays those
+  /// presses after load (one every 1.2 s), so layout and navigation can be
+  /// checked from screenshots without typing into the browser.
+  Future<void> _replayScriptedKeys() async {
+    if (!kIsWeb) return;
+    final keys = Uri.base.queryParameters['keys'];
+    if (keys == null || keys.isEmpty) return;
+    final actions = <String, VoidCallback>{
+      'up': _up,
+      'down': _down,
+      'left': () => _sideways(-1),
+      'right': () => _sideways(1),
+      'enter': _select,
+      'back': _back,
+    };
+    await Future<void>.delayed(const Duration(seconds: 3));
+    for (final k in keys.split(',')) {
+      if (!mounted) return;
+      actions[k.trim().toLowerCase()]?.call();
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+    }
   }
 
   bool _isWide(HomeRail r) =>

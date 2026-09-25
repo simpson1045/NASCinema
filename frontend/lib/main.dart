@@ -73,9 +73,14 @@ class _ConnectScreenState extends State<ConnectScreen> {
   void initState() {
     super.initState();
     _config.get().then((saved) {
-      if (!mounted || saved == null || saved.isEmpty) return;
+      if (!mounted) return;
+      // The big picture preview connects to the server that served the page.
+      final url = (saved == null || saved.isEmpty) && bigPictureWebPreview
+          ? Uri.base.origin
+          : saved;
+      if (url == null || url.isEmpty) return;
       setState(() {
-        _urlController.text = saved;
+        _urlController.text = url;
         _autoConnecting = true;
       });
       _connect();

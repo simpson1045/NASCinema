@@ -20,6 +20,30 @@ def _confidence(parsed_title: str, tmdb_title: str) -> float:
     return round(SequenceMatcher(None, a, b).ratio(), 3)
 
 
+def _norm(s: str) -> str:
+    return "".join(c for c in (s or "").lower() if c.isalnum())
+
+
+def _pick(results: list[dict], title: str, year: int | None) -> dict:
+    """Choose the TMDB result that IS this movie, not just the first/most
+    popular: an exact (punctuation-blind) title match wins, then the release
+    year, then TMDB's own order. "Jurassic World" must not become "Jurassic
+    World Rebirth"; "...Deathly Hallows Part 2" must not become Part 1."""
+    want = _norm(title)
+
+    def score(i_r: tuple[int, dict]) -> tuple:
+        i, r = i_r
+        names = {_norm(r.get("title", "")), _norm(r.get("original_title", ""))}
+        released = (r.get("release_date") or "")[:4]
+        return (
+            want in names,
+            bool(year) and released == str(year),
+            -i,
+        )
+
+    return max(enumerate(results), key=score)[1]
+
+
 async def get_movie_metadata(title: str, year: int | None = None) -> dict | None:
     """Search TMDB for a movie, then fetch details for runtime + genres."""
     key = get_settings().tmdb_api_key
@@ -37,7 +61,7 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
             results = search.json().get("results", [])
             if not results:
                 return None
-            best = results[0]
+            best = _pick(results, title, year)
 
             details = await client.get(
                 f"{TMDB_BASE}/movie/{best['id']}", params={"api_key": key}
