@@ -132,6 +132,18 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
 
   int _itemOf(int rail) => _item[rail] ?? 0;
 
+  /// Once the user starts moving through the rails, the hero follows the
+  /// highlighted movie; going up to the hero hands it back to the rotation.
+  void _syncHero() {
+    final hero = _heroKey.currentState;
+    if (hero == null) return;
+    if (_zone == _Zone.hero || _rails.isEmpty) {
+      hero.follow(null);
+    } else {
+      hero.follow(_rails[_rail].movies[_itemOf(_rail)]);
+    }
+  }
+
   // ── Navigation ─────────────────────────────────────────────────────────────
 
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
@@ -194,6 +206,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     } else {
       setState(() => _rail--);
     }
+    _syncHero();
   }
 
   void _down() {
@@ -202,6 +215,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     } else if (_rail < _rails.length - 1) {
       setState(() => _rail++);
     }
+    _syncHero();
   }
 
   void _sideways(int dir) {
@@ -212,6 +226,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     final n = _rails[_rail].movies.length;
     final next = (_itemOf(_rail) + dir).clamp(0, n - 1);
     if (next != _itemOf(_rail)) setState(() => _item[_rail] = next);
+    _syncHero();
   }
 
   void _select() {
@@ -226,8 +241,10 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   void _back() {
     if (_zone == _Zone.hero) {
       if (_rails.isNotEmpty) setState(() => _zone = _Zone.rails);
+      _syncHero();
     } else if (_rail > 0) {
       setState(() => _rail = 0); // Back jumps to the top rail first
+      _syncHero();
     } else {
       _openMenu();
     }

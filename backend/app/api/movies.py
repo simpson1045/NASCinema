@@ -88,6 +88,14 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
         await session.scalars(select(Movie).options(selectinload(Movie.files)))
     ).all()
     summ = {m.id: _summary(m) for m in movies}
+    # Every tile knows whether its trailer is cached (+ its letterbox bars), so
+    # the big picture hero can play the highlighted movie's trailer without
+    # ever triggering a download.
+    for mid, item in summ.items():
+        if is_cached(mid):
+            item["trailer_ready"] = True
+            item["trailer_url"] = f"/api/movies/{mid}/trailer?v={trailer_version(mid)}"
+            item["trailer_bars"] = trailer_bars(mid)
     rails: list[dict] = []
 
     def rail(key: str, title: str, ms: list[Movie], limit: int = 25) -> None:

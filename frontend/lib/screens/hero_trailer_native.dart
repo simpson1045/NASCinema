@@ -9,9 +9,16 @@ import 'package:media_kit_video/media_kit_video.dart';
 /// can't use is fine here, and a texture composites/scrolls with the list
 /// (an mpv `--wid` child window could not).
 ///
-/// The hero only dissolves from backdrop to video after the FIRST FRAME
-/// actually renders — if the texture path fails on some machine, `playing`
-/// alone would swap to a black box with no way to detect it.
+/// ONE player for the hero's whole life. The first version created a new
+/// Player per trailer and disposed the old one; flipping through the hero
+/// raced a native teardown against the next start and libmpv aborted the
+/// process (0xc0000409 in ucrtbase, twice on ELKO). Now switching trailers
+/// just opens new media in the same player, and every open/stop runs
+/// strictly in order.
+///
+/// The hero only dissolves from backdrop to video once playback is actually
+/// advancing — if the texture path fails on some machine, `playing` alone
+/// would swap to a black box with no way to detect it.
 class TrailerPlayer {
   TrailerPlayer({
     required this.onFirstFrame,
@@ -26,50 +33,70 @@ class TrailerPlayer {
   Player? _player;
   VideoController? _controller;
   final _subs = <StreamSubscription>[];
-  int _generation = 0;
+  int _generation = 0; // bumps on every open/stop; stale events are ignored
+  int _shownFor = -1; // generation whose first frame was already reported
+  bool _active = false;
+  bool _disposed = false;
+  Future<void> _queue = Future.value();
   static bool _mkInit = false;
 
   bool get supported => true;
 
-  Future<void> open(String url, {required bool muted}) async {
+  /// Serialize every player operation — no two ever overlap.
+  Future<void> _run(Future<void> Function() op) =>
+      _queue = _queue.then((_) => _disposed ? null : op()).catchError((_) {});
+
+  Player _ensurePlayer() {
+    if (_player != null) return _player!;
     if (!_mkInit) {
       MediaKit.ensureInitialized();
       _mkInit = true;
     }
-    await stop();
-    final gen = ++_generation;
     final player = Player();
-    final controller = VideoController(player);
     _player = player;
-    _controller = controller;
-
+    _controller = VideoController(player);
     _subs.add(player.stream.completed.listen((done) {
-      if (done && gen == _generation) onFinished();
+      if (done && _active) {
+        _active = false;
+        onFinished();
+      }
     }));
     _subs.add(player.stream.error.listen((_) {
-      if (gen == _generation) onError();
+      if (_active) {
+        _active = false;
+        onError();
+      }
     }));
-
-    await player.setVolume(muted ? 0 : 100);
-    await player.open(Media(url));
-    unawaited(controller.waitUntilFirstFrameRendered.then((_) {
-      if (gen == _generation) onFirstFrame();
+    // Real frames are flowing once the position moves past zero.
+    _subs.add(player.stream.position.listen((pos) {
+      if (_active && _shownFor != _generation && pos > Duration.zero) {
+        _shownFor = _generation;
+        onFirstFrame();
+      }
     }));
+    return player;
   }
 
-  Future<void> setMuted(bool muted) async =>
-      _player?.setVolume(muted ? 0 : 100);
+  Future<void> open(String url, {required bool muted}) {
+    final gen = ++_generation;
+    _active = false;
+    return _run(() async {
+      if (gen != _generation) return; // superseded before it ran
+      final player = _ensurePlayer();
+      await player.setVolume(muted ? 0 : 100);
+      if (gen != _generation) return;
+      _active = true;
+      await player.open(Media(url));
+    });
+  }
 
-  Future<void> stop() async {
+  Future<void> setMuted(bool muted) =>
+      _run(() async => _player?.setVolume(muted ? 0 : 100));
+
+  Future<void> stop() {
     _generation++;
-    for (final s in _subs) {
-      unawaited(s.cancel());
-    }
-    _subs.clear();
-    final p = _player;
-    _player = null;
-    _controller = null;
-    await p?.dispose();
+    _active = false;
+    return _run(() async => _player?.stop());
   }
 
   /// [fit] cover fills the box (the mouse hero); contain never crops (big
@@ -85,7 +112,20 @@ class TrailerPlayer {
     );
   }
 
+  /// The only place the native player is torn down — when its owner is gone.
   void dispose() {
-    unawaited(stop());
+    _generation++;
+    _active = false;
+    final player = _player;
+    _queue = _queue.then((_) async {
+      for (final s in _subs) {
+        await s.cancel();
+      }
+      _subs.clear();
+      await player?.dispose();
+    }).catchError((_) {});
+    _disposed = true;
+    _player = null;
+    _controller = null;
   }
 }

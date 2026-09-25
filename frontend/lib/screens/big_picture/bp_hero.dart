@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../models/movie.dart';
+import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../hero_trailer.dart';
 
@@ -51,8 +52,50 @@ class BpHeroState extends State<BpHero> {
   Timer? _trailerDelay; // the backdrop "beat" before the trailer starts
   Timer? _routePoll; // isCurrent has no change notification — poll it
 
+  // Follow mode: while browsing the rails the hero shows the highlighted
+  // movie (Netflix-style) instead of cycling the featured list.
+  Movie? _follow;
+  Timer? _followDebounce; // fast scrolling doesn't thrash backdrops/trailers
+  final Map<int, String?> _logos = {}; // rail items carry no logo — fetched once
+  late final ApiService _api = ApiService(widget.baseUrl);
+
   /// The movie currently shown (null when there's nothing featured).
-  Movie? get current => _items.isEmpty ? null : _items[_i];
+  Movie? get current =>
+      _follow ?? (_items.isEmpty ? null : _items[_i]);
+
+  /// Show [movie] (the highlighted rail tile) — or null to go back to the
+  /// featured rotation. Backdrop crossfades after a short settle; its trailer
+  /// follows after the usual beat if the server has one cached.
+  void follow(Movie? movie) {
+    _followDebounce?.cancel();
+    if (movie == null) {
+      if (_follow == null) return;
+      _follow = null;
+      _showItem();
+      return;
+    }
+    if (movie.id == _follow?.id) return;
+    _followDebounce = Timer(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      _follow = movie;
+      _dwell?.cancel(); // no auto-advance while browsing
+      _stopTrailer();
+      setState(() {});
+      _trailerDelay?.cancel();
+      if (!_suspended && _trailer.supported) {
+        _trailerDelay =
+            Timer(const Duration(milliseconds: 1400), _playTrailer);
+      }
+      if (movie.logo == null && !_logos.containsKey(movie.id)) {
+        _logos[movie.id] = null;
+        _api.getMovieDetail(movie.id).then((d) {
+          if (mounted && d.logo != null) setState(() => _logos[movie.id] = d.logo);
+        }).catchError((_) {});
+      }
+    });
+  }
+
+  String? _logoFor(Movie m) => m.logo ?? _logos[m.id];
 
   @override
   void initState() {
@@ -84,7 +127,7 @@ class BpHeroState extends State<BpHero> {
 
   @override
   void dispose() {
-    for (final t in [_dwell, _trailerDelay, _routePoll]) {
+    for (final t in [_dwell, _trailerDelay, _routePoll, _followDebounce]) {
       t?.cancel();
     }
     _trailer.dispose();
@@ -96,6 +139,14 @@ class BpHeroState extends State<BpHero> {
     _stopTrailer();
     setState(() {});
     _dwell?.cancel();
+    if (_follow != null) {
+      // Browsing the rails: the followed movie stays; only its trailer resumes.
+      _trailerDelay?.cancel();
+      if (!_suspended && _trailer.supported) {
+        _trailerDelay = Timer(const Duration(milliseconds: 1400), _playTrailer);
+      }
+      return;
+    }
     _dwell = Timer(Duration(seconds: _full ? 15 : 25), () => advance(1));
     _trailerDelay?.cancel();
     if (!_suspended && _trailer.supported) {
@@ -108,6 +159,7 @@ class BpHeroState extends State<BpHero> {
     if (_suspended || !mounted || m == null) return;
     // Only trailers already cached server-side — never wait on a download.
     if (!m.trailerReady || m.trailerUrl == null) return;
+    if (_follow != null && _follow!.id != m.id) return;
     _trailer.open('${widget.baseUrl}${m.trailerUrl}', muted: !_full);
   }
 
@@ -142,6 +194,7 @@ class BpHeroState extends State<BpHero> {
 
   /// Next/previous featured movie (Left/Right on the hero, or the timer).
   void advance(int dir) {
+    if (_follow != null) return; // browsing the rails: no rotation
     if (_items.length < 2 || _fading) return;
     _fadeThrough(() {
       _i = (_i + dir + _items.length) % _items.length;
@@ -188,7 +241,7 @@ class BpHeroState extends State<BpHero> {
           Positioned(
             left: 90,
             bottom: 70,
-            child: _Info(movie: m, compact: true),
+            child: _Info(movie: m, logo: _logoFor(m), compact: true),
           )
         else
           Positioned(
@@ -196,8 +249,11 @@ class BpHeroState extends State<BpHero> {
             top: 110,
             child: _Info(
               movie: m,
+              logo: _logoFor(m),
               compact: false,
-              dots: _items.length > 1 ? _Dots(count: _items.length, index: _i) : null,
+              dots: _follow == null && _items.length > 1
+                  ? _Dots(count: _items.length, index: _i)
+                  : null,
             ),
           ),
         IgnorePointer(
@@ -293,9 +349,11 @@ class _FullscreenScrim extends StatelessWidget {
 
 /// Logo (or title), ratings row, and — on home — the overview + paging dots.
 class _Info extends StatelessWidget {
-  const _Info({required this.movie, required this.compact, this.dots});
+  const _Info(
+      {required this.movie, required this.compact, this.logo, this.dots});
 
   final Movie movie;
+  final String? logo;
   final bool compact;
   final Widget? dots;
 
@@ -345,7 +403,7 @@ class _Info extends StatelessWidget {
         ),
       ),
     );
-    final logo = movie.logo;
+    final logo = this.logo;
     if (logo == null || logo.isEmpty) return title;
     return Image.network(
       logo,

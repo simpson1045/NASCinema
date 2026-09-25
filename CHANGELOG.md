@@ -2,6 +2,11 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.5 - 2026-09-25
+- **Fixed the crash when flipping through trailers** — the featured area now keeps one video player instead of creating and destroying one per trailer.
+- **The top of the screen follows what you highlight** — as you move through the rows, the backdrop, title and (after a moment) the trailer switch to the highlighted movie. Press Up to get back to the featured rotation.
+- Trailers now come only from each movie's official trailer list; Sorcerer's Stone has its real trailer and the US poster.
+
 ## 0.5.4 - 2026-09-25
 - **Updates install for real now** — NASCinema uses NASRadio's proven updater. When you update, a small "NASCinema Update" window shows progress, closes itself, and the new version opens.
 - Includes 0.5.3: the new Big Picture movie page with in-app trailers and playable extras, and right-stick scrolling.
