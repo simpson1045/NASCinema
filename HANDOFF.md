@@ -138,6 +138,22 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   on home closes big picture in the browser instead of opening the menu** —
   suspected web-only (dialog vs browser history), unproven.
 
+- **PAUSED Sept 25 ~12:08 — NAS shut down so Matt can install an SSD.** On resume:
+  (1) restart the trailer backfill: `/tmp/alltrailers.py` lived in the container
+  and is GONE after reboot — rewrite it (loop all movies by popularity; skip
+  `is_cached` / `_recently_found_nothing`; `ensure_trailer(id, tmdb, override,
+  title, year)`), run via ADMS start_job -> ssh admin@192.168.0.248 `sudo docker
+  exec ... nice -n 15 python -u`. ~175 movies needed one; any `.part` leftovers
+  are harmless. Then make the home hero pick featured movies from ALL movies
+  with a cached trailer (currently random 8 of the top-30 popular).
+  (2) Back-menu bug: temporary `[bp-debug]` debugPrints are in
+  `big_picture_screen.dart` (uncommitted) and in the published web build; the
+  console showed NO bp-debug lines on `?bp=1&keys=back` — next step: confirm the
+  replay even runs on that URL (maybe the page reloads/loses BP before the key).
+  Remove the debug prints before committing.
+  (3) then step 2: Xbox controller. Later: series/franchise pages (TMDB
+  collection_id is stored; Marvel/DC/Star Wars need companies/keywords + manual).
+
 **Known broken / not verified:**
 - **C2 PC-label guard in `webos_control.dart` will likely fail:** direct
   `ssap com.webos.service.eim/setDeviceInfo` returns **401** with our pairing key
