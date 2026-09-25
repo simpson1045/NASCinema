@@ -166,13 +166,16 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
         if len(gms) >= 3:
             rail(f"genre:{genre}", genre, gms)
 
-    # Featured hero — a random handful from the most popular titles that have a
-    # backdrop, so each launch surfaces a different selection (not just reordered).
-    pool = sorted(
-        (m for m in movies if m.backdrop_path and m.popularity is not None),
-        key=lambda m: m.popularity,
-        reverse=True,
-    )[:30]
+    # Featured hero — a random handful from EVERY movie that has a cached
+    # trailer (and a backdrop), so the whole library rotates through the hero.
+    # Falls back to the most popular titles until enough trailers exist.
+    pool = [m for m in movies if m.backdrop_path and is_cached(m.id)]
+    if len(pool) < 8:
+        pool = sorted(
+            (m for m in movies if m.backdrop_path and m.popularity is not None),
+            key=lambda m: m.popularity,
+            reverse=True,
+        )[:30]
     featured_movies = random.sample(pool, min(8, len(pool)))
     featured = []
     for m in featured_movies:

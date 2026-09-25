@@ -326,7 +326,9 @@ def _offer_sync(key: str) -> dict | None:
     if best[0] == 0:
         return None
     return {"key": key, "height": best[0], "kbps": best[1],
-            "title": info.get("title") or ""}
+            "title": info.get("title") or "",
+            "channel": info.get("channel") or info.get("uploader") or "",
+            "duration": info.get("duration") or 0}
 
 
 _SEQUEL_WORDS = {"2", "3", "4", "5", "6", "7", "8", "9", "ii", "iii", "iv", "v"}
@@ -384,20 +386,19 @@ def _search_keys_sync(title: str, year: int | None) -> list[str]:
     return keys
 
 
-async def _ranked_offers(
-    tmdb_id: int | None, title: str | None, year: int | None, override: str | None
-) -> list[dict]:
-    """Every candidate (manual pick, TMDB's trailers, a YouTube search), probed
-    and sorted sharpest first. A manual pick wins unless another candidate is
-    clearly better: higher resolution, or 1.5x the bitrate at the same one."""
+async def _ranked_offers(tmdb_id: int | None, override: str | None) -> list[dict]:
+    """OFFICIAL candidates only — the manual pick and TMDB's trailer list for
+    this exact movie — probed and sorted sharpest first (a manual pick wins
+    unless another is clearly better). YouTube search is NOT used here: an
+    upload's title proves nothing (Chamber of Secrets got the HBO series
+    teaser titled "Chamber of Secrets 2002 Trailer 4K"). Search results are
+    for a human-verified hunt only (search_offers)."""
     keys: list[str] = []
     manual = _youtube_key(override) if override else None
     if manual:
         keys.append(manual)
     if tmdb_id:
         keys += (await _ranked_trailer_keys(tmdb_id))[:_MAX_CANDIDATES + 3]
-    if title:
-        keys += await asyncio.to_thread(_search_keys_sync, title, year)
     seen: set[str] = set()
     unique = [k for k in keys if k and not (k in seen or seen.add(k))]
     offers = [o for o in await asyncio.gather(
@@ -410,6 +411,29 @@ async def _ranked_offers(
     return sorted(offers, key=score, reverse=True)
 
 
+async def search_offers(title: str, year: int | None) -> list[dict]:
+    """YouTube search candidates, probed and sorted sharpest first. NOT used
+    automatically — only to hunt a sharper trailer that a human then checks
+    (look at frames!) before pinning it as the movie's manual trailer."""
+    keys = await asyncio.to_thread(_search_keys_sync, title, year)
+    offers = [o for o in await asyncio.gather(
+        *(asyncio.to_thread(_offer_sync, k) for k in dict.fromkeys(keys))) if o]
+    return sorted(offers, key=lambda o: (o["height"], o["kbps"]), reverse=True)
+
+
+def _source_file(movie_id: int) -> Path:
+    return trailers_dir() / f"{movie_id}.source.json"
+
+
+def trailer_source(movie_id: int) -> dict | None:
+    """Where the cached trailer came from (video key/title/channel), if known."""
+    try:
+        data = json.loads(_source_file(movie_id).read_text())
+    except (OSError, ValueError):
+        return None
+    return data if data.get("version") == trailer_version(movie_id) else None
+
+
 async def ensure_trailer(
     movie_id: int,
     tmdb_id: int | None,
@@ -417,11 +441,14 @@ async def ensure_trailer(
     title: str | None = None,
     year: int | None = None,
 ) -> Path | None:
-    """Cache + return the sharpest good trailer for a movie, or None (the hero
-    then shows the backdrop — a crisp still beats a smeared trailer)."""
+    """Cache + return the sharpest OFFICIAL trailer for a movie, or None (the
+    hero then shows the backdrop). One that clears the quality bar wins; if
+    none does, the sharpest official one at 1080p+ is still used — the right
+    movie beats pretty pixels. (title/year are accepted for callers but no
+    longer drive a search.)"""
     if is_cached(movie_id):
         return trailer_file(movie_id)
-    if not yt_dlp_path() or not (tmdb_id or override or title):
+    if not yt_dlp_path() or not (tmdb_id or override):
         return None
     if not override and _recently_found_nothing(movie_id):
         return None
@@ -434,32 +461,43 @@ async def ensure_trailer(
         async with _download_sem:
             if is_cached(movie_id):
                 return trailer_file(movie_id)
-            offers = await _ranked_offers(tmdb_id, title, year, override)
+            offers = await _ranked_offers(tmdb_id, override)
             manual = _youtube_key(override) if override else None
             tries = offers[:_MAX_CANDIDATES + 1]
             # The manual pick always gets a turn, even if it ranked lower.
             tries += [o for o in offers[_MAX_CANDIDATES + 1:] if o["key"] == manual]
             for offer in tries:
-                key = offer["key"]
-                if not await _download(movie_id, key):
-                    clear_trailer(movie_id)
-                    continue
-                info = await _probe(trailer_file(movie_id))
-                # A manual pick is trusted even under the bar — but only after
-                # every sharper candidate lost.
-                if not _good_quality(info) and key != manual:
-                    clear_trailer(movie_id)  # mush — try the next candidate
-                    continue
-                # Fix Roku-unplayable audio (Opus, or multichannel AAC which the
-                # 4802 silences) by transcoding to AC-3 — keeps 5.1 surround and
-                # bitstreams to the Denon.
-                if info and not _audio_ok(info):
-                    await _to_ac3(movie_id)
-                _none_file(movie_id).unlink(missing_ok=True)
-                asyncio.create_task(measure_bars(movie_id))
+                if await _fetch(movie_id, offer, require_bar=offer["key"] != manual):
+                    return trailer_file(movie_id)
+            # Nothing cleared the bar: the sharpest official 1080p+ trailer.
+            best = next((o for o in offers if o["height"] >= _MIN_HEIGHT), None)
+            if best and await _fetch(movie_id, best, require_bar=False):
                 return trailer_file(movie_id)
             _none_file(movie_id).write_text(json.dumps({"offers": len(offers)}))
     return None
+
+
+async def _fetch(movie_id: int, offer: dict, require_bar: bool) -> bool:
+    """Download one candidate; keep it if it passes (or the bar is waived)."""
+    if not await _download(movie_id, offer["key"]):
+        clear_trailer(movie_id)
+        return False
+    info = await _probe(trailer_file(movie_id))
+    if require_bar and not _good_quality(info):
+        clear_trailer(movie_id)  # mush — the caller tries the next one
+        return False
+    # Fix Roku-unplayable audio (Opus, or multichannel AAC which the 4802
+    # silences) by transcoding to AC-3 — keeps 5.1 and bitstreams to the Denon.
+    if info and not _audio_ok(info):
+        await _to_ac3(movie_id)
+    _none_file(movie_id).unlink(missing_ok=True)
+    _source_file(movie_id).write_text(json.dumps({
+        "version": trailer_version(movie_id), "key": offer["key"],
+        "title": offer.get("title"), "channel": offer.get("channel"),
+        "official": True,
+    }))
+    asyncio.create_task(measure_bars(movie_id))
+    return True
 
 
 async def _probe(path: Path) -> dict | None:
