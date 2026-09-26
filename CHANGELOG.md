@@ -2,6 +2,12 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.6.2 - 2026-09-25
+- **Trailer button fixed:** only true HDR trailers switch to the HDR player now — no more screen glitch on regular trailers. In HDR trailers the controller works (A pause, ←/→ skip, B back) and the controls show up.
+- **Sequel logos:** movies whose only logo is the series logo (like *The Land Before Time VIII*) now show their subtitle in gold underneath — and most sequels get their own proper logo instead of the series one.
+- **Better trailer picks:** when Apple only has a low-res trailer, the studio's HD YouTube trailer is used instead.
+- The HDR trailers setting is gold like the other settings.
+
 ## 0.6.1 - 2026-09-25
 - **The movie player got a glow-up.** New on-screen controls in NASCinema's navy and gold: a title bar, a slim gold timeline with preview thumbnails when you scrub, chapter marks, and time remaining — all fading away while you watch.
 - **Full controller control while watching:** **A** play/pause · **←/→** skip 10 seconds · **LB/RB** previous/next chapter · **X** audio track · **Y** subtitles · **Start** menu · **↑/↓** show the controls · **B** back out (or close a menu) · **View** flag a problem.
