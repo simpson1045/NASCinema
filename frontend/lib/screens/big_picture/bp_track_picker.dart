@@ -5,28 +5,42 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/movie_file.dart';
+import '../../services/api_service.dart';
 import '../../services/flag_service.dart';
 import '../../services/gamepad/pad_dispatch.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/pad_hints.dart';
 import 'bp_hero.dart' show bpLogo, bpLogoOver;
+import 'bp_subtitle_search.dart';
 
 /// What Play will use: a version (file) and its audio/subtitle tracks, as mpv
 /// ids. [audio] null = the file's default; [subtitle] null = automatic (mpv's
 /// default/forced choice), 0 = off.
 class TrackPick {
-  const TrackPick({required this.fileId, this.audio, this.subtitle});
+  const TrackPick(
+      {required this.fileId, this.audio, this.subtitle, this.external});
 
   final int fileId;
   final int? audio;
   final int? subtitle;
+  // A downloaded (OpenSubtitles) subtitle's id for this file — loaded by the
+  // player at start; embedded subtitles are then off (subtitle 0).
+  final String? external;
 
-  TrackPick copyWith({int? fileId, int? audio, int? subtitle, bool clearAudio = false,
-          bool clearSubtitle = false}) =>
+  TrackPick copyWith({
+    int? fileId,
+    int? audio,
+    int? subtitle,
+    String? external,
+    bool clearAudio = false,
+    bool clearSubtitle = false,
+    bool clearExternal = false,
+  }) =>
       TrackPick(
         fileId: fileId ?? this.fileId,
         audio: clearAudio ? null : (audio ?? this.audio),
         subtitle: clearSubtitle ? null : (subtitle ?? this.subtitle),
+        external: clearExternal ? null : (external ?? this.external),
       );
 
   static String _key(int movieId) => 'bp_pick_$movieId';
@@ -56,6 +70,7 @@ class TrackPick {
             // "Automatic" only exists when the file has a forced/default
             // track; otherwise nothing would show, so say Off.
             subtitle: sub ?? (autoSubtitle(f) == null ? 0 : null),
+            external: j['external'] as String?,
           );
         }
       }
@@ -77,7 +92,12 @@ class TrackPick {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setString(_key(movieId),
-          jsonEncode({'file': fileId, 'audio': audio, 'subtitle': subtitle}));
+          jsonEncode({
+            'file': fileId,
+            'audio': audio,
+            'subtitle': subtitle,
+            'external': external,
+          }));
     } catch (_) {}
   }
 
@@ -106,11 +126,13 @@ class TrackPick {
     return [
       if (files.length > 1) f.label ?? f.quality ?? 'Version',
       a?.title ?? (f.audioTracks.isEmpty ? 'Audio' : 'Default audio'),
-      subtitle == 0
-          ? 'Subtitles off'
-          : s != null
-              ? 'Subtitles: ${s.title}'
-              : 'Subtitles: automatic',
+      external != null
+          ? 'Subtitles: downloaded (${external!.split('-').first.toUpperCase()})'
+          : subtitle == 0
+              ? 'Subtitles off'
+              : s != null
+                  ? 'Subtitles: ${s.title}'
+                  : 'Subtitles: automatic',
     ].join('  ·  ');
   }
 }
@@ -155,6 +177,9 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
   late TrackPick _pick = widget.initial;
   late int _col = widget.files.length > 1 ? 0 : 1;
   final _cursor = [0, 0, 0];
+  // Downloaded subtitles for the chosen version ({id, lang, label, url}).
+  List<Map<String, dynamic>> _externals = const [];
+  static const _searchOnline = -9999; // the "Search online…" row's value
 
   static const _visible = 8; // rows shown per column; the list scrolls
 
@@ -201,15 +226,62 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
                 desc: t.title == t.desc ? '' : t.desc,
                 tags: [if (t.forced) 'FORCED', if (t.isDefault) 'DEFAULT'],
                 dim: !((t.language ?? 'en').startsWith('en'))),
+          // Downloaded ones: negative values index _externals.
+          for (var i = 0; i < _externals.length; i++)
+            _Item(-(i + 1),
+                'Downloaded · ${(_externals[i]['label'] ?? '').toString()}',
+                desc: 'From OpenSubtitles',
+                tags: const ['ONLINE']),
+          const _Item(_searchOnline, 'Search online…',
+              desc: 'Find subtitles on OpenSubtitles for this version'),
         ];
     }
   }
 
-  int? _selected(int col) => switch (col) {
-        0 => _pick.fileId,
-        1 => _pick.audio,
-        _ => _pick.subtitle,
-      };
+  int? _selected(int col) {
+    if (col == 0) return _pick.fileId;
+    if (col == 1) return _pick.audio;
+    final ext = _pick.external;
+    if (ext != null) {
+      final i = _externals.indexWhere((e) => e['id'] == ext);
+      if (i >= 0) return -(i + 1);
+    }
+    return _pick.subtitle;
+  }
+
+  Future<void> _loadExternals() async {
+    try {
+      final r = await ApiService(widget.baseUrl).getSubtitles(_pick.fileId);
+      if (!mounted) return;
+      setState(() {
+        _externals = r.subtitles;
+        final i = _items(2).indexWhere((it) => it.value == _selected(2));
+        if (i >= 0) _cursor[2] = i;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _searchOnlineSubs() async {
+    final entry = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => BpSubtitleSearch(
+          baseUrl: widget.baseUrl,
+          fileId: _pick.fileId,
+          title: widget.title,
+        ),
+      ),
+    );
+    if (!mounted || entry == null) return;
+    setState(() {
+      _externals = [..._externals.where((e) => e['id'] != entry['id']), entry];
+      _pick = TrackPick(
+          fileId: _pick.fileId,
+          audio: _pick.audio,
+          subtitle: 0,
+          external: entry['id'] as String?);
+    });
+    _done();
+  }
 
   @override
   void initState() {
@@ -221,6 +293,7 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
       final i = _items(c).indexWhere((it) => it.value == _selected(c));
       _cursor[c] = i < 0 ? 0 : i;
     }
+    _loadExternals();
   }
 
   @override
@@ -252,6 +325,9 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
               subtitle: _pick.subtitle == 0 || TrackPick.autoSubtitle(f) == null
                   ? 0
                   : null);
+          // Downloads belong to a file: fetch the new version's.
+          _externals = const [];
+          _loadExternals();
           final ai = _items(1).indexWhere((it) => it.value == _pick.audio);
           _cursor[1] = ai < 0 ? 0 : ai;
           final si = _items(2).indexWhere((it) => it.value == _pick.subtitle);
@@ -261,10 +337,19 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
       } else if (_col == 1) {
         _pick = _pick.copyWith(audio: v);
         _col = 2;
+      } else if (v == _searchOnline) {
+        _searchOnlineSubs();
+      } else if (v != null && v < 0) {
+        final e = _externals[-v - 1];
+        _pick = TrackPick(
+            fileId: _pick.fileId,
+            audio: _pick.audio,
+            subtitle: 0,
+            external: e['id'] as String?);
+        _done();
       } else {
-        _pick = v == null
-            ? _pick.copyWith(clearSubtitle: true)
-            : _pick.copyWith(subtitle: v);
+        _pick = TrackPick(
+            fileId: _pick.fileId, audio: _pick.audio, subtitle: v);
         _done();
       }
     });

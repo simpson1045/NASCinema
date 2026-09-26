@@ -29,6 +29,7 @@ class PlayerScreen extends StatefulWidget {
     this.subtitleTrack,
     this.startAt,
     this.versions = const [],
+    this.externalSubtitle,
   });
 
   final int fileId;
@@ -42,6 +43,8 @@ class PlayerScreen extends StatefulWidget {
   // The movie's versions — enables ▼ / the Versions button to switch files
   // mid-movie at the same timestamp.
   final List<MovieFile> versions;
+  // A downloaded subtitle (sidecar id) picked before Play — loaded at start.
+  final String? externalSubtitle;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -281,7 +284,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final p = await ApiService(widget.baseUrl)
           .getPlay(_fileId, client: _isDesktop ? 'native' : 'web');
       _resumePosition = p.resumePosition;
-      _resumeSubtitle = p.resumeSubtitle;
+      _resumeSubtitle = widget.externalSubtitle ?? p.resumeSubtitle;
       final passthrough = await _readPassthroughPref();
       if (!mounted) return;
       setForcePassthrough(passthrough); // applied when buildPlayerView opens

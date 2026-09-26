@@ -70,4 +70,13 @@ void main() {
     expect(result!.summary(files),
         '4K77  ·  1.0 DTS-HD-MA (1977 35mm mono mix)  ·  Subtitles off');
   });
+
+  test('changing audio keeps a downloaded subtitle; summary names it', () {
+    const p = TrackPick(fileId: 1008, audio: 1, subtitle: 0, external: 'en-123');
+    final q = p.copyWith(audio: 3);
+    expect(q.external, 'en-123');
+    expect(q.audio, 3);
+    expect(q.copyWith(clearExternal: true).external, isNull);
+    expect(q.summary(files), contains('Subtitles: downloaded (EN)'));
+  });
 }

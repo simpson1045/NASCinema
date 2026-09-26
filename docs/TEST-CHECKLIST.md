@@ -69,3 +69,8 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 - [ ] 👀 Movie page has a round **+** button after Versions & Audio; highlighted it says "Add to My List". A → toast "Added to My List", icon becomes ✓ ("On My List — A to remove"). A again removes.
 - [ ] 👀 Home shows a **My List** row right after Continue Watching (newest first) once something's on it.
 
+### Online subtitles (ELKO picker) — ✅ analyze/tests (pick carries a download)
+- [ ] 👀 Picker → Subtitles column ends with **"Search online…"** → results screen (release names, SDH/TRUSTED tags, download counts). ▲▼ + A downloads → back in the picker with **"Downloaded · EN"** selected; Play shows it (embedded subs off).
+- [ ] 👀 Reopen the picker: the download is listed for that version; switching versions shows that version's downloads instead.
+- [ ] 👀 Subtitle sync is right (hash matches should be exact; title-only matches may drift — say which movie).
+

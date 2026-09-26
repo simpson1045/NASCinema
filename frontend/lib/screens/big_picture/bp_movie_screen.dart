@@ -199,6 +199,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       audioTrack: pick.audio,
       subtitleTrack: pick.subtitle,
       versions: _files,
+      externalSubtitle: pick.external,
     ));
   }
 
