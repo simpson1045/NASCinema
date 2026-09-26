@@ -48,7 +48,11 @@ REM runs starved the machine until AAPT2 could not start and Windows froze
 REM (2026-09-26, hard reset twice). gradle.properties now caps the heap and
 REM disables resident daemons; this also clears any leftovers and refuses to
 REM start when memory is already short.
-echo [0/7] Clearing leftover Gradle/Kotlin/AAPT2 processes + checking memory...
+echo [0/7] Lowering build priority, clearing leftover Gradle/Kotlin/AAPT2, checking memory...
+REM Below-normal CPU priority for this script and everything it starts
+REM (Flutter, Gradle, AAPT2, MSBuild inherit it): a build can still use the whole
+REM CPU, but the desktop, RDP and SSH are always served first.
+powershell -NoProfile -Command "$p=(Get-CimInstance Win32_Process -Filter \"ProcessId=$PID\").ParentProcessId; (Get-Process -Id $p).PriorityClass='BelowNormal'" >nul 2>&1
 pushd "%FRONTEND%\android"
 call gradlew.bat --stop >nul 2>&1
 popd
