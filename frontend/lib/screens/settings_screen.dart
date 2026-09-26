@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/big_picture_prefs.dart';
+import '../services/display_hdr.dart';
+import '../services/hdr_prefs.dart';
 import '../services/theater/theater_prefs.dart';
 import '../services/theater/webos_control.dart';
 import '../theme/app_theme.dart';
@@ -42,6 +44,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Display
   bool _refreshMatch = false;
   bool _bigPicture = true;
+  HdrMode _hdrMode = HdrMode.auto;
+  bool? _hdrDetected; // what Auto sees on this device's display
 
   // Renderer
   bool _truehdBitstream = false;
@@ -53,6 +57,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _load();
+    displayHdrActive().then((on) {
+      if (mounted) setState(() => _hdrDetected = on);
+    });
   }
 
   Future<void> _load() async {
@@ -61,6 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _prefs = p;
       _bigPicture = p.getBool(kBigPicturePref) ?? true;
+      _hdrMode = HdrMode.values.asNameMap()[p.getString(kHdrTrailersPref)] ??
+          HdrMode.auto;
       _denonEnabled = p.getBool(kDenonEnabledPref) ?? false;
       _denonPower = p.getBool(kDenonPowerPref) ?? true;
       _denonHost.text = p.getString(kDenonHostPref) ?? '';
@@ -143,6 +152,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
         value: value,
         onChanged: onChanged,
       );
+
+  /// HDR trailers: Auto / Always / Never. Auto follows whether HDR is on for
+  /// this device's display (shown underneath so it's never a mystery).
+  Widget _hdrRow() {
+    final detected = _hdrDetected;
+    final autoNote = detected == null
+        ? ''
+        : detected
+            ? ' Right now: HDR is on for this display.'
+            : ' Right now: this display is SDR.';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('HDR trailers', style: TextStyle(fontSize: 15)),
+          const SizedBox(height: 4),
+          Text(
+            'Play trailers in HDR when the trailer has it. Auto uses HDR when '
+            'it\'s switched on for this display.$autoNote',
+            style: const TextStyle(color: NasColors.muted, fontSize: 12.5),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<HdrMode>(
+            segments: const [
+              ButtonSegment(value: HdrMode.auto, label: Text('Auto')),
+              ButtonSegment(value: HdrMode.always, label: Text('Always')),
+              ButtonSegment(value: HdrMode.never, label: Text('Never')),
+            ],
+            selected: {_hdrMode},
+            showSelectedIcon: false,
+            onSelectionChanged: (sel) {
+              setState(() => _hdrMode = sel.first);
+              HdrPrefs.setMode(sel.first);
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _field(TextEditingController c, String label, String hint,
           String prefKey) =>
@@ -247,6 +296,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 setState(() => _bigPicture = v);
                 _prefs?.setBool(kBigPicturePref, v);
               }),
+              _hdrRow(),
               _toggle(
                   'Match display refresh rate to the movie',
                   'Switch the desktop to the film\'s cadence (e.g. 23.976 Hz) '

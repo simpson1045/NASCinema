@@ -28,6 +28,10 @@ sub init()
     m.items = []
     m.dots = []
     m.activeState = false
+    ' HDR trailers (Auto): ask the server for the HDR master when this TV can
+    ' show HDR10/HDR10+/Dolby Vision; otherwise it serves the SDR copy.
+    dp = createObject("roDeviceInfo").GetDisplayProperties()
+    m.hdr = dp <> invalid and (dp.Hdr10 = true or dp.Hdr10Plus = true or dp.DolbyVision = true)
     m.fadeReason = "advance"   ' "advance" (next item) or "mode" (banner<->fullscreen)
     m.meta.itemSpacings = [18]   ' array field -> set in code, not XML
 
@@ -146,6 +150,7 @@ sub playTrailer()
 
     vc = createObject("roSGNode", "ContentNode")
     vc.url = base + turl
+    if m.hdr then vc.url = vc.url + "&variant=hdr"
     vc.streamFormat = "mkv"
     ' Home: slide (never zoom) a letterboxed trailer up so its top bar is
     ' off-screen and the bottom bar lands under the rails. Fullscreen: centered.

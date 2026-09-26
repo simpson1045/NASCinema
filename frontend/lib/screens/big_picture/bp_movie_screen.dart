@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,8 +10,10 @@ import '../../models/movie_file.dart';
 import '../../services/api_service.dart';
 import '../../services/flag_service.dart';
 import '../../services/gamepad/pad_dispatch.dart';
+import '../../services/hdr_prefs.dart';
 import '../../theme/app_theme.dart';
 import '../hero_trailer.dart';
+import '../player/player_view.dart';
 import '../player_screen.dart';
 import 'bp_hero.dart' show bpMetaRow;
 
@@ -534,12 +537,14 @@ class _BpTrailerScreen extends StatefulWidget {
 
 class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   final _focus = FocusNode(debugLabel: 'bp-trailer');
-  late final TrailerPlayer _player = TrailerPlayer(
-    onFirstFrame: () => mounted ? setState(() => _playing = true) : null,
-    onFinished: _close,
-    onError: _close,
-  );
+  // SDR: the in-app texture player. HDR (Windows, HDR wanted): native mpv —
+  // the same pipeline as the movies, the only one that shows HDR properly.
+  TrailerPlayer? _player;
+  Widget? _native;
+  Timer? _endPoll;
   bool _playing = false;
+
+  bool get _hdr => _native != null;
 
   @override
   void initState() {
@@ -549,22 +554,52 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
           'kind': 'trailer',
           'movie_id': widget.movie.id,
           'movie_title': widget.movie.title,
-          'position_seconds': _player.positionSeconds,
+          'position_seconds':
+              _hdr ? playerCurrentTime() : _player?.positionSeconds,
           'trailer_url': widget.url,
+          'hdr': _hdr,
         });
-    unawaited(_player.open(widget.url, muted: false));
+    _start();
+  }
+
+  Future<void> _start() async {
+    final hdr = !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows &&
+        await HdrPrefs.wantHdr();
+    if (!mounted) return;
+    if (hdr) {
+      setDirectMedia(null); // the seam is shared with the movie player
+      setStartPosition(0);
+      setState(() {
+        _native = buildPlayerView('${widget.url}?variant=hdr', false);
+        _playing = true;
+      });
+      _endPoll = Timer.periodic(const Duration(milliseconds: 500), (_) {
+        final d = playerDuration();
+        if (d > 0 && playerCurrentTime() >= d - 0.5) _close();
+      });
+    } else {
+      _player = TrailerPlayer(
+        onFirstFrame: () => mounted ? setState(() => _playing = true) : null,
+        onFinished: _close,
+        onError: _close,
+      );
+      unawaited(_player!.open(widget.url, muted: false));
+    }
   }
 
   @override
   void dispose() {
     PadDispatch.remove(_onPad);
     FlagService.unregister(this);
-    _player.dispose();
+    _endPoll?.cancel();
+    _player?.dispose();
     _focus.dispose();
     super.dispose();
   }
 
   void _close() {
+    _endPoll?.cancel();
     if (mounted) Navigator.of(context).maybePop();
   }
 
@@ -579,7 +614,8 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final view = _playing ? _player.view(fit: BoxFit.contain) : null;
+    final view =
+        _native ?? (_playing ? _player?.view(fit: BoxFit.contain) : null);
     return Scaffold(
       backgroundColor: Colors.black,
       body: CallbackShortcuts(
