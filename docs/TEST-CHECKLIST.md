@@ -74,3 +74,23 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 - [ ] 👀 Reopen the picker: the download is listed for that version; switching versions shows that version's downloads instead.
 - [ ] 👀 Subtitle sync is right (hash matches should be exact; title-only matches may drift — say which movie).
 
+
+## Batch 2 — Roku 0.2.0 (sideload ~/Downloads/NASCinema-roku.zip) — ✅ brighterscript lint (CI)
+
+### Movie page
+- [ ] 👀 OK on any poster **or the hero** opens a movie page (no more instant play): backdrop, logo centered over the rating row, overview, then a line like "4K HDR · Audio: Auto · Subtitles: Off".
+- [ ] 👀 Sequel line under a franchise logo ("VIII · The Big Freeze") on the movie page **and** the home hero (both home and fullscreen), centered with the logo.
+- [ ] 👀 Buttons: **Play** (or **Resume 1:02:13** + **Play from start** if you've watched part of it), **Audio & Subtitles**, **+ My List**. ◀▶ moves, OK presses, Back returns home to where you were.
+- [ ] 👀 + My List ⇄ On My List toggles (and shows up in the ELKO app's My List row).
+
+### The * key (options panel)
+- [ ] 👀 * on the movie page (or the Audio & Subtitles button) opens a right-hand panel: VERSION (if more than one), AUDIO (Auto + every track), SUBTITLES (Off + every track + downloaded ones), Flag a problem.
+- [ ] 👀 TrueHD / DTS-HD audio and PGS subtitles are **greyed "(ELKO app)"** and the cursor skips them.
+- [ ] 👀 Pick an audio track + subtitle, Back, Play → it plays with those (check the Denon's display for the audio format).
+- [ ] 👀 **During playback** * opens the same panel (if Roku's own menu pops up instead, tell me — that's the one unknown). Subtitles switch live; changing audio/version restarts at the same spot in a second or two.
+- [ ] 👀 Downloaded (OpenSubtitles) subtitles from the ELKO app show on the Roku and are in sync.
+- [ ] 👀 Flag a problem (home, movie page, mid-movie) → toast "Flag sent — thanks"; it shows in the flags list with platform "roku".
+
+### Resume
+- [ ] 👀 Watch a few minutes, Back → the page now says **Resume <time>**; Resume picks up there. Same position shows in the ELKO app's Continue Watching.
+- [ ] 👀 Finish a movie (or stop in the last 5%) → back to plain **Play**.

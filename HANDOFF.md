@@ -7,7 +7,33 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-26 night) — franchise logos, Mac clone, repo scrub
+## Latest (2026-09-26 late night) — Batch 2: Roku 0.2.0
+
+**Done**
+- Roku had **no movie page** (every poster played instantly; git shows it never
+  had one — Matt remembered one, likely the fullscreen hero). Built:
+  MovieScreen (logo + sequel line, rating row, overview, Play/Resume/Play from
+  start, Audio & Subtitles, My List), OptionsPanel on the **\* key** everywhere
+  (version/audio/subtitles, Roku-unplayable TrueHD/DTS-HD/PGS greyed, Flag a
+  problem), progress saving (10s + on exit; keeps the subtitle other apps
+  remembered), downloaded subs side-loaded as WebVTT, hero sequel line.
+  Mid-movie: subtitles switch live; audio/version restart at the same spot
+  (mid-stream audio switch breaks Roku's MKV demuxer).
+- CI: .github/workflows/roku-lint.yml (brighterscript) — caught `pos`/`box`
+  reserved words on its first run.
+- GitHub Actions bumped to Node 24 majors; Linux jobs pinned to ubuntu-24.04
+  (ubuntu-latest → 26 on 2026-10-19). First real test = next release tag.
+- NAS hard crash ~21:15 UTC: Nvidia (GPU) memory error per the other Claude —
+  not NASCinema. Backend came back healthy on 5db3902.
+- Zip: ~/Downloads/NASCinema-roku.zip (0.2.0). Checklist: Batch 2 section.
+
+**Unknowns for Matt's test:** whether Roku's own * menu intercepts the key during
+playback; embedded-subtitle mapping (by order of text tracks) — /cast/log
+lines "subs: want …" and "audio: viewer picked …" show what happened.
+
+**Next:** Franchises row on Roku (needs a franchise page) — stretch; Batch 3.
+
+## Earlier (2026-09-26 night) — franchise logos, Mac clone, repo scrub
 
 **Done**
 - Franchise logos (5db3902, deployed 21:11 UTC): TMDB collections have no logos,
