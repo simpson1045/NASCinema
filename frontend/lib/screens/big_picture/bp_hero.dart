@@ -396,22 +396,11 @@ class _Info extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (compact) {
-      // Fullscreen: logo and rating row share one centre line — the block is
-      // as wide as the wider of the two (420–620 px) and both centre in it.
-      return ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 420, maxWidth: 620),
-        child: IntrinsicWidth(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(height: 150, child: _logoOrTitle(centered: true)),
-              const SizedBox(height: 22),
-              Center(child: bpMetaRow(movie)),
-            ],
-          ),
-        ),
-      );
+      // Fullscreen: logo centred over the rating row.
+      return bpLogoOver(
+          logo: _logoOrTitle(centered: true),
+          below: bpMetaRow(movie),
+          maxWidth: 620);
     }
     final overview = movie.overview ?? '';
     return Column(
@@ -463,6 +452,33 @@ class _Info extends StatelessWidget {
     return bpLogo(logo, logoSubtitle, title, centered: centered);
   }
 }
+
+/// A logo centred over the line beneath it (rating row, pick summary …): the
+/// block is as wide as the wider of the two and both centre in it, while the
+/// block itself stays wherever the layout puts it. The house rule for every
+/// logo that sits on a line of text — never a left-aligned logo on a row.
+Widget bpLogoOver({
+  required Widget logo,
+  required Widget below,
+  double logoHeight = 150,
+  double gap = 22,
+  double minWidth = 420,
+  double maxWidth = 1000,
+}) =>
+    ConstrainedBox(
+      constraints: BoxConstraints(minWidth: minWidth, maxWidth: maxWidth),
+      child: IntrinsicWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(height: logoHeight, child: logo),
+            SizedBox(height: gap),
+            Center(child: below),
+          ],
+        ),
+      ),
+    );
 
 /// A clearlogo — with this movie's subtitle under it (gold) when the logo is
 /// the franchise's shared wordmark, so a sequel still reads as itself

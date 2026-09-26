@@ -9,7 +9,7 @@ import '../../services/flag_service.dart';
 import '../../services/gamepad/pad_dispatch.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/pad_hints.dart';
-import 'bp_hero.dart' show bpLogo;
+import 'bp_hero.dart' show bpLogo, bpLogoOver;
 
 /// What Play will use: a version (file) and its audio/subtitle tracks, as mpv
 /// ids. [audio] null = the file's default; [subtitle] null = automatic (mpv's
@@ -325,15 +325,20 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 560, height: 130, child: _header()),
-                    const SizedBox(height: 14),
-                    Text(_pickSummary(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: NasColors.amber,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700)),
+                    // Logo centred over the summary line (house rule).
+                    bpLogoOver(
+                      logo: _header(),
+                      logoHeight: 130,
+                      gap: 14,
+                      maxWidth: 1400,
+                      below: Text(_pickSummary(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: NasColors.amber,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700)),
+                    ),
                     const SizedBox(height: 40),
                     Expanded(
                       child: Row(
@@ -369,16 +374,18 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
 
   Widget _header() {
     final text = Align(
-      alignment: Alignment.bottomLeft,
+      alignment: Alignment.bottomCenter,
       child: Text(widget.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: const TextStyle(
               color: Colors.white, fontSize: 46, fontWeight: FontWeight.w800)),
     );
     final logo = widget.logo;
     if (logo == null || logo.isEmpty) return text;
-    return bpLogo(logo, widget.logoSubtitle, text, subtitleSize: 30);
+    return bpLogo(logo, widget.logoSubtitle, text,
+        subtitleSize: 30, centered: true);
   }
 
   Widget _column(int col, String heading) {

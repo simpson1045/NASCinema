@@ -15,7 +15,7 @@ import '../../theme/app_theme.dart';
 import '../hero_trailer.dart';
 import '../player/player_view.dart';
 import '../player_screen.dart';
-import 'bp_hero.dart' show bpLogo, bpMetaRow;
+import 'bp_hero.dart' show bpLogo, bpLogoOver, bpMetaRow;
 import 'bp_track_picker.dart';
 import '../../widgets/pad_hints.dart';
 
@@ -259,9 +259,14 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: 620, height: 180, child: _logoOrTitle()),
-              const SizedBox(height: 26),
-              bpMetaRow(_m),
+              // Logo centred over the rating row (house rule).
+              bpLogoOver(
+                logo: _logoOrTitle(),
+                below: bpMetaRow(_m),
+                logoHeight: 180,
+                gap: 26,
+                maxWidth: 760,
+              ),
               if (_m.genres.isNotEmpty || _m.runtimeLabel != null) ...[
                 const SizedBox(height: 14),
                 Text(
@@ -368,11 +373,12 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
 
   Widget _logoOrTitle() {
     final title = Align(
-      alignment: Alignment.bottomLeft,
+      alignment: Alignment.bottomCenter,
       child: Text(
         _m.title,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
         style: const TextStyle(
             color: Colors.white,
             fontSize: 72,
@@ -382,7 +388,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     );
     final logo = _logo;
     if (logo == null || logo.isEmpty) return title;
-    return bpLogo(logo, _logoSub, title, subtitleSize: 40);
+    return bpLogo(logo, _logoSub, title, subtitleSize: 40, centered: true);
   }
 
   /// Extras along the bottom; the focused card stays in the left slot and the
