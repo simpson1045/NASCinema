@@ -68,7 +68,10 @@ jobs:
 
   windows:
     needs: version
-    runs-on: windows-latest
+    # Visual Studio 2022 — the compiler family ALPINE built ELKO's app with.
+    # (windows-latest moved to VS 2026, which rejects a plugin's old coroutine
+    # header; CMakeLists also silences that, for when 2022 is retired.)
+    runs-on: windows-2022
     defaults:
       run:
         working-directory: frontend

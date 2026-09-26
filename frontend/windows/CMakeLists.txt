@@ -55,6 +55,11 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# permission_handler_windows (0.2.x) includes <experimental/coroutine>, which
+# Visual Studio 2026 (MSVC 14.5x) turns into a hard error (STL1011); VS 2022
+# only warned. Silence it for every plugin target added below.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 include(flutter/generated_plugins.cmake)
 
 
