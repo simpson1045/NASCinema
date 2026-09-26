@@ -220,7 +220,11 @@ def parse_master(text: str, base: str, max_lines: int, lang: str) -> dict:
                                "channels": a.get("CHANNELS", "2")})
     fits = [v for v in videos.values() if 0 < _lines(v["res"]) <= max_lines + 40]
     best = lambda vs: max(vs, key=lambda v: (_lines(v["res"]), v["bw"]), default=None)
-    hdr = best([v for v in fits if v["range"] in ("PQ", "HLG")])
+    # HDR10/HDR10+ only. Dolby Vision-only ladders (Apple originals: dvh1
+    # Profile 5) aren't HDR10-compatible — non-DV players show them green/
+    # purple — and MKV rejects the dvh1 tag. Those titles get the SDR master.
+    hdr = best([v for v in fits if v["range"] in ("PQ", "HLG")
+                and not v["codec"].startswith(("dvh1", "dvhe"))])
     sdr = best([v for v in fits if v["range"] == "SDR"])
 
     want = (lang or "en").split("-")[0].lower()
@@ -295,7 +299,13 @@ async def download(offer: dict, main: Path, sdr_copy: Path) -> dict | None:
     if not ff:
         return None
     primary = offer["hdr"] or offer["sdr"]
-    if not await asyncio.to_thread(_mux_sync, ff, primary, offer["audio"], main):
+    ok = await asyncio.to_thread(_mux_sync, ff, primary, offer["audio"], main)
+    if not ok and offer["hdr"] and offer["sdr"]:
+        # HDR wouldn't mux — an SDR Apple trailer still beats giving up.
+        offer = {**offer, "hdr": None}
+        primary = offer["sdr"]
+        ok = await asyncio.to_thread(_mux_sync, ff, primary, offer["audio"], main)
+    if not ok:
         return None
     wrote_sdr = False
     if offer["hdr"] and offer["sdr"]:

@@ -183,6 +183,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
             selected: {_hdrMode},
             showSelectedIcon: false,
+            // Gold like the toggles (the theme's default here is violet).
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: NasColors.amber,
+              selectedForegroundColor: NasColors.bg,
+              foregroundColor: NasColors.text,
+              side: const BorderSide(color: NasColors.amber),
+            ),
             onSelectionChanged: (sel) {
               setState(() => _hdrMode = sel.first);
               HdrPrefs.setMode(sel.first);
