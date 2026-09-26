@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.8 - 2026-09-25
+- **The mouse cursor hides while you use the controller or keyboard** — it disappears the moment you press a button and comes back as soon as you move the mouse.
+- **Trailers play in English.** YouTube now auto-dubs many trailers into other languages, and the downloader sometimes grabbed a dub (German, Portuguese…). It now always takes the original audio, and the affected trailers were re-downloaded — keeping their 4K picture.
+
 ## 0.5.7 - 2026-09-25
 - **Correct quality labels.** Widescreen movies stored without their black bars (1920x800) showed "720p" and 4K ones (3840x1600) showed "1080p" — about half the library. Labels now go by the real picture size.
 
