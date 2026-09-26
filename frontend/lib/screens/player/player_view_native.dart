@@ -51,6 +51,23 @@ void setDirectMedia(String? path) => _directMedia = path;
 double _startAt = 0;
 void setStartPosition(double seconds) => _startAt = seconds;
 
+// Tracks picked before Play (mpv ids, 1-based per type; sub 0 = off; null =
+// the file's default). Set by the player screen before each launch.
+int? _startAid;
+int? _startSid;
+void setStartTracks(int? audio, int? subtitle) {
+  _startAid = audio;
+  _startSid = subtitle;
+}
+
+// The player screen's hooks: our script-messages from uosc buttons/menus
+// ("nascinema-versions", "nascinema-version <id>"), and what ▼ opens.
+void Function(List<String> args)? _messageHandler;
+void setPlayerMessageHandler(void Function(List<String> args)? h) =>
+    _messageHandler = h;
+void Function()? _versionsHandler;
+void setVersionsHandler(void Function()? h) => _versionsHandler = h;
+
 /// Append a diagnostic line next to the running exe. ELKO (the renderer) has
 /// no remote shell, so this is how we read player failures — over the C$
 /// share. Best-effort; never throws into playback.
@@ -178,6 +195,8 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
       hwnd: win.hwnd,
       startSeconds: widget.startAt,
       passthrough: _forcePassthrough,
+      audioId: _startAid,
+      subId: _startSid,
       diag: _diag,
     );
     _mpv = c;
@@ -191,10 +210,17 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
       // uosc's custom back button (script-message nascinema-back) → leave
       // the player screen, which tears everything down.
       c.events?.listen((e) {
-        if (e['event'] == 'client-message' &&
-            (e['args'] as List?)?.contains('nascinema-back') == true) {
+        if (e['event'] != 'client-message') return;
+        final args = [for (final a in (e['args'] as List? ?? const [])) '$a'];
+        if (args.contains('nascinema-back')) {
           if (mounted) Navigator.of(context).maybePop();
+        } else if (args.any((a) => a.startsWith('nascinema-'))) {
+          _messageHandler?.call(args);
         }
+      });
+      // Tell people what the controller does (it's otherwise invisible).
+      Timer(const Duration(milliseconds: 2500), () {
+        if (_mpv == c) c.showHints(versions: _versionsHandler != null);
       });
       unawaited(_matchRefreshRate(c));
     }
@@ -577,9 +603,13 @@ bool playerPad(PadButton b) {
     case PadButton.rb:
       c.chapter(1);
       c.uosc('flash-timeline');
+    case PadButton.down when _versionsHandler != null:
+      _menuHint = true;
+      _versionsHandler!();
     case PadButton.up:
     case PadButton.down:
       c.uosc('flash-ui');
+      c.showHints(versions: _versionsHandler != null);
     case PadButton.x:
       _menuHint = true;
       c.uosc('audio');
@@ -597,3 +627,14 @@ bool playerPad(PadButton b) {
 
 /// Run a uosc binding on the live player (e.g. 'flash-top-bar').
 void playerUosc(String binding) => _mpv?.uosc(binding);
+
+/// Open a custom uosc menu on the live player (see MpvController.openMenu).
+void playerOpenMenu(Map<String, Object?> menu) => _mpv?.openMenu(menu);
+
+/// Language of the audio track playing now, if known.
+Future<String?> playerCurrentAudioLang() async =>
+    await _mpv?.currentAudioLang();
+
+/// Switch the live player to another file (another version) in place.
+void playerLoadMedia(String media, {double start = 0, String? alang}) =>
+    _mpv?.loadFile(media, start: start, alang: alang);

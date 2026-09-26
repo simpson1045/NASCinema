@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from .. import apple_trailers
 from ..db import SessionLocal, get_session
 from ..metadata import get_movie_logo_info, get_movie_videos, logo_subtitle
+from ..tracks import quality_label, track_rows, version_label
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
 from ..scanner import backfill_ratings, reprobe, scan
@@ -36,6 +37,11 @@ from ..trailers import (
 )
 
 router = APIRouter(prefix="/api", tags=["library"])
+
+
+def _track_fields(f: MediaFile) -> dict:
+    t = track_rows(f)
+    return {"audio_tracks": t["audio"], "subtitle_tracks": t["subtitles"]}
 
 
 async def _logo_fields(m: Movie) -> dict:
@@ -231,14 +237,26 @@ async def get_movie(
     movie_id: int, session: AsyncSession = Depends(get_session)
 ) -> dict:
     movie = await session.scalar(
-        select(Movie).options(selectinload(Movie.files)).where(Movie.id == movie_id)
+        select(Movie)
+        .options(selectinload(Movie.files).selectinload(MediaFile.streams))
+        .where(Movie.id == movie_id)
     )
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
     data = _summary(movie)
+    # Versions best-first (4K HDR > 4K > 1080p …) so a plain Play gets the
+    # best copy; each carries its label and tracks for the pickers.
+    features = sorted(
+        (f for f in movie.files if f.kind == "feature"),
+        key=lambda f: (max(f.height or 0, round((f.width or 0) * 9 / 16)), f.hdr),
+        reverse=True,
+    )
     data["files"] = [
         {
             "id": f.id,
+            "label": version_label(f),
+            "quality": quality_label(f),
+            **_track_fields(f),
             "path": f.path,
             "container": f.container,
             "video_codec": f.video_codec,
@@ -250,8 +268,7 @@ async def get_movie(
             "hdr": f.hdr,
             "size_bytes": f.size_bytes,
         }
-        for f in movie.files
-        if f.kind == "feature"
+        for f in features
     ]
     data["extras"] = [
         {

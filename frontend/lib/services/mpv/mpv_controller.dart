@@ -11,6 +11,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -89,6 +90,8 @@ class MpvController {
     int? hwnd,
     double startSeconds = 0,
     bool passthrough = false,
+    int? audioId,
+    int? subId,
     void Function(String line)? diag,
   }) {
     final next = (_launchChain ?? Future<MpvController?>.value(null))
@@ -98,6 +101,8 @@ class MpvController {
               hwnd: hwnd,
               startSeconds: startSeconds,
               passthrough: passthrough,
+              audioId: audioId,
+              subId: subId,
               diag: diag,
             ));
     _launchChain = next;
@@ -109,6 +114,8 @@ class MpvController {
     int? hwnd,
     double startSeconds = 0,
     bool passthrough = false,
+    int? audioId,
+    int? subId,
     void Function(String line)? diag,
   }) async {
     // One renderer at a time — tear down the previous instance (and its
@@ -133,6 +140,9 @@ class MpvController {
       '--log-file=$exeDir${Platform.pathSeparator}mpv.log',
       if (hwnd != null) '--wid=$hwnd' else '--fullscreen',
       if (startSeconds > 1) '--start=$startSeconds',
+      // Tracks picked before Play (mpv ids are 1-based per type; sub 0 = off).
+      if (audioId != null) '--aid=$audioId',
+      if (subId != null) subId == 0 ? '--sid=no' : '--sid=$subId',
       '--hwdec=auto',
       '--keep-open=yes', // reaching EOF must not kill the process under us
       '--force-window=yes',
@@ -355,6 +365,43 @@ class MpvController {
 
   /// True while a uosc menu is open (observed from uosc's user-data).
   bool menuOpen = false;
+
+  /// A custom uosc menu (e.g. Versions): items' `value` is the command run on
+  /// select. JSON per uosc's open-menu API.
+  void openMenu(Map<String, Object?> menu) =>
+      _ipc?.command(['script-message-to', 'uosc', 'open-menu', jsonEncode(menu)]);
+
+  /// The button legend, drawn by mpv just above the timeline — the only way
+  /// to put text over the native video. A few seconds, then it fades.
+  void showHints({bool versions = false}) {
+    final keys = [
+      'A  Pause', '◀ ▶  Skip 10s', 'LB / RB  Chapters', 'X  Audio',
+      'Y  Subtitles', if (versions) '▼  Versions', 'Start  Menu', 'B  Back',
+    ].join('      ');
+    _ipc?.command([
+      'show-text',
+      '\${osd-ass-cc/0}{\\an2}{\\fs22}{\\bord2}{\\3c&H270E0A&}'
+          '{\\1c&HFFF1EE&}$keys\\N\\N\\N\\N',
+      4500,
+    ]);
+  }
+
+  /// Swap to another file in the running player (another version of the
+  /// movie) at [start] seconds, preferring audio in [alang]. mpv ≥ 0.38 form:
+  /// `loadfile <url> replace <index> <options>`.
+  void loadFile(String media, {double start = 0, String? alang}) {
+    final opts = [
+      'start=${start.toStringAsFixed(1)}',
+      if (alang != null && alang.isNotEmpty) 'alang=$alang',
+    ].join(',');
+    _ipc?.command(['loadfile', media, 'replace', -1, opts]);
+  }
+
+  /// Language of the audio track playing now (to carry across versions).
+  Future<String?> currentAudioLang() async {
+    final v = await _ipc?.get('current-tracks/audio/lang');
+    return v?.toString();
+  }
 
   void setPaused(bool p) => _ipc?.set('pause', p);
 

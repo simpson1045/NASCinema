@@ -16,6 +16,7 @@ import '../hero_trailer.dart';
 import '../player/player_view.dart';
 import '../player_screen.dart';
 import 'bp_hero.dart' show bpLogo, bpMetaRow;
+import 'bp_track_picker.dart';
 
 /// Big picture's movie page — the Netflix treatment, on the same fixed
 /// 1920x1080 canvas as the home: full backdrop, logo, ratings, overview, big
@@ -45,6 +46,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   String? _logo;
   String? _logoSub;
   bool _loaded = false;
+  TrackPick? _pick; // version + audio + subtitles Play will use
 
   _Row _row = _Row.buttons;
   int _button = 0;
@@ -85,13 +87,15 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
         }
         _loaded = true;
       });
+      final pick = await TrackPick.load(_m.id, d.files);
+      if (mounted) setState(() => _pick = pick);
     } catch (_) {
       if (mounted) setState(() => _loaded = true);
     }
   }
 
-  // Buttons: Play/Resume, Trailer.
-  static const _buttonCount = 2;
+  // Buttons: Play/Resume, Trailer, Versions & Audio.
+  static const _buttonCount = 3;
 
   void _move(int dx, int dy) {
     setState(() {
@@ -113,6 +117,8 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       _open(PlayerScreen(fileId: e.id, baseUrl: widget.baseUrl, title: e.title));
     } else if (_button == 0) {
       _play();
+    } else if (_button == 2) {
+      _openPicker();
     } else {
       _open(_BpTrailerScreen(
         url: '${widget.baseUrl}/api/movies/${_m.id}/trailer',
@@ -124,8 +130,37 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
 
   void _play() {
     if (_files.isEmpty) return; // still loading
+    final pick = _pick ?? TrackPick(fileId: _files.first.id);
+    unawaited(pick.save(_m.id));
     _open(PlayerScreen(
-        fileId: _files.first.id, baseUrl: widget.baseUrl, title: _m.title));
+      fileId: pick.fileId,
+      baseUrl: widget.baseUrl,
+      title: _m.title,
+      audioTrack: pick.audio,
+      subtitleTrack: pick.subtitle,
+      versions: _files,
+    ));
+  }
+
+  Future<void> _openPicker() async {
+    final pick = _pick;
+    if (pick == null || _files.isEmpty) return;
+    final result = await Navigator.of(context).push<TrackPick>(
+      MaterialPageRoute(
+        builder: (_) => BpTrackPicker(
+          title: _m.title,
+          files: _files,
+          initial: pick,
+          baseUrl: widget.baseUrl,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    _focus.requestFocus();
+    if (result != null) {
+      setState(() => _pick = result);
+      unawaited(result.save(_m.id));
+    }
   }
 
   Future<void> _open(Widget page) async {
@@ -276,7 +311,35 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                     _activate();
                   },
                 ),
+                const SizedBox(width: 24),
+                _BpButton(
+                  icon: Icons.tune_rounded,
+                  label: _files.length > 1 ? 'Versions & Audio' : 'Audio & Subtitles',
+                  focused: _row == _Row.buttons && _button == 2,
+                  onTap: () {
+                    setState(() {
+                      _row = _Row.buttons;
+                      _button = 2;
+                    });
+                    _activate();
+                  },
+                ),
               ]),
+              if (_pick != null) ...[
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: 1000,
+                  child: Text(
+                    _pick!.summary(_files),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: NasColors.muted,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
               if (_resume) ...[
                 const SizedBox(height: 18),
                 SizedBox(
@@ -586,6 +649,7 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
     if (hdr) {
       setDirectMedia(null); // the seam is shared with the movie player
       setStartPosition(0);
+      setStartTracks(null, null);
       setState(() {
         _native = buildPlayerView('${widget.url}?variant=hdr', false);
         _playing = true;

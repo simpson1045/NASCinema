@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/movie_file.dart';
 import '../services/api_service.dart';
 import '../services/cast/cast_device.dart';
 import '../services/cast_actions.dart';
@@ -24,17 +25,33 @@ class PlayerScreen extends StatefulWidget {
     required this.fileId,
     required this.baseUrl,
     required this.title,
+    this.audioTrack,
+    this.subtitleTrack,
+    this.startAt,
+    this.versions = const [],
   });
 
   final int fileId;
   final String baseUrl;
   final String title;
+  // Picked before Play (mpv ids; subtitle 0 = off; null = file default).
+  final int? audioTrack;
+  final int? subtitleTrack;
+  // Overrides the saved resume point when set.
+  final double? startAt;
+  // The movie's versions — enables ▼ / the Versions button to switch files
+  // mid-movie at the same timestamp.
+  final List<MovieFile> versions;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  // Which screen owns the player seam's hooks (a replaced screen's dispose
+  // must not clear its successor's).
+  static Object? _hooksOwner;
+  late int _fileId = widget.fileId; // changes when you switch versions
   String? _mode;
   String? _reason;
   String? _error;
@@ -121,9 +138,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     PadDispatch.add(_onPad);
+    _hooksOwner = this;
+    setPlayerMessageHandler(_onPlayerMessage);
+    setVersionsHandler(widget.versions.length > 1 ? _openVersions : null);
     FlagService.register(this, 'player', widget.baseUrl, () => {
           'kind': 'movie',
-          'media_file_id': widget.fileId,
+          'media_file_id': _fileId,
           'movie_title': widget.title,
           'position_seconds': _position,
           'mode': _mode,
@@ -172,6 +192,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     PadDispatch.remove(_onPad);
+    if (_hooksOwner == this) {
+      setPlayerMessageHandler(null);
+      setVersionsHandler(null);
+      _hooksOwner = null;
+    }
     FlagService.unregister(this);
     _saveProgress(); // capture the resume point on the way out
     _poll?.cancel();
@@ -185,6 +210,57 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
+  /// The Versions menu (uosc), current one marked.
+  void _openVersions() {
+    playerOpenMenu({
+      'type': 'nascinema_versions',
+      'title': 'Versions',
+      'items': [
+        for (final v in widget.versions)
+          {
+            'title': v.label ?? v.filename,
+            'hint': v.quality ?? '',
+            'active': v.id == _fileId,
+            'value': ['script-message', 'nascinema-version', '${v.id}'],
+          },
+      ],
+    });
+  }
+
+  void _onPlayerMessage(List<String> args) {
+    if (args.contains('nascinema-versions')) {
+      _openVersions();
+      return;
+    }
+    final i = args.indexOf('nascinema-version');
+    if (i >= 0 && i + 1 < args.length) {
+      final id = int.tryParse(args[i + 1]);
+      if (id != null) _switchVersion(id);
+    }
+  }
+
+  /// Swap to another version in place, at the same moment, keeping the
+  /// audio language. Cuts can differ by a few seconds (added scenes) — close
+  /// enough to land in the same scene.
+  Future<void> _switchVersion(int id) async {
+    if (id == _fileId) return;
+    _saveProgress();
+    final at = _position;
+    final lang = await playerCurrentAudioLang();
+    try {
+      final p = await ApiService(widget.baseUrl).getPlay(id, client: 'native');
+      if (!mounted) return;
+      playerLoadMedia(p.path ?? '${widget.baseUrl}${p.url}',
+          start: at, alang: lang);
+      setState(() {
+        _fileId = id;
+        _mode = p.mode;
+        _reason = p.reason;
+        _source = p.source;
+      });
+    } catch (_) {}
+  }
+
   /// Controller → the native player (and its on-video menus). Unhandled
   /// presses (B with no menu open) fall through to the default: back out.
   bool _onPad(PadButton b) => _nativeVideo && playerPad(b);
@@ -194,7 +270,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _saveProgress() {
     if (_duration <= 0 || _position <= 2) return;
     if (_position >= _duration - 5) return; // basically finished
-    ApiService(widget.baseUrl).saveProgress(widget.fileId, _position, _activeSub);
+    ApiService(widget.baseUrl).saveProgress(_fileId, _position, _activeSub);
   }
 
   Future<void> _load() async {
@@ -203,7 +279,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Phone/tablet (and web) are browser-class → 'web' so the decision engine
       // transcodes what they can't natively play (HEVC/HDR/TrueHD).
       final p = await ApiService(widget.baseUrl)
-          .getPlay(widget.fileId, client: _isDesktop ? 'native' : 'web');
+          .getPlay(_fileId, client: _isDesktop ? 'native' : 'web');
       _resumePosition = p.resumePosition;
       _resumeSubtitle = p.resumeSubtitle;
       final passthrough = await _readPassthroughPref();
@@ -213,8 +289,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // (the proven flawless byte path) and open at the resume point, instead
       // of streaming the backend URL and visibly seeking after start.
       setDirectMedia(p.path);
+      setStartTracks(widget.audioTrack, widget.subtitleTrack);
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
-        setStartPosition(_resumePosition);
+        setStartPosition(widget.startAt ?? _resumePosition);
         _resumeApplied = true; // handled at launch; don't re-seek from _poll
       }
       setState(() {
@@ -274,7 +351,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _loadSubs() async {
     try {
-      final r = await ApiService(widget.baseUrl).getSubtitles(widget.fileId);
+      final r = await ApiService(widget.baseUrl).getSubtitles(_fileId);
       if (!mounted) return;
       setState(() {
         _subs = r.subtitles;
@@ -302,14 +379,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _offsetSave?.cancel();
     _offsetSave = Timer(const Duration(milliseconds: 600), () {
       ApiService(widget.baseUrl)
-          .setSubtitleOffset(widget.fileId, _subOffset)
+          .setSubtitleOffset(_fileId, _subOffset)
           .catchError((_) {});
     });
   }
 
   Future<void> _refreshCached() async {
     try {
-      final c = await ApiService(widget.baseUrl).getCached(widget.fileId);
+      final c = await ApiService(widget.baseUrl).getCached(_fileId);
       if (!mounted) return;
       setState(() {
         _cached = c.ranges;
@@ -582,7 +659,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       context,
       cast: _cast,
       baseUrl: widget.baseUrl,
-      fileId: widget.fileId,
+      fileId: _fileId,
       title: widget.title,
       activeSubtitleId: _activeSub,
     );
@@ -713,7 +790,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
       builder: (_) => _SubsSheet(
         baseUrl: widget.baseUrl,
-        fileId: widget.fileId,
+        fileId: _fileId,
         subs: _subs,
         activeId: _activeSub,
         onOff: () {

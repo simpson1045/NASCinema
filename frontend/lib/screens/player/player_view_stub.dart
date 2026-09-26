@@ -41,3 +41,10 @@ void playerSetSubtitleOffset(double seconds) {}
 /// No native player here — the screen handles the controller itself.
 bool playerPad(PadButton b) => false;
 void playerUosc(String binding) {}
+
+void setStartTracks(int? audio, int? subtitle) {}
+void setPlayerMessageHandler(void Function(List<String> args)? h) {}
+void setVersionsHandler(void Function()? h) {}
+void playerOpenMenu(Map<String, Object?> menu) {}
+Future<String?> playerCurrentAudioLang() async => null;
+void playerLoadMedia(String media, {double start = 0, String? alang}) {}
