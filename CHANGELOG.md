@@ -2,6 +2,9 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.7.3 - 2026-09-26
+- **Logos line up on the home screen too:** the movie logo at the top of the home screen (and the mouse layout's home) now sits centered over the year · rating · IMDb · RT · quality row.
+
 ## 0.7.2 - 2026-09-26
 - **Content ratings** (G, PG, PG-13, R …) now show next to the year — on the trailer wheel, full screen, the movie page and the picker.
 - **Logos line up:** on the movie page and in the picker, the logo sits centered over the line beneath it, just like full screen.

@@ -3,11 +3,24 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.7.2+33 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.7.3+34 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-26 ~08:00 UTC) — 0.7.2 content ratings, logo rule
+## Latest (2026-09-26 evening) — 0.7.3; ALPINE crash post-mortem
+
+- 0.7.3: logo centred over the rating row on Big Picture's home hero + the
+  mouse-UI home hero (every logo-over-a-line uses bpLogoOver now); Roku 0.1.11
+  centres in home mode too (centerInfo).
+- ALPINE froze (no SSH/RDP/keyboard) ~08:15 UTC after stacked SSH sessions +
+  a release build; Matt hard-reset it. The first rebuild failed on AAPT2
+  "Daemon startup failed" (post-crash hiccup, 29-min Android step); a retry
+  hours later built clean in ~6 min. Rules now in memory
+  (alpine-ssh-connection-limit): short ALPINE commands only, no retry-stacking,
+  watch builds via job_status on the NAS (a file-only watcher waited all night
+  on a build that had already failed).
+
+## Earlier (2026-09-26 ~08:00 UTC) — 0.7.2 content ratings, logo rule
 
 - movies.certification (migration 0012) from TMDB release_dates in
   settings.rating_region; backfill done (212 rated, 7 none). Badge after the
