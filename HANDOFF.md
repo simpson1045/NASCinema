@@ -3,11 +3,25 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.7.0+31 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.7.1+32 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-26 ~07:00 UTC) — 0.7.0 versions/audio/subtitles picker
+## Latest (2026-09-26 ~07:30 UTC) — 0.7.1 Xbox glyphs, picker polish
+
+- Kenney Input Prompts 1.5 (CC0) — full pack in frontend/third_party/
+  kenney-input-prompts (4,667 files; copy big trees on ALPINE, not over SMB).
+  App ships 14 Xbox PNGs (assets/prompts/xbox, `widgets/pad_hints.dart`:
+  PadIcon/PadHints). mpv legend uses the Kenney Xbox font
+  (mpv-config/fonts/kenney_input_xbox_series.ttf, family "Kenney Input Xbox
+  Series"; codepoints in the pack's *_map.txt, e.g. color A U+E00C).
+- tracks.py clean_title + generic-name rule ("Original · English DTS-HD MA
+  5.1", "SDH (full)"). Picker: "Automatic" subs only when a forced/default
+  track exists (says which); else default Off. Picker header = clearlogo.
+- Deploy tip: run deploy.sh detached (`setsid … > /tmp/nascinema_deploy.log`)
+  and poll — deploy + slow startup exceeds the 300 s run_command cap.
+
+## Earlier (2026-09-26 ~07:00 UTC) — 0.7.0 versions/audio/subtitles picker
 
 - Backend `app/tracks.py`: version_label (edition → filename [tag] not an
   encode tag → quality summary), quality_label, track_rows (audio/subtitle

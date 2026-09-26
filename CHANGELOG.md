@@ -2,6 +2,12 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.7.1 - 2026-09-26
+- **Real Xbox buttons** in the on-screen hints — the green A, red B, blue X and yellow Y, bumpers and D-pad — in the picker, the trailer controls and the in-movie button legend.
+- **The picker shows the movie's logo** at the top.
+- **Cleaner track names** (e.g. "Original · English DTS-HD MA 5.1", "SDH (full)").
+- **Subtitles make sense:** "Automatic" only appears when a movie has a forced track (and says which); otherwise subtitles start Off.
+
 ## 0.7.0 - 2026-09-25
 - **Pick your version, audio and subtitles.** A new **Versions & Audio** button on the movie page opens a full-screen picker: choose the version (e.g. *4K77*, *Harmy Despecialized*, the 4K remux), then the audio track by its real name (lossless tracks marked, commentaries tagged), then subtitles. The line under the buttons shows what Play will use, and your choice is remembered for next time.
 - **Switch versions mid-movie:** press **▼** (or the new Versions button on the control bar) and pick another version — it picks up at the same moment in the same language.
