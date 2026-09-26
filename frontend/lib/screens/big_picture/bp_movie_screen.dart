@@ -56,6 +56,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   int _moreIdx = 0;
   List<CastMember> _cast = const [];
   int _castIdx = 0;
+  bool _inList = false; // on My List
 
   _Row _row = _Row.buttons;
   int _button = 0;
@@ -95,6 +96,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
           _logoSub = d.logoSubtitle;
         }
         _series = d.series;
+        _inList = d.inWatchlist;
         final here = d.series?.movies.indexWhere((m) => m.id == _m.id) ?? -1;
         _seriesIdx = here < 0 ? 0 : here;
         _loaded = true;
@@ -113,8 +115,8 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     }
   }
 
-  // Buttons: Play/Resume, Trailer, Versions & Audio.
-  static const _buttonCount = 3;
+  // Buttons: Play/Resume, Trailer, Versions & Audio, My List.
+  static const _buttonCount = 4;
 
   bool get _hasSeries => (_series?.movies.length ?? 0) > 1;
 
@@ -175,6 +177,8 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       _play();
     } else if (_button == 2) {
       _openPicker();
+    } else if (_button == 3) {
+      _toggleList();
     } else {
       _open(_BpTrailerScreen(
         url: '${widget.baseUrl}/api/movies/${_m.id}/trailer',
@@ -196,6 +200,20 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       subtitleTrack: pick.subtitle,
       versions: _files,
     ));
+  }
+
+  Future<void> _toggleList() async {
+    final want = !_inList;
+    setState(() => _inList = want); // instant; reverted if the server says no
+    try {
+      final now = await _api.setWatchlist(_m.id, want);
+      if (!mounted) return;
+      setState(() => _inList = now);
+      FlagService.say(now ? 'Added to My List' : 'Removed from My List');
+    } catch (_) {
+      if (mounted) setState(() => _inList = !want);
+      FlagService.say("Couldn't update My List");
+    }
   }
 
   Future<void> _openPicker() async {
@@ -310,7 +328,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
         Positioned(
           left: 90,
           top: 120,
-          width: 1000,
+          width: 1200, // 4 buttons (Play · Trailer · Versions & Audio · My List)
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -387,7 +405,28 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                     _activate();
                   },
                 ),
+                const SizedBox(width: 24),
+                _BpButton(
+                  icon: _inList ? Icons.check_rounded : Icons.add_rounded,
+                  label: '',
+                  focused: _row == _Row.buttons && _button == 3,
+                  onTap: () {
+                    setState(() {
+                      _row = _Row.buttons;
+                      _button = 3;
+                    });
+                    _activate();
+                  },
+                ),
               ]),
+              if (_row == _Row.buttons && _button == 3) ...[
+                const SizedBox(height: 10),
+                Text(_inList ? 'On My List — A to remove' : 'Add to My List',
+                    style: const TextStyle(
+                        color: NasColors.amber,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700)),
+              ],
               if (_pick != null) ...[
                 const SizedBox(height: 18),
                 SizedBox(
@@ -697,7 +736,8 @@ class _BpButton extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         scale: focused ? 1.08 : 1.0,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+          padding: EdgeInsets.symmetric(
+              horizontal: label.isEmpty ? 22 : 40, vertical: 20),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(10),
@@ -711,10 +751,12 @@ class _BpButton extends StatelessWidget {
                     height: 34,
                     child: CircularProgressIndicator(strokeWidth: 3, color: fg))
                 : Icon(icon, color: fg, size: 40),
-            const SizedBox(width: 14),
-            Text(label,
-                style: TextStyle(
-                    color: fg, fontSize: 30, fontWeight: FontWeight.w700)),
+            if (label.isNotEmpty) ...[
+              const SizedBox(width: 14),
+              Text(label,
+                  style: TextStyle(
+                      color: fg, fontSize: 30, fontWeight: FontWeight.w700)),
+            ],
           ]),
         ),
       ),

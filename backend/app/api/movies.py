@@ -30,6 +30,7 @@ from ..metadata import (
 from ..tracks import quality_label, track_rows, version_label
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
+from ..models.watchlist import WatchlistItem
 from ..scanner import backfill_certifications, backfill_ratings, reprobe, scan
 from ..trailers import (
     clear_trailer,
@@ -164,6 +165,14 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
             {"key": "continue", "title": "Continue Watching", "movies": cw[:20]}
         )
 
+    # My List — saved to watch later, newest first.
+    saved = (await session.scalars(
+        select(WatchlistItem).order_by(WatchlistItem.added_at.desc())
+    )).all()
+    mine = [summ[w.movie_id] for w in saved if w.movie_id in summ]
+    if mine:
+        rails.append({"key": "mylist", "title": "My List", "movies": mine[:40]})
+
     # Popular (TMDB popularity) — sparse until the backfill populates it.
     rail(
         "popular",
@@ -293,6 +302,8 @@ async def get_movie(
     ]
     # Clearlogo for the big picture movie page (manual override wins).
     data.update(await _logo_fields(movie))
+    data["in_watchlist"] = bool(await session.scalar(
+        select(WatchlistItem.id).where(WatchlistItem.movie_id == movie.id)))
     # "More in this series": the franchise's other movies in the library.
     data["series"] = None
     if movie.collection_id:
@@ -595,3 +606,38 @@ async def movie_related(
         "cast": (rel or {}).get("cast", []),
         "more_like_this": [_summary(m) for m in picks[:12]],
     }
+
+
+# --- My List -------------------------------------------------------------------
+
+@router.get("/watchlist")
+async def get_watchlist(session: AsyncSession = Depends(get_session)) -> list[dict]:
+    rows = (await session.scalars(
+        select(WatchlistItem).order_by(WatchlistItem.added_at.desc()))).all()
+    if not rows:
+        return []
+    ms = {m.id: m for m in (await session.scalars(
+        select(Movie).options(selectinload(Movie.files))
+        .where(Movie.id.in_([r.movie_id for r in rows])))).all()}
+    return [_summary(ms[r.movie_id]) for r in rows if r.movie_id in ms]
+
+
+@router.put("/watchlist/{movie_id}")
+async def add_to_watchlist(movie_id: int, session: AsyncSession = Depends(get_session)) -> dict:
+    if not await session.get(Movie, movie_id):
+        raise HTTPException(status_code=404, detail="Movie not found")
+    if not await session.scalar(
+            select(WatchlistItem.id).where(WatchlistItem.movie_id == movie_id)):
+        session.add(WatchlistItem(movie_id=movie_id))
+        await session.commit()
+    return {"in_watchlist": True}
+
+
+@router.delete("/watchlist/{movie_id}")
+async def remove_from_watchlist(movie_id: int, session: AsyncSession = Depends(get_session)) -> dict:
+    """Take a movie off My List (the user's own toggle)."""
+    for row in (await session.scalars(
+            select(WatchlistItem).where(WatchlistItem.movie_id == movie_id))).all():
+        await session.delete(row)
+    await session.commit()
+    return {"in_watchlist": False}

@@ -6,5 +6,6 @@ from .media_stream import MediaStream
 from .movie import Movie
 from .user import User
 from .watch_progress import WatchProgress
+from .watchlist import WatchlistItem
 
-__all__ = ["User", "Movie", "MediaFile", "MediaStream", "WatchProgress", "Flag"]
+__all__ = ["User", "Movie", "MediaFile", "MediaStream", "WatchProgress", "Flag", "WatchlistItem"]

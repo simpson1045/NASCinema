@@ -100,6 +100,7 @@ class ApiService {
             String? logo,
             String? logoSubtitle,
             Franchise? series,
+            bool inWatchlist,
           })>
       getMovieDetail(
       int id) async {
@@ -121,6 +122,7 @@ class ApiService {
       logo: data['logo'] as String?,
       logoSubtitle: data['logo_subtitle'] as String?,
       // "More in this series": the franchise's movies here (incl. this one).
+      inWatchlist: data['in_watchlist'] == true,
       series: data['series'] is Map
           ? Franchise.fromJson({
               ...(data['series'] as Map<String, dynamic>),
@@ -128,6 +130,17 @@ class ApiService {
             })
           : null,
     );
+  }
+
+  /// Add to / remove from My List. Returns the new state.
+  Future<bool> setWatchlist(int movieId, bool on) async {
+    final u = _u('/api/watchlist/$movieId');
+    final r = await (on ? http.put(u) : http.delete(u))
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return (jsonDecode(r.body) as Map<String, dynamic>)['in_watchlist'] == true;
   }
 
   /// Cast + "More like this" (library movies only) for a movie page.

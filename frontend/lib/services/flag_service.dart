@@ -112,6 +112,9 @@ class FlagService {
     }
   }
 
+  /// A short confirmation in the same toast ("Added to My List").
+  static void say(String text) => _show(text);
+
   static Timer? _toastTimer;
   static void _show(String text) {
     toast.value = text;

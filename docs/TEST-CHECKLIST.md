@@ -65,3 +65,7 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 - [ ] 👀 **Cast**: round headshots, name, character, top-billed first (browse only for now).
 - [ ] 👀 Page opens fast — cast/more-like-this fill in a moment after.
 
+### My List (ELKO + backend) — ✅ analyze/tests, real-font render (buttons fit)
+- [ ] 👀 Movie page has a round **+** button after Versions & Audio; highlighted it says "Add to My List". A → toast "Added to My List", icon becomes ✓ ("On My List — A to remove"). A again removes.
+- [ ] 👀 Home shows a **My List** row right after Continue Watching (newest first) once something's on it.
+
