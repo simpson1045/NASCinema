@@ -15,7 +15,8 @@ the Node 24 action versions — green) and published with deploy.sh --release.
 **Releases are now build-only by default** (907045f): ship fixes as tag
 `vX.Y.Z-bN` with pubspec X.Y.Z+N; bump the version only for a finished
 feature set (README rule 2; Matt, after 0.5 → 0.9 in two days). Next ship of
-fixes = v0.9.0-b37.
+fixes = v0.9.0-b37. **0.9 = Track Manager: Phase B ships as 0.9.0 builds,
+not 0.10** (Matt).
 **Pushed, not deployed:** 042f52f spelled-out language names count as dubs
 (Matt said yes) — deploy together with the stripped-files reprobe.
 **Done:** 63bda4d backend (app/track_rules.py = spec §3
