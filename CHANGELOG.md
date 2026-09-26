@@ -2,6 +2,9 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.6.4 - 2026-09-25
+- **Trailer controls:** full-screen trailers now show a title, a gold progress bar with the time, and a pause indicator. **A** pause · **←/→** skip 10 seconds · **B** back. Other buttons no longer close the trailer.
+
 ## 0.6.3 - 2026-09-25
 - **Fullscreen logos line up:** the movie logo now sits centered over the year · IMDb · Rotten Tomatoes · quality row, whatever their widths.
 
