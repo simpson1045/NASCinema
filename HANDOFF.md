@@ -7,9 +7,14 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-26, ~23:00 UTC) — Batch 3: Track Manager Phase A (built, not deployed)
+## Latest (2026-09-26, ~23:00 UTC) — Batch 3: Track Manager Phase A (LIVE, app 0.9.0)
 
-**Done (pushed, NOT deployed):** 63bda4d backend (app/track_rules.py = spec §3
+**Deployed:** backend 782bcc0 (22:11 UTC; migration 0014 ran; live plan =
+79 / 70.1 GB / 15 protected), app **0.9.0** released via Actions (first run on
+the Node 24 action versions — green) and published with deploy.sh --release.
+**Pushed, not deployed:** 042f52f spelled-out language names count as dubs
+(Matt said yes) — deploy together with the stripped-files reprobe.
+**Done:** 63bda4d backend (app/track_rules.py = spec §3
 verbatim; /api/track-manager/plan, /file/{id}, PUT /protect/{movie}; migration
 0014 movies.track_protect; backend/tests/test_track_rules.py — 9 pass, run
 `python3 -m unittest discover tests` in backend/), 8c613aa Big Picture screens
