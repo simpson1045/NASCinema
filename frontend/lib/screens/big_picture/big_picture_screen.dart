@@ -10,10 +10,12 @@ import '../../services/fullscreen.dart';
 import '../../services/gamepad/pad_dispatch.dart';
 import '../../services/update_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/pad_hints.dart';
 import '../library_screen.dart';
 import '../settings_screen.dart';
 import 'bp_hero.dart';
 import 'bp_movie_screen.dart';
+import 'bp_search_screen.dart';
 
 /// Big picture mode: the 10-foot, fullscreen home for the couch PC, built to
 /// match the Roku channel (the design source of truth). Everything is laid out
@@ -209,6 +211,8 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
         _back();
       case PadButton.start:
         _openMenu();
+      case PadButton.y:
+        _openSearch();
       default:
         return false;
     }
@@ -291,6 +295,13 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     if (mounted) _focus.requestFocus();
   }
 
+  Future<void> _openSearch() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => BpSearchScreen(baseUrl: widget.baseUrl),
+    ));
+    if (mounted) _focus.requestFocus();
+  }
+
   Future<void> _openMenu() async {
     final choice = await showDialog<String>(
       context: context,
@@ -369,6 +380,19 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
           duration: const Duration(milliseconds: 250),
           opacity: heroFocused ? 0 : 1,
           child: IgnorePointer(ignoring: heroFocused, child: _railsLayer()),
+        ),
+        // Discoverable shortcuts, top-right (hidden in the fullscreen hero).
+        Positioned(
+          top: 44,
+          right: 90,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 250),
+            opacity: heroFocused ? 0 : 1,
+            child: const PadHints([
+              (PadGlyph.y, 'Search'),
+              (PadGlyph.menu, 'Menu'),
+            ], size: 30, fontSize: 20),
+          ),
         ),
       ],
     );
