@@ -2,6 +2,11 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.7.0 - 2026-09-25
+- **Pick your version, audio and subtitles.** A new **Versions & Audio** button on the movie page opens a full-screen picker: choose the version (e.g. *4K77*, *Harmy Despecialized*, the 4K remux), then the audio track by its real name (lossless tracks marked, commentaries tagged), then subtitles. The line under the buttons shows what Play will use, and your choice is remembered for next time.
+- **Switch versions mid-movie:** press **▼** (or the new Versions button on the control bar) and pick another version — it picks up at the same moment in the same language.
+- **The player tells you the buttons:** a short legend appears when a movie starts and whenever you press ▲/▼ — A pause · ◀▶ skip · LB/RB chapters · X audio · Y subtitles · ▼ versions · Start menu · B back.
+
 ## 0.6.4 - 2026-09-25
 - **Trailer controls:** full-screen trailers now show a title, a gold progress bar with the time, and a pause indicator. **A** pause · **←/→** skip 10 seconds · **B** back. Other buttons no longer close the trailer.
 

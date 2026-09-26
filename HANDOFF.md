@@ -3,11 +3,32 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.6.2+28 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.7.0+31 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-26 ~05:55 UTC) — 0.6.2, trailer rules, sequel logos
+## Latest (2026-09-26 ~07:00 UTC) — 0.7.0 versions/audio/subtitles picker
+
+- Backend `app/tracks.py`: version_label (edition → filename [tag] not an
+  encode tag → quality summary), quality_label, track_rows (audio/subtitle
+  with mpv 1-based ids, embedded title, "English · DTS-HD MA · Mono" desc,
+  lossless/commentary/default/forced). Movie detail files now carry label,
+  quality, audio_tracks, subtitle_tracks; versions sorted best-first.
+- Big Picture movie page: 3rd button "Versions & Audio" → BpTrackPicker
+  (bp_track_picker.dart, Version|Audio|Subtitles columns; test
+  track_picker_test.dart). Picks remembered per movie in SharedPreferences
+  `bp_pick_<movieId>`; Play → PlayerScreen(fileId, audioTrack, subtitleTrack,
+  versions) → mpv --aid/--sid.
+- Player: ▼ or uosc "Versions" button (script-message nascinema-versions) →
+  uosc open-menu; choosing sends nascinema-version <id> → loadfile replace -1
+  start=..,alang=.. in place (mpv 0.41 on ELKO). Button legend via
+  show-text (ASS) 2.5 s after start + on ▲/▼.
+- ANH (movie 184) versions: 1007 UHD remux, 1008 4K77 (aid 3 = 1977 mono),
+  1009 Harmy, 1010 Respecialized — all label correctly.
+- Still TODO: Roku picker; online subtitle search in Big Picture; audience
+  RT score source; Roku logo_subtitle.
+
+## Earlier (2026-09-26 ~05:55 UTC) — 0.6.2, trailer rules, sequel logos
 
 - **Trailer order now:** pin → Apple 720p+ → YouTube official (1080p bar) →
   Apple 480p last resort → backdrop (`_APPLE_WEAK_LINES=700`). Matt picked
