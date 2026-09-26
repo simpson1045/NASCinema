@@ -47,5 +47,29 @@ services:
       - ./data:/data
       - "/mnt/NAS Storage/movies:/movies:ro"
 
+  # Track Manager strip worker (docs/SPEC-track-manager.md): the ONLY
+  # container with write access to the movies. Same image and code; runs
+  # app/strip_worker.py instead of the server. Stages on the SSD scratch pool.
+  nascinema-strip:
+    image: nascinema:latest
+    container_name: nascinema-strip
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - nascinema
+    env_file: .env
+    environment:
+      NASCINEMA_DATABASE_URL: postgresql+psycopg://nascinema:${POSTGRES_PASSWORD}@127.0.0.1:5435/nascinema
+      NASCINEMA_MEDIA_DIRS: /movies
+      NASCINEMA_DATA_DIR: /data
+      NASCINEMA_STRIP_DIR: /scratch
+    working_dir: /srv/nascinema/backend
+    entrypoint: ["python", "-m", "app.strip_worker"]
+    volumes:
+      - ./repo:/srv/nascinema
+      - ./data:/data
+      - "/mnt/NAS Storage/movies:/movies"
+      - "/mnt/scratch/nascinema-strip:/scratch"
+
 volumes:
   nascinema_pgdata:

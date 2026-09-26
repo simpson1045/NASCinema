@@ -122,6 +122,11 @@ else
   docker compose up -d
   docker restart nascinema >/dev/null
 fi
+# The strip worker runs the same code: restart it too (an interrupted strip is
+# recovered on start — its original is always kept or restored).
+if docker ps -a --format '{{.Names}}' | grep -qx nascinema-strip; then
+  docker restart nascinema-strip >/dev/null
+fi
 echo "[deploy] waiting for health…"
 # The NAS can take a few minutes to start under load — wait up to 3.
 for i in $(seq 1 90); do
