@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/extra.dart';
+import '../../models/franchise.dart';
 import '../../models/movie.dart';
 import '../../models/movie_file.dart';
 import '../../services/api_service.dart';
@@ -36,7 +37,7 @@ class BpMovieScreen extends StatefulWidget {
   State<BpMovieScreen> createState() => _BpMovieScreenState();
 }
 
-enum _Row { buttons, extras }
+enum _Row { buttons, series, extras }
 
 class _BpMovieScreenState extends State<BpMovieScreen> {
   late final ApiService _api = ApiService(widget.baseUrl);
@@ -48,6 +49,8 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   String? _logoSub;
   bool _loaded = false;
   TrackPick? _pick; // version + audio + subtitles Play will use
+  Franchise? _series; // "More in this series" (includes this movie)
+  int _seriesIdx = 0;
 
   _Row _row = _Row.buttons;
   int _button = 0;
@@ -86,6 +89,9 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
           _logo = d.logo;
           _logoSub = d.logoSubtitle;
         }
+        _series = d.series;
+        final here = d.series?.movies.indexWhere((m) => m.id == _m.id) ?? -1;
+        _seriesIdx = here < 0 ? 0 : here;
         _loaded = true;
       });
       final pick = await TrackPick.load(_m.id, d.files);
@@ -98,22 +104,40 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   // Buttons: Play/Resume, Trailer, Versions & Audio.
   static const _buttonCount = 3;
 
+  bool get _hasSeries => (_series?.movies.length ?? 0) > 1;
+
   void _move(int dx, int dy) {
     setState(() {
-      if (dy > 0 && _row == _Row.buttons && _extras.isNotEmpty) {
-        _row = _Row.extras;
-      } else if (dy < 0 && _row == _Row.extras) {
-        _row = _Row.buttons;
-      } else if (dx != 0 && _row == _Row.buttons) {
+      if (dy > 0) {
+        // buttons → series → extras (skipping what isn't there).
+        if (_row == _Row.buttons && _hasSeries) {
+          _row = _Row.series;
+        } else if (_row != _Row.extras && _extras.isNotEmpty) {
+          _row = _Row.extras;
+        }
+      } else if (dy < 0) {
+        if (_row == _Row.extras && _hasSeries) {
+          _row = _Row.series;
+        } else if (_row != _Row.buttons) {
+          _row = _Row.buttons;
+        }
+      } else if (_row == _Row.buttons) {
         _button = (_button + dx).clamp(0, _buttonCount - 1);
-      } else if (dx != 0 && _row == _Row.extras) {
+      } else if (_row == _Row.series) {
+        _seriesIdx = (_seriesIdx + dx).clamp(0, _series!.movies.length - 1);
+      } else {
         _extra = (_extra + dx).clamp(0, _extras.length - 1);
       }
     });
   }
 
   void _activate() {
-    if (_row == _Row.extras && _extras.isNotEmpty) {
+    if (_row == _Row.series && _hasSeries) {
+      final m = _series!.movies[_seriesIdx];
+      if (m.id != _m.id) {
+        _open(BpMovieScreen(movie: m, baseUrl: widget.baseUrl));
+      }
+    } else if (_row == _Row.extras && _extras.isNotEmpty) {
       final e = _extras[_extra];
       _open(PlayerScreen(fileId: e.id, baseUrl: widget.baseUrl, title: e.title));
     } else if (_button == 0) {
@@ -366,7 +390,12 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
             ],
           ),
         ),
-        if (_extras.isNotEmpty) _extrasRail(),
+        // One band at the bottom: the series row, or Extras once you go
+        // down to them (or when there's no series).
+        if (_hasSeries && _row != _Row.extras)
+          _seriesRail()
+        else if (_extras.isNotEmpty)
+          _extrasRail(),
       ],
     );
   }
@@ -393,6 +422,57 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
 
   /// Extras along the bottom; the focused card stays in the left slot and the
   /// rail slides under it (same as the home rails).
+  Widget _seriesRail() {
+    const cardW = 320.0, cardH = 180.0, gap = 24.0;
+    final ms = _series!.movies;
+    final focused = _row == _Row.series;
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 800,
+      height: 260,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 90,
+            top: 0,
+            child: Text('More in ${_series!.name}  ·  ${ms.length}',
+                style: const TextStyle(
+                    color: NasColors.text,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w600)),
+          ),
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            left: 90 - (focused ? _seriesIdx : 0) * (cardW + gap),
+            top: 56,
+            child: Row(children: [
+              for (int i = 0; i < ms.length; i++) ...[
+                if (i > 0) const SizedBox(width: gap),
+                _SeriesCard(
+                  movie: ms[i],
+                  width: cardW,
+                  height: cardH,
+                  current: ms[i].id == _m.id,
+                  focused: focused && i == _seriesIdx,
+                  onTap: () {
+                    setState(() {
+                      _row = _Row.series;
+                      _seriesIdx = i;
+                    });
+                    _activate();
+                  },
+                ),
+              ],
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _extrasRail() {
     const cardW = 420.0, gap = 24.0;
     final focused = _row == _Row.extras;
@@ -521,6 +601,95 @@ class _BpButton extends StatelessWidget {
                 style: TextStyle(
                     color: fg, fontSize: 30, fontWeight: FontWeight.w700)),
           ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// A "More in this series" card: the movie's backdrop, title + year over it.
+class _SeriesCard extends StatelessWidget {
+  const _SeriesCard({
+    required this.movie,
+    required this.width,
+    required this.height,
+    required this.current,
+    required this.focused,
+    required this.onTap,
+  });
+
+  final Movie movie;
+  final double width;
+  final double height;
+  final bool current;
+  final bool focused;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = movie.backdropUrl(size: 'w780');
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 150),
+        scale: focused ? 1.07 : 1,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: NasColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: focused ? Colors.white : Colors.transparent, width: 4),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (url != null)
+                Image.network(url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink()),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xDD000000)],
+                    stops: [0.35, 1.0],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 10,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (current)
+                      const Text('NOW VIEWING',
+                          style: TextStyle(
+                              color: NasColors.amber,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.5)),
+                    Text(movie.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700)),
+                    if (movie.year != null)
+                      Text('${movie.year}',
+                          style: const TextStyle(
+                              color: NasColors.muted, fontSize: 18)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

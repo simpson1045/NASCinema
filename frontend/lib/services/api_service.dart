@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/extra.dart';
+import '../models/franchise.dart';
 import '../models/home.dart';
 import '../models/movie.dart';
 import '../models/movie_file.dart';
@@ -97,6 +98,7 @@ class ApiService {
             List<Extra> extras,
             String? logo,
             String? logoSubtitle,
+            Franchise? series,
           })>
       getMovieDetail(
       int id) async {
@@ -117,7 +119,25 @@ class ApiService {
       extras: extras,
       logo: data['logo'] as String?,
       logoSubtitle: data['logo_subtitle'] as String?,
+      // "More in this series": the franchise's movies here (incl. this one).
+      series: data['series'] is Map
+          ? Franchise.fromJson({
+              ...(data['series'] as Map<String, dynamic>),
+              'count': ((data['series'] as Map)['movies'] as List).length,
+            })
+          : null,
     );
+  }
+
+  /// A franchise page: its art + its movies in release order.
+  Future<Franchise> getCollection(int id) async {
+    final r = await http
+        .get(_u('/api/collections/$id'))
+        .timeout(const Duration(seconds: 20));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return Franchise.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
   Future<List<Video>> getMovieVideos(int id) async {

@@ -50,3 +50,12 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 - [ ] 👀 **A** types / opens a movie · **X** delete · **Y** space · **B** back. A real keyboard types directly (Backspace, Esc too).
 - [ ] 👀 "potter" → all 8 Harry Potters; "jur park" → Jurassic Park films; "rocky" → the Rocky films, most popular first.
 - [ ] 👀 Opening a result → movie page → Back returns to search with the query intact.
+
+### Franchises (ELKO Big Picture + backend) — ✅ analyze/tests/render of the row
+- [ ] 👀 Home has a **Franchises** row right after Continue Watching (or first): wide tiles with each franchise's logo over a backdrop, name + "N movies · years" below.
+- [ ] 👀 **Animated tile:** highlight one → it grows, the backdrop slowly pans/zooms and crossfades through that franchise's movies every ~4 s; moving off stops it. Smooth, no stutter in the hero trailer above.
+- [ ] 👀 While on the Franchises row the hero keeps its featured rotation (doesn't follow).
+- [ ] 👀 **A** on a tile → franchise page: backdrop, logo **centred over** "8 movies · 2001–2011", overview, posters in release order (year above title). ◀▶ browse · A open · B back.
+- [ ] 👀 Movie page (e.g. any Harry Potter): bottom band shows **"More in Harry Potter · 8"** — 16:9 cards, this movie tagged NOW VIEWING. ▼ into it, ◀▶ browse, A opens another; ▼ again switches the band to Extras, ▲ back.
+- [ ] 👀 Franchise logos/backdrops look right (TMDB collection art) — note any wrong/missing ones.
+

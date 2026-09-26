@@ -19,7 +19,13 @@ from sqlalchemy.orm import selectinload
 
 from .. import apple_trailers
 from ..db import SessionLocal, get_session
-from ..metadata import get_movie_logo_info, get_movie_videos, logo_subtitle
+from ..metadata import (
+    franchise_name,
+    get_collection_art,
+    get_movie_logo_info,
+    get_movie_videos,
+    logo_subtitle,
+)
 from ..tracks import quality_label, track_rows, version_label
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
@@ -230,7 +236,8 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
                 ensure_trailer(m.id, m.tmdb_id, m.trailer_youtube, m.title, m.year)
             )
 
-    return {"featured": featured, "rails": rails}
+    return {"featured": featured, "rails": rails,
+            "collections": await _collections(movies, summ)}
 
 
 @router.get("/movies/{movie_id}")
@@ -285,6 +292,20 @@ async def get_movie(
     ]
     # Clearlogo for the big picture movie page (manual override wins).
     data.update(await _logo_fields(movie))
+    # "More in this series": the franchise's other movies in the library.
+    data["series"] = None
+    if movie.collection_id:
+        sibs = (await session.scalars(
+            select(Movie).options(selectinload(Movie.files))
+            .where(Movie.collection_id == movie.collection_id)
+        )).all()
+        if len(sibs) > 1:
+            data["series"] = {
+                "id": movie.collection_id,
+                "name": franchise_name(movie.collection_name),
+                "movies": [_summary(m) for m in sorted(
+                    sibs, key=lambda m: (m.year or 9999, m.title))],
+            }
     return data
 
 
@@ -462,3 +483,79 @@ async def apple_upgrade_status() -> dict:
 async def movie_trailer_source(movie_id: int) -> dict:
     """Where the cached trailer came from (Apple/YouTube, variants, audio)."""
     return trailer_source(movie_id) or {}
+
+
+# --- Franchises (TMDB collections) --------------------------------------------
+
+_MIN_FRANCHISE = 2  # a "franchise" needs at least this many movies here
+
+
+async def _collections(movies: list[Movie], summ: dict[int, dict]) -> list[dict]:
+    """Every franchise with 2+ movies in the library, biggest/most popular
+    first, with its art: TMDB's franchise logo/backdrop plus each member's
+    backdrop (the tile's slideshow)."""
+    groups: dict[int, list[Movie]] = {}
+    for m in movies:
+        if m.collection_id:
+            groups.setdefault(m.collection_id, []).append(m)
+    groups = {k: v for k, v in groups.items() if len(v) >= _MIN_FRANCHISE}
+    sem = asyncio.Semaphore(6)
+
+    async def art(cid: int) -> dict | None:
+        async with sem:
+            return await get_collection_art(cid)
+
+    arts = await asyncio.gather(*(art(cid) for cid in groups))
+    out = []
+    for (cid, ms), a in zip(groups.items(), arts):
+        ms = sorted(ms, key=lambda m: (m.year or 9999, m.title))
+        years = [m.year for m in ms if m.year]
+        out.append({
+            "id": cid,
+            "name": franchise_name((a or {}).get("name") or ms[0].collection_name),
+            "count": len(ms),
+            "years": (f"{min(years)}–{max(years)}" if years and min(years) != max(years)
+                      else (str(years[0]) if years else None)),
+            "logo": (a or {}).get("logo"),
+            "backdrop": (a or {}).get("backdrop"),
+            "poster": (a or {}).get("poster"),
+            "overview": (a or {}).get("overview"),
+            "backdrops": [summ[m.id]["backdrop_path"] for m in ms
+                          if summ.get(m.id, {}).get("backdrop_path")][:10],
+            "popularity": sum(m.popularity or 0 for m in ms),
+        })
+    out.sort(key=lambda c: (c["popularity"], c["count"]), reverse=True)
+    return out
+
+
+@router.get("/collections")
+async def list_collections(session: AsyncSession = Depends(get_session)) -> list[dict]:
+    movies = (await session.scalars(select(Movie).options(selectinload(Movie.files)))).all()
+    return await _collections(movies, {m.id: _summary(m) for m in movies})
+
+
+@router.get("/collections/{collection_id}")
+async def get_collection(
+    collection_id: int, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """A franchise page: its art + its movies in release order."""
+    ms = (await session.scalars(
+        select(Movie).options(selectinload(Movie.files))
+        .where(Movie.collection_id == collection_id)
+    )).all()
+    if not ms:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    summ = {m.id: _summary(m) for m in ms}
+    info = (await _collections(ms, summ) or [{}])[0] if len(ms) >= _MIN_FRANCHISE else {}
+    a = await get_collection_art(collection_id) or {}
+    ordered = sorted(ms, key=lambda m: (m.year or 9999, m.title))
+    return {
+        "id": collection_id,
+        "name": info.get("name") or franchise_name(a.get("name") or ms[0].collection_name),
+        "count": len(ms),
+        "years": info.get("years"),
+        "logo": a.get("logo"),
+        "backdrop": a.get("backdrop"),
+        "overview": a.get("overview"),
+        "movies": [summ[m.id] for m in ordered],
+    }

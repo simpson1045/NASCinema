@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/franchise.dart';
 import '../../models/home.dart';
 import '../../models/movie.dart';
 import '../../services/api_service.dart';
@@ -13,6 +14,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/pad_hints.dart';
 import '../library_screen.dart';
 import '../settings_screen.dart';
+import 'bp_collection_screen.dart';
+import 'bp_franchise_tile.dart';
 import 'bp_hero.dart';
 import 'bp_movie_screen.dart';
 import 'bp_search_screen.dart';
@@ -48,6 +51,7 @@ const double _left = 90;
 const double _titleH = 50;
 const double _posterW = 200, _posterH = 300, _posterRow = 410;
 const double _wideW = 480, _wideH = 270, _wideRow = 370;
+const double _franchiseRow = 430; // tile + name + "N movies · years"
 const double _tileGap = 26;
 
 class _BigPictureScreenState extends State<BigPictureScreen> {
@@ -85,7 +89,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   /// For a flag: the highlighted tile, plus the hero (movie, trailer, time).
   Map<String, Object?> _flagInfo() {
     final rail = _rails.isEmpty ? null : _rails[_rail];
-    final m = rail == null || rail.movies.isEmpty
+    final m = rail == null || rail.isFranchises || rail.movies.isEmpty
         ? null
         : rail.movies[_itemOf(_rail)];
     return {
@@ -103,6 +107,18 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       setState(() {
         _data = data;
         _rails = data.rails.where((r) => r.movies.isNotEmpty).toList();
+        // Disney+-style Franchises row: right after Continue Watching (or
+        // first when there's nothing to continue).
+        if (data.collections.isNotEmpty) {
+          final at = _rails.indexWhere((r) => r.key == 'continue') + 1;
+          _rails.insert(
+              at,
+              HomeRail(
+                  key: 'franchises',
+                  title: 'Franchises',
+                  movies: const [],
+                  franchises: data.collections));
+        }
         _zone = _rails.isEmpty ? _Zone.hero : _Zone.rails;
       });
       _replayScriptedKeys();
@@ -145,9 +161,12 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   }
 
   bool _isWide(HomeRail r) =>
-      r.movies.isNotEmpty && r.movies.first.resumePosition != null;
+      r.isFranchises ||
+      (r.movies.isNotEmpty && r.movies.first.resumePosition != null);
 
-  double _rowHeight(HomeRail r) => _isWide(r) ? _wideRow : _posterRow;
+  double _rowHeight(HomeRail r) => r.isFranchises
+      ? _franchiseRow
+      : (_isWide(r) ? _wideRow : _posterRow);
 
   int _itemOf(int rail) => _item[rail] ?? 0;
 
@@ -156,8 +175,8 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   void _syncHero() {
     final hero = _heroKey.currentState;
     if (hero == null) return;
-    if (_zone == _Zone.hero || _rails.isEmpty) {
-      hero.follow(null);
+    if (_zone == _Zone.hero || _rails.isEmpty || _rails[_rail].isFranchises) {
+      hero.follow(null); // franchise tiles keep the featured rotation
     } else {
       hero.follow(_rails[_rail].movies[_itemOf(_rail)]);
     }
@@ -243,7 +262,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       _heroKey.currentState?.advance(dir);
       return;
     }
-    final n = _rails[_rail].movies.length;
+    final n = _rails[_rail].length;
     final next = (_itemOf(_rail) + dir).clamp(0, n - 1);
     if (next != _itemOf(_rail)) setState(() => _item[_rail] = next);
     _syncHero();
@@ -254,7 +273,12 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       final m = _heroKey.currentState?.current;
       if (m != null) _openMovie(m);
     } else if (_rails.isNotEmpty) {
-      _openMovie(_rails[_rail].movies[_itemOf(_rail)]);
+      final rail = _rails[_rail];
+      if (rail.isFranchises) {
+        _openFranchise(rail.franchises[_itemOf(_rail)]);
+      } else {
+        _openMovie(rail.movies[_itemOf(_rail)]);
+      }
     }
   }
 
@@ -291,6 +315,13 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   Future<void> _openMovie(Movie m) async {
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => BpMovieScreen(movie: m, baseUrl: widget.baseUrl),
+    ));
+    if (mounted) _focus.requestFocus();
+  }
+
+  Future<void> _openFranchise(Franchise f) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => BpCollectionScreen(baseUrl: widget.baseUrl, franchise: f),
     ));
     if (mounted) _focus.requestFocus();
   }
@@ -461,6 +492,21 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              for (int i = 0; i < rail.franchises.length; i++) ...[
+                if (i > 0) const SizedBox(width: _tileGap),
+                BpFranchiseTile(
+                  franchise: rail.franchises[i],
+                  focused: railFocused && i == focusedItem,
+                  onTap: () {
+                    setState(() {
+                      _zone = _Zone.rails;
+                      _rail = r;
+                      _item[r] = i;
+                    });
+                    _openFranchise(rail.franchises[i]);
+                  },
+                ),
+              ],
               for (int i = 0; i < rail.movies.length; i++) ...[
                 if (i > 0) const SizedBox(width: _tileGap),
                 _BpTile(

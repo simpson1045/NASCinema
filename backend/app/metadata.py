@@ -307,6 +307,54 @@ def logo_subtitle(title: str, collection_name: str | None) -> str | None:
     return (rest[:1].upper() + rest[1:]) if rest else None
 
 
+# collection id -> {"name", "overview", "logo", "backdrop", "poster"}.
+_collection_art: dict[int, dict] = {}
+
+
+async def get_collection_art(collection_id: int) -> dict | None:
+    """A franchise's own art from TMDB (clearlogo, backdrop, poster, overview),
+    cached for the process. None on a transient failure (retried later)."""
+    if collection_id in _collection_art:
+        return _collection_art[collection_id]
+    key = get_settings().tmdb_api_key
+    if not key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{TMDB_BASE}/collection/{collection_id}",
+                params={"api_key": key, "append_to_response": "images",
+                        "include_image_language": "en,null"},
+            )
+            r.raise_for_status()
+            d = r.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    logos = (d.get("images") or {}).get("logos", [])
+    best = max(logos, key=lambda lg: (lg.get("iso_639_1") == "en",
+                                      str(lg.get("file_path", "")).endswith(".png"),
+                                      lg.get("vote_average") or 0), default=None)
+    img = "https://image.tmdb.org/t/p/"
+    art = {
+        "name": d.get("name"),
+        "overview": d.get("overview") or None,
+        "logo": f"{img}w500{best['file_path']}" if best and best.get("file_path") else None,
+        "backdrop": f"{img}original{d['backdrop_path']}" if d.get("backdrop_path") else None,
+        "poster": f"{img}w500{d['poster_path']}" if d.get("poster_path") else None,
+    }
+    _collection_art[collection_id] = art
+    return art
+
+
+def franchise_name(collection_name: str | None) -> str:
+    """"Harry Potter Collection" -> "Harry Potter"."""
+    n = (collection_name or "").strip()
+    for suffix in (" Collection", " collection"):
+        if n.endswith(suffix):
+            n = n[: -len(suffix)].strip()
+    return n
+
+
 async def get_movie_videos(tmdb_id: int) -> list[dict]:
     """Official trailers/clips for a movie (YouTube-hosted) from TMDB."""
     key = get_settings().tmdb_api_key
