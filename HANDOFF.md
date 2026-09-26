@@ -3,11 +3,37 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.5.8+24 published (in-app updater); ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.5.9+25 published (in-app updater); ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest session (2026-09-25, late) — trailer decode, quality labels, trailer identity
+## Latest (2026-09-25, night) — flag button (0.5.9+25), library rescan on hold
+
+- **Flag button:** View (controller) / F8 anywhere → `POST /api/flags` with
+  top screen, movie, trailer/movie + position, app version, context,
+  screenshot (`<data_dir>/flags/<id>.png`). **Read open flags at the start of
+  every session:** `curl -s http://127.0.0.1:8400/api/flags` on NASHOST;
+  resolve with `PATCH /api/flags/<id> {"resolved":true,"resolution_note":…}`.
+  Screens register via `FlagService.register(owner, screen, baseUrl, info)`
+  (bp-home, bp-movie, bp-trailer, player, library, movie-detail). View is
+  no longer Back (B is). Mid-movie screenshots lack the mpv picture.
+  Flag #1 = smoke test (resolved).
+- **Library rescan ON HOLD:** another Claude is replacing movies and stripping
+  foreign audio/subs right now. 38 movies currently have no playable file
+  (mid-replacement), 142 stale media_files rows (42 features, 100 extras).
+  When Matt says it's done: `POST /api/scan` (long — run detached),
+  `POST /api/reprobe`, show Matt the stale-row list before pruning, then
+  retry the 40 movies without trailers (their `.none.json` markers are stale).
+- 6 files have zeroed headers (unfinished torrents, Jun 29): HP 3/6/7/8 Open
+  Matte x265 copies + Blue Collar One for the Road / Rides Again — told Matt.
+- `POST /api/reprobe` ran once: first-ever media_streams for 261 files.
+- **Trailer quality:** 1080p YouTube ≈ 3 Mbps median (86 trailers), 4K ≈ 10
+  Mbps (65). Ideas: allow the m3u8 H.264 1080p (~4.3 vs 2.6 Mbps; needs the
+  MKV-merge fix), Apple TV trailers (4K DV, not tried), previews cut from
+  Matt's own files (best). Asked Matt whether 4K trailers also look soft (if
+  so, suspect the player path).
+
+## Session (2026-09-25, late) — trailer decode, quality labels, trailer identity
 
 **Shipped:**
 - **0.5.6+22 — trailers decode in software** (`hero_trailer_native.dart`,

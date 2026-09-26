@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.5.9 - 2026-09-25
+- **New: the flag button.** Something look or sound wrong? Press **View** (the two-squares button) on the controller — or **F8** on the keyboard — right when it happens. NASCinema saves a screenshot plus which movie or trailer was playing and exactly where, shows "Flagged ✓", and gets out of your way. No need to stop and describe it; Claude reads the flags and fixes them.
+- View no longer works as Back — use **B** (it always did the same thing).
+
 ## 0.5.8 - 2026-09-25
 - **The mouse cursor hides while you use the controller or keyboard** — it disappears the moment you press a button and comes back as soon as you move the mouse.
 - **Trailers play in English.** YouTube now auto-dubs many trailers into other languages, and the downloader sometimes grabbed a dub (German, Portuguese…). It now always takes the original audio, and the affected trailers were re-downloaded — keeping their 4K picture.
