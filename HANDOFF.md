@@ -3,11 +3,33 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.6.1+27 (player glow-up) — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.6.2+28 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-26 ~05:20 UTC) — player glow-up (0.6.1), Apple upgrade done
+## Latest (2026-09-26 ~05:55 UTC) — 0.6.2, trailer rules, sequel logos
+
+- **Trailer order now:** pin → Apple 720p+ → YouTube official (1080p bar) →
+  Apple 480p last resort → backdrop (`_APPLE_WEAK_LINES=700`). Matt picked
+  this after Apple's 480p/32 kbps National Treasure trailers "looked like
+  shit". Apple HDR = HDR10/HDR10+ only; Dolby Vision-only (Apple originals,
+  dvh1 P5) → SDR master; HDR mux failure → SDR fallback.
+- Rebalance job re-running (POST apple-upgrade?replace_pins=true, started
+  05:52 UTC): results apple / already / youtube / apple-sd / kept / none.
+- **Sequel logos:** `metadata.get_movie_logo_info` prefers a logo no
+  collection sibling shares; if only the shared franchise wordmark exists →
+  `logo_subtitle` ("VIII · The Big Freeze") drawn gold under it (`bpLogo`
+  in bp_hero.dart). Roku doesn't render logo_subtitle yet.
+- **Trailer screen (0.6.2):** mpv only if `/trailer/source` says hdr; mpv
+  mode gets playerPad + flash-top-bar; B closes.
+- Deploy gotcha: a full deploy while release.bat is building on ALPINE failed
+  with "tar: Unexpected EOF" (build writing files) — it aborted before the
+  restart (set -e). Re-run after the build. A full deploy ALSO publishes
+  backend/updates, so write the CHANGELOG notes before it.
+- Movie player UI (uosc) confirmed loading on ELKO via mpv.log; Matt hasn't
+  reported on the in-movie controls yet.
+
+## Earlier (2026-09-26 ~05:20 UTC) — player glow-up (0.6.1), Apple upgrade done
 
 - **Apple trailer upgrade finished:** 219 checked → 195 now Apple, 22 kept
   their YouTube/none (Apple has nothing), 2 already Apple.
