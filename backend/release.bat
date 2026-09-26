@@ -42,6 +42,28 @@ echo.
 REM Write UTF-8 WITHOUT a BOM throughout: PowerShell 5.x Set-Content -Encoding
 REM UTF8 writes a BOM which breaks Python's json.load + CHANGELOG parsing.
 
+REM [0/7] Protect ALPINE before building. Android builds used to leave an
+REM 8 GB Gradle daemon + a Kotlin daemon resident for hours; stacked release
+REM runs starved the machine until AAPT2 could not start and Windows froze
+REM (2026-09-26, hard reset twice). gradle.properties now caps the heap and
+REM disables resident daemons; this also clears any leftovers and refuses to
+REM start when memory is already short.
+echo [0/7] Clearing leftover Gradle/Kotlin/AAPT2 processes + checking memory...
+pushd "%FRONTEND%\android"
+call gradlew.bat --stop >nul 2>&1
+popd
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { $_.CommandLine -match 'GradleDaemon|KotlinCompileDaemon' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
+taskkill /f /im aapt2.exe >nul 2>&1
+set "FREE_MB=99999"
+REM (if the check itself fails, don't block the build on a blank number)
+for /f %%M in ('powershell -NoProfile -Command "[int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1024)"') do set "FREE_MB=%%M"
+echo         free memory: !FREE_MB! MB
+if !FREE_MB! LSS 4096 (
+  echo ERROR: only !FREE_MB! MB of RAM free. Refusing to build - it would starve ALPINE.
+  echo        Close something heavy ^(or reboot^) and retry.
+  exit /b 2
+)
+
 echo [1/7] Bumping pubspec.yaml to %VERSION%+%BUILD%...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$existing = [IO.File]::ReadAllText('%PUBSPEC%', [Text.UTF8Encoding]::new($false));" ^
@@ -51,13 +73,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 echo [1.5/7] flutter clean + pub get (release builds reuse a stale Dart
 echo         snapshot otherwise — exe relinks but app.so/dex stays old)...
 pushd "%FRONTEND%"
-call flutter clean || (popd ^& exit /b 1)
-call flutter pub get || (popd ^& exit /b 1)
+call flutter clean || (popd & exit /b 1)
+call flutter pub get || (popd & exit /b 1)
 popd
 
 echo [2/7] flutter build apk --release ...
 pushd "%FRONTEND%"
-call flutter build apk --release || (popd ^& exit /b 1)
+call flutter build apk --release || (popd & exit /b 1)
+popd
+REM Release the Android build's memory before the Windows build starts.
+pushd "%FRONTEND%\android"
+call gradlew.bat --stop >nul 2>&1
 popd
 
 REM The `jni` plugin's Windows native links against the JDK's jvm.lib; the
@@ -66,12 +92,12 @@ REM "machine type x86 conflicts with x64". Point at an x64 JDK for this step.
 set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot"
 echo [3/7] flutter build windows --release (JAVA_HOME=%JAVA_HOME%) ...
 pushd "%FRONTEND%"
-call flutter build windows --release || (popd ^& exit /b 1)
+call flutter build windows --release || (popd & exit /b 1)
 popd
 
 echo [3.5/7] flutter build web (clean wiped build\web — restore the served UI)...
 pushd "%FRONTEND%"
-call flutter build web --pwa-strategy=none || (popd ^& exit /b 1)
+call flutter build web --pwa-strategy=none || (popd & exit /b 1)
 popd
 
 if not exist "%APK_SRC%" (
