@@ -15,7 +15,7 @@ import '../../theme/app_theme.dart';
 import '../hero_trailer.dart';
 import '../player/player_view.dart';
 import '../player_screen.dart';
-import 'bp_hero.dart' show bpMetaRow;
+import 'bp_hero.dart' show bpLogo, bpMetaRow;
 
 /// Big picture's movie page — the Netflix treatment, on the same fixed
 /// 1920x1080 canvas as the home: full backdrop, logo, ratings, overview, big
@@ -43,6 +43,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   List<MovieFile> _files = const [];
   List<Extra> _extras = const [];
   String? _logo;
+  String? _logoSub;
   bool _loaded = false;
 
   _Row _row = _Row.buttons;
@@ -56,6 +57,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   void initState() {
     super.initState();
     _logo = _m.logo;
+    _logoSub = _m.logoSubtitle;
     PadDispatch.add(_onPad);
     FlagService.register(this, 'bp-movie', widget.baseUrl,
         () => {'movie_id': _m.id, 'movie_title': _m.title});
@@ -77,7 +79,10 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       setState(() {
         _files = d.files;
         _extras = d.extras;
-        _logo = _logo ?? d.logo;
+        if (_logo == null) {
+          _logo = d.logo;
+          _logoSub = d.logoSubtitle;
+        }
         _loaded = true;
       });
     } catch (_) {
@@ -311,10 +316,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     );
     final logo = _logo;
     if (logo == null || logo.isEmpty) return title;
-    return Image.network(logo,
-        fit: BoxFit.contain,
-        alignment: Alignment.bottomLeft,
-        errorBuilder: (_, _, _) => title);
+    return bpLogo(logo, _logoSub, title, subtitleSize: 40);
   }
 
   /// Extras along the bottom; the focused card stays in the left slot and the
@@ -563,9 +565,19 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   }
 
   Future<void> _start() async {
-    final hdr = !kIsWeb &&
+    final wantHdr = !kIsWeb &&
         defaultTargetPlatform == TargetPlatform.windows &&
         await HdrPrefs.wantHdr();
+    // Only an actually-HDR trailer goes to native mpv — spinning it up (and
+    // the TV's signal switch) for an SDR trailer is just a glitch.
+    var hdr = false;
+    if (wantHdr) {
+      try {
+        final src =
+            await ApiService(widget.baseUrl).getTrailerSource(widget.movie.id);
+        hdr = src['hdr'] == true;
+      } catch (_) {}
+    }
     if (!mounted) return;
     if (hdr) {
       setDirectMedia(null); // the seam is shared with the movie player
@@ -573,6 +585,10 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
       setState(() {
         _native = buildPlayerView('${widget.url}?variant=hdr', false);
         _playing = true;
+      });
+      // Show the title bar once it's up (the UI only appears on activity).
+      Timer(const Duration(milliseconds: 1800), () {
+        if (mounted) playerUosc('flash-top-bar');
       });
       _endPoll = Timer.periodic(const Duration(milliseconds: 500), (_) {
         final d = playerDuration();
@@ -604,6 +620,17 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   }
 
   bool _onPad(PadButton b) {
+    if (_hdr) {
+      // Native player: the movie controls (A pause, ←/→ skip, menus…);
+      // B leaves once no menu is open. mpv's window holds OS focus here, so
+      // don't gate on Flutter focus.
+      if (playerPad(b)) return true;
+      if (b == PadButton.b) {
+        _close();
+        return true;
+      }
+      return false;
+    }
     if (!_focus.hasPrimaryFocus) return false;
     if (b == PadButton.b || b == PadButton.a) {
       _close();

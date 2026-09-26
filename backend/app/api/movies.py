@@ -19,7 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from .. import apple_trailers
 from ..db import SessionLocal, get_session
-from ..metadata import get_movie_logo, get_movie_videos
+from ..metadata import get_movie_logo_info, get_movie_videos, logo_subtitle
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
 from ..scanner import backfill_ratings, reprobe, scan
@@ -36,6 +36,19 @@ from ..trailers import (
 )
 
 router = APIRouter(prefix="/api", tags=["library"])
+
+
+async def _logo_fields(m: Movie) -> dict:
+    """`logo` (manual override wins, else TMDB's), plus `logo_subtitle` when
+    the logo is the franchise's shared wordmark — the apps print it under the
+    logo so a sequel still reads as itself ("VIII · The Big Freeze")."""
+    if m.logo_url:
+        return {"logo": m.logo_url, "logo_subtitle": None}
+    if not m.tmdb_id:
+        return {"logo": None, "logo_subtitle": None}
+    info = await get_movie_logo_info(m.tmdb_id)
+    sub = logo_subtitle(m.title, m.collection_name) if info["series"] else None
+    return {"logo": info["url"], "logo_subtitle": sub}
 
 
 def _summary(m: Movie) -> dict:
@@ -191,13 +204,8 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
     featured_movies = random.sample(pool, min(8, len(pool)))
     featured = []
     for m in featured_movies:
-        # Manual override wins; otherwise the auto-picked TMDB logo.
-        if m.logo_url:
-            logo = m.logo_url
-        else:
-            logo = await get_movie_logo(m.tmdb_id) if m.tmdb_id else None
         item = dict(summ[m.id])
-        item["logo"] = logo
+        item.update(await _logo_fields(m))
         # ?v=<mtime> busts the TV's URL cache when the trailer file is re-pulled.
         item["trailer_url"] = f"/api/movies/{m.id}/trailer?v={trailer_version(m.id)}"
         # The banner only plays a trailer that's already cached — never waits on a
@@ -258,9 +266,7 @@ async def get_movie(
         if f.kind == "extra"
     ]
     # Clearlogo for the big picture movie page (manual override wins).
-    data["logo"] = movie.logo_url or (
-        await get_movie_logo(movie.tmdb_id) if movie.tmdb_id else None
-    )
+    data.update(await _logo_fields(movie))
     return data
 
 

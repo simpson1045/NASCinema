@@ -3,6 +3,8 @@ and the scanner falls back to the parsed filename."""
 
 from __future__ import annotations
 
+import asyncio
+
 from difflib import SequenceMatcher
 
 import httpx
@@ -165,50 +167,123 @@ async def get_omdb_ratings(imdb_id: str) -> dict | None:
     }
 
 
-# tmdb_id -> clearlogo URL (or None). Cached for the process so the play path
-# only hits TMDB once per movie. None is cached too (movie has no logo); only
-# transient fetch failures are left uncached so a later play can retry.
-_logo_cache: dict[int, str | None] = {}
+# tmdb_id -> {"url": clearlogo URL or None, "series": bool}. Cached for the
+# process so the play path only hits TMDB once per movie. Transient fetch
+# failures are left uncached so a later request can retry.
+_logo_cache: dict[int, dict] = {}
+# tmdb_id -> set of that movie's logo file paths (for collection comparison).
+_logo_paths: dict[int, set[str]] = {}
+# collection id -> member tmdb ids.
+_collection_parts: dict[int, list[int]] = {}
 
 
-async def get_movie_logo(tmdb_id: int) -> str | None:
-    """A movie's clearlogo (transparent PNG, ~JF-style) URL, or None."""
+async def _sibling_logo_paths(client: httpx.AsyncClient, key: str,
+                              collection_id: int, tmdb_id: int) -> set[str]:
+    """Every logo file used by the OTHER movies in a collection. TMDB reuses one
+    file across a franchise for its series wordmark (13 of 14 Land Before Time
+    movies share one), so a path found here is the series logo, not this
+    movie's."""
+    parts = _collection_parts.get(collection_id)
+    if parts is None:
+        r = await client.get(f"{TMDB_BASE}/collection/{collection_id}",
+                             params={"api_key": key})
+        r.raise_for_status()
+        parts = [p["id"] for p in r.json().get("parts", []) if p.get("id")]
+        _collection_parts[collection_id] = parts
+
+    async def paths(mid: int) -> set[str]:
+        if mid not in _logo_paths:
+            r = await client.get(f"{TMDB_BASE}/movie/{mid}/images",
+                                 params={"api_key": key,
+                                         "include_image_language": "en,null"})
+            r.raise_for_status()
+            _logo_paths[mid] = {lg["file_path"] for lg in r.json().get("logos", [])
+                                if lg.get("file_path")}
+        return _logo_paths[mid]
+
+    found: set[str] = set()
+    for fp in await asyncio.gather(*(paths(m) for m in parts if m != tmdb_id)):
+        found |= fp
+    return found
+
+
+async def get_movie_logo_info(tmdb_id: int) -> dict:
+    """A movie's clearlogo URL plus `series`: True when the best available logo
+    is the franchise's shared wordmark rather than this movie's own (the apps
+    then print the subtitle — "VIII · The Big Freeze" — under it)."""
     if tmdb_id in _logo_cache:
         return _logo_cache[tmdb_id]
     key = get_settings().tmdb_api_key
     if not key:
-        return None
+        return {"url": None, "series": False}
     try:
-        # Short timeout: this rides the play decision, so a slow TMDB must not
-        # stall playback — we just skip the logo.
+        # Short timeouts: this rides the play decision, so a slow TMDB must
+        # not stall playback — we just skip the logo.
         async with httpx.AsyncClient(timeout=6) as client:
             r = await client.get(
-                f"{TMDB_BASE}/movie/{tmdb_id}/images",
-                params={"api_key": key, "include_image_language": "en,null"},
+                f"{TMDB_BASE}/movie/{tmdb_id}",
+                params={"api_key": key, "append_to_response": "images",
+                        "include_image_language": "en,null"},
             )
             r.raise_for_status()
-            logos = r.json().get("logos", [])
+            data = r.json()
+            logos = (data.get("images") or {}).get("logos", [])
+            shared: set[str] = set()
+            col = (data.get("belongs_to_collection") or {}).get("id")
+            if col and logos:
+                try:
+                    shared = await asyncio.wait_for(
+                        _sibling_logo_paths(client, key, col, tmdb_id), timeout=8)
+                except (httpx.HTTPError, ValueError, asyncio.TimeoutError):
+                    shared = set()  # can't tell — fall back to the plain pick
     except (httpx.HTTPError, ValueError):
-        return None  # uncached — retry on a later play
+        return {"url": None, "series": False}  # uncached — retry later
 
-    url: str | None = None
+    info = {"url": None, "series": False}
     if logos:
-        # Prefer English, then PNG (renders cleaner than SVG on the TV), then the
-        # most-voted.
+        # English first (an untagged logo can be a foreign title — Land Before
+        # Time VIII's was Portuguese, for a different sequel), then this movie's
+        # own logo over a franchise-shared one, then PNG, then most-voted.
         def _score(lg: dict) -> tuple:
-            fp = str(lg.get("file_path", "")).lower()
+            fp = str(lg.get("file_path", ""))
             return (
                 1 if lg.get("iso_639_1") == "en" else 0,
-                1 if fp.endswith(".png") else 0,
+                0 if fp in shared else 1,
+                1 if fp.lower().endswith(".png") else 0,
                 lg.get("vote_average") or 0,
             )
 
         best = max(logos, key=_score)
         fp = best.get("file_path")
         if fp:
-            url = f"https://image.tmdb.org/t/p/w500{fp}"
-    _logo_cache[tmdb_id] = url
-    return url
+            info = {"url": f"https://image.tmdb.org/t/p/w500{fp}",
+                    "series": fp in shared}
+    _logo_cache[tmdb_id] = info
+    return info
+
+
+async def get_movie_logo(tmdb_id: int) -> str | None:
+    """A movie's clearlogo (transparent PNG, ~JF-style) URL, or None."""
+    return (await get_movie_logo_info(tmdb_id))["url"]
+
+
+def logo_subtitle(title: str, collection_name: str | None) -> str | None:
+    """What to print under a franchise-wide logo: the part of the title that
+    names THIS movie. "The Land Before Time VIII: The Big Freeze" in "The Land
+    Before Time Collection" -> "VIII · The Big Freeze"."""
+    base = (collection_name or "").strip()
+    for suffix in (" Collection", " collection", " Series", " Trilogy"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)].strip()
+    rest = title
+    if base and title.lower().startswith(base.lower()):
+        rest = title[len(base):]
+    rest = rest.strip(" :-–—").replace(": ", " · ")
+    # "Harry Potter and the Chamber of Secrets" -> "The Chamber of Secrets"
+    for joiner in ("and ", "& ", "of "):
+        if rest.lower().startswith(joiner):
+            rest = rest[len(joiner):]
+    return (rest[:1].upper() + rest[1:]) if rest else None
 
 
 async def get_movie_videos(tmdb_id: int) -> list[dict]:

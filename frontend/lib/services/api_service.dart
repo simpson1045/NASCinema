@@ -82,7 +82,22 @@ class ApiService {
     }
   }
 
-  Future<({List<MovieFile> files, List<Extra> extras, String? logo})>
+  /// Where a movie's cached trailer came from (`hdr`, `source`, `video` …).
+  Future<Map<String, dynamic>> getTrailerSource(int id) async {
+    final r = await http
+        .get(_u('/api/movies/$id/trailer/source'))
+        .timeout(const Duration(seconds: 8));
+    if (r.statusCode != 200) return const {};
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  Future<
+          ({
+            List<MovieFile> files,
+            List<Extra> extras,
+            String? logo,
+            String? logoSubtitle,
+          })>
       getMovieDetail(
       int id) async {
     final r =
@@ -97,7 +112,12 @@ class ApiService {
     final extras = ((data['extras'] ?? []) as List)
         .map((e) => Extra.fromJson(e as Map<String, dynamic>))
         .toList();
-    return (files: files, extras: extras, logo: data['logo'] as String?);
+    return (
+      files: files,
+      extras: extras,
+      logo: data['logo'] as String?,
+      logoSubtitle: data['logo_subtitle'] as String?,
+    );
   }
 
   Future<List<Video>> getMovieVideos(int id) async {

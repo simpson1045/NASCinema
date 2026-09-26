@@ -594,3 +594,6 @@ bool playerPad(PadButton b) {
   }
   return true;
 }
+
+/// Run a uosc binding on the live player (e.g. 'flash-top-bar').
+void playerUosc(String binding) => _mpv?.uosc(binding);

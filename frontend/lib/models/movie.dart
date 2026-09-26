@@ -22,6 +22,7 @@ class Movie {
     this.popularity,
     this.collectionName,
     this.logo,
+    this.logoSubtitle,
     this.trailerUrl,
     this.trailerReady = false,
     this.trailerBars,
@@ -50,6 +51,9 @@ class Movie {
   final double? popularity; // TMDB popularity
   final String? collectionName; // e.g. "Harry Potter Collection"
   final String? logo; // clearlogo URL — featured items only
+  // Set when [logo] is the franchise's shared wordmark: this movie's part of
+  // the title, printed under the logo ("VIII · The Big Freeze").
+  final String? logoSubtitle;
   final String? trailerUrl; // /api/movies/{id}/trailer?v=… — featured only
   final bool trailerReady; // backend has the trailer cached
   /// Letterbox bars baked into the cached trailer, as fractions of a 16:9
@@ -81,6 +85,7 @@ class Movie {
         popularity: (j['popularity'] as num?)?.toDouble(),
         collectionName: j['collection_name'] as String?,
         logo: j['logo'] as String?,
+        logoSubtitle: j['logo_subtitle'] as String?,
         trailerUrl: j['trailer_url'] as String?,
         trailerReady: j['trailer_ready'] == true,
         trailerBars: j['trailer_bars'] is Map

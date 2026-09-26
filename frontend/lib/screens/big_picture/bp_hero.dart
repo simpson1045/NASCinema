@@ -57,6 +57,7 @@ class BpHeroState extends State<BpHero> {
   Movie? _follow;
   Timer? _followDebounce; // fast scrolling doesn't thrash backdrops/trailers
   final Map<int, String?> _logos = {}; // rail items carry no logo — fetched once
+  final Map<int, String?> _logoSubs = {};
   late final ApiService _api = ApiService(widget.baseUrl);
 
   /// The movie currently shown (null when there's nothing featured).
@@ -107,13 +108,20 @@ class BpHeroState extends State<BpHero> {
       if (movie.logo == null && !_logos.containsKey(movie.id)) {
         _logos[movie.id] = null;
         _api.getMovieDetail(movie.id).then((d) {
-          if (mounted && d.logo != null) setState(() => _logos[movie.id] = d.logo);
+          if (mounted && d.logo != null) {
+            setState(() {
+              _logos[movie.id] = d.logo;
+              _logoSubs[movie.id] = d.logoSubtitle;
+            });
+          }
         }).catchError((_) {});
       }
     });
   }
 
   String? _logoFor(Movie m) => m.logo ?? _logos[m.id];
+  String? _logoSubFor(Movie m) =>
+      m.logo != null ? m.logoSubtitle : _logoSubs[m.id];
 
   @override
   void initState() {
@@ -259,7 +267,11 @@ class BpHeroState extends State<BpHero> {
           Positioned(
             left: 90,
             bottom: 70,
-            child: _Info(movie: m, logo: _logoFor(m), compact: true),
+            child: _Info(
+                movie: m,
+                logo: _logoFor(m),
+                logoSubtitle: _logoSubFor(m),
+                compact: true),
           )
         else
           Positioned(
@@ -268,6 +280,7 @@ class BpHeroState extends State<BpHero> {
             child: _Info(
               movie: m,
               logo: _logoFor(m),
+              logoSubtitle: _logoSubFor(m),
               compact: false,
               dots: _follow == null && _items.length > 1
                   ? _Dots(count: _items.length, index: _i)
@@ -368,10 +381,15 @@ class _FullscreenScrim extends StatelessWidget {
 /// Logo (or title), ratings row, and — on home — the overview + paging dots.
 class _Info extends StatelessWidget {
   const _Info(
-      {required this.movie, required this.compact, this.logo, this.dots});
+      {required this.movie,
+      required this.compact,
+      this.logo,
+      this.logoSubtitle,
+      this.dots});
 
   final Movie movie;
   final String? logo;
+  final String? logoSubtitle;
   final bool compact;
   final Widget? dots;
 
@@ -423,13 +441,41 @@ class _Info extends StatelessWidget {
     );
     final logo = this.logo;
     if (logo == null || logo.isEmpty) return title;
-    return Image.network(
-      logo,
-      fit: BoxFit.contain,
-      alignment: Alignment.bottomLeft,
-      errorBuilder: (_, _, _) => title,
-    );
+    return bpLogo(logo, logoSubtitle, title);
   }
+}
+
+/// A clearlogo — with this movie's subtitle under it (gold) when the logo is
+/// the franchise's shared wordmark, so a sequel still reads as itself
+/// ("THE LAND BEFORE TIME" / "VIII · The Big Freeze").
+Widget bpLogo(String logo, String? subtitle, Widget fallback,
+    {double subtitleSize = 34}) {
+  final image = Image.network(
+    logo,
+    fit: BoxFit.contain,
+    alignment: Alignment.bottomLeft,
+    errorBuilder: (_, _, _) => fallback,
+  );
+  if (subtitle == null || subtitle.isEmpty) return image;
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(child: image),
+      const SizedBox(height: 6),
+      Text(
+        subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: NasColors.amber,
+          fontSize: subtitleSize,
+          fontWeight: FontWeight.w800,
+          height: 1.1,
+          shadows: const [Shadow(blurRadius: 12, color: Colors.black87)],
+        ),
+      ),
+    ],
+  );
 }
 
 /// Year · IMDb · RT · quality, sized for the couch (matches the Roku meta row).
