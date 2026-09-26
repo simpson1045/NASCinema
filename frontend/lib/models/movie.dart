@@ -18,6 +18,7 @@ class Movie {
     this.trailerYoutube,
     this.imdbRating,
     this.rtScore,
+    this.certification,
     this.metacritic,
     this.popularity,
     this.collectionName,
@@ -47,6 +48,7 @@ class Movie {
   final String? trailerYoutube; // manual trailer override (YouTube URL/key)
   final double? imdbRating; // external ratings (OMDb), null if unknown
   final int? rtScore; // Rotten Tomatoes %, 0–100
+  final String? certification; // content rating: PG-13, R … (region setting)
   final int? metacritic; // Metacritic, 0–100
   final double? popularity; // TMDB popularity
   final String? collectionName; // e.g. "Harry Potter Collection"
@@ -81,6 +83,7 @@ class Movie {
         trailerYoutube: j['trailer_youtube'] as String?,
         imdbRating: (j['imdb_rating'] as num?)?.toDouble(),
         rtScore: (j['rt_score'] as num?)?.toInt(),
+        certification: j['certification'] as String?,
         metacritic: (j['metacritic'] as num?)?.toInt(),
         popularity: (j['popularity'] as num?)?.toDouble(),
         collectionName: j['collection_name'] as String?,

@@ -66,7 +66,8 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
             best = _pick(results, title, year)
 
             details = await client.get(
-                f"{TMDB_BASE}/movie/{best['id']}", params={"api_key": key}
+                f"{TMDB_BASE}/movie/{best['id']}",
+                params={"api_key": key, "append_to_response": "release_dates"},
             )
             details.raise_for_status()
             detail = details.json()
@@ -92,6 +93,7 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
         "vote_count": detail.get("vote_count") or best.get("vote_count"),
         "imdb_id": detail.get("imdb_id") or None,
         "collection_id": collection.get("id"),
+        "certification": _certification(detail),
         "collection_name": collection.get("name"),
     }
 
@@ -108,7 +110,8 @@ async def get_movie_metadata_by_id(tmdb_id: int) -> dict | None:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(
-                f"{TMDB_BASE}/movie/{tmdb_id}", params={"api_key": key}
+                f"{TMDB_BASE}/movie/{tmdb_id}",
+                params={"api_key": key, "append_to_response": "release_dates"},
             )
             r.raise_for_status()
             detail = r.json()
@@ -121,6 +124,7 @@ async def get_movie_metadata_by_id(tmdb_id: int) -> dict | None:
         "rating": detail.get("vote_average"),
         "imdb_id": detail.get("imdb_id") or None,
         "collection_id": collection.get("id"),
+        "certification": _certification(detail),
         "collection_name": collection.get("name"),
     }
 
@@ -165,6 +169,23 @@ async def get_omdb_ratings(imdb_id: str) -> dict | None:
         "rt_score": rt,
         "metacritic": int(meta) if str(meta).isdigit() else None,
     }
+
+
+def _certification(detail: dict) -> str:
+    """The movie's content rating in the configured region (PG-13, R, 12A…)
+    from TMDB's release dates — theatrical first. "" = none published (kept
+    distinct from NULL = not looked up yet)."""
+    region = (get_settings().rating_region or "us").strip().upper()
+    for country in (detail.get("release_dates") or {}).get("results", []):
+        if country.get("iso_3166_1") != region:
+            continue
+        dates = country.get("release_dates", [])
+        # TMDB types: 3 theatrical, 2 limited, 1 premiere, 4 digital, 5 physical.
+        for kind in (3, 2, 1, 4, 5, 6):
+            for d in dates:
+                if d.get("type") == kind and (d.get("certification") or "").strip():
+                    return d["certification"].strip()
+    return ""
 
 
 # tmdb_id -> {"url": clearlogo URL or None, "series": bool}. Cached for the

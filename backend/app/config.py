@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     apple_trailers: bool = True
     trailer_region: str = "us"
     trailer_locale: str = "en-US"
+    # Whose content ratings to show (two-letter country: us → PG-13/R, gb →
+    # 12A/15, de → FSK …).
+    rating_region: str = "us"
 
     # Wired renderer (the theater PC). MAC enables POST /api/renderer/wake —
     # the phone wakes the sleeping renderer before "Play on <renderer>".

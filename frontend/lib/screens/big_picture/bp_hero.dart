@@ -520,6 +520,21 @@ Widget bpMetaRow(Movie m) {
       color: NasColors.text, fontSize: 30, fontWeight: FontWeight.w700);
   final parts = <Widget>[
     if (m.year != null) Text('${m.year}', style: text),
+    // Content rating in an outlined box, like the TV's own ratings bug.
+    if ((m.certification ?? '').isNotEmpty)
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
+        decoration: BoxDecoration(
+          border: Border.all(color: NasColors.text, width: 2),
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Text(m.certification!,
+            style: const TextStyle(
+                color: NasColors.text,
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5)),
+      ),
     if (m.imdbRating != null)
       Row(mainAxisSize: MainAxisSize.min, children: [
         Container(

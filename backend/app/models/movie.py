@@ -36,6 +36,9 @@ class Movie(Base):
     vote_count: Mapped[int | None] = mapped_column(Integer)  # TMDB vote count
     imdb_id: Mapped[str | None] = mapped_column(String(32), index=True)
     imdb_rating: Mapped[float | None] = mapped_column(Float)  # OMDb (0–10)
+    # Content rating in settings.rating_region (PG-13, R …); "" = none
+    # published, NULL = not looked up yet.
+    certification: Mapped[str | None] = mapped_column(String(16))
     rt_score: Mapped[int | None] = mapped_column(Integer)  # OMDb Tomatometer (%)
     metacritic: Mapped[int | None] = mapped_column(Integer)  # OMDb Metascore (0–100)
 

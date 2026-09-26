@@ -354,6 +354,7 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
         movie.imdb_id = meta.get("imdb_id")
         movie.collection_id = meta.get("collection_id")
         movie.collection_name = meta.get("collection_name")
+        movie.certification = meta.get("certification")
         omdb = await get_omdb_ratings(meta.get("imdb_id") or "")
         if omdb:
             movie.imdb_rating = omdb.get("imdb_rating")
@@ -363,6 +364,28 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
     session.add(movie)
     await session.flush()
     return movie
+
+
+async def backfill_certifications(limit: int | None = None) -> dict:
+    """Fill content ratings (PG-13, R …) for movies scanned before they were
+    stored — one TMDB detail call per movie, only where it's still NULL."""
+    from .metadata import get_movie_metadata_by_id
+
+    stats = {"updated": 0, "none": 0, "failed": 0}
+    async with SessionLocal() as session:
+        q = select(Movie).where(Movie.tmdb_id.isnot(None),
+                                Movie.certification.is_(None))
+        if limit:
+            q = q.limit(limit)
+        for movie in (await session.scalars(q)).all():
+            meta = await get_movie_metadata_by_id(movie.tmdb_id)
+            if not meta:
+                stats["failed"] += 1
+                continue
+            movie.certification = meta.get("certification") or ""
+            stats["updated" if movie.certification else "none"] += 1
+        await session.commit()
+    return stats
 
 
 async def backfill_ratings(limit: int | None = None) -> dict:

@@ -23,7 +23,7 @@ from ..metadata import get_movie_logo_info, get_movie_videos, logo_subtitle
 from ..tracks import quality_label, track_rows, version_label
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
-from ..scanner import backfill_ratings, reprobe, scan
+from ..scanner import backfill_certifications, backfill_ratings, reprobe, scan
 from ..trailers import (
     clear_trailer,
     ensure_trailer,
@@ -80,6 +80,7 @@ def _summary(m: Movie) -> dict:
         "vote_count": m.vote_count,
         "imdb_rating": m.imdb_rating,
         "rt_score": m.rt_score,
+        "certification": m.certification or None,
         "metacritic": m.metacritic,
         "collection_id": m.collection_id,
         "collection_name": m.collection_name,
@@ -380,6 +381,12 @@ async def update_extra(
 async def trigger_scan() -> dict:
     # Synchronous for the MVP; becomes a background job with live progress later.
     return await scan()
+
+
+@router.post("/backfill-certifications")
+async def trigger_backfill_certifications(limit: int | None = None) -> dict:
+    """Fetch content ratings (PG-13, R …) for movies that don't have one yet."""
+    return await backfill_certifications(limit)
 
 
 @router.post("/backfill-ratings")

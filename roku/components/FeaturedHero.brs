@@ -284,6 +284,7 @@ sub buildMeta(it as object)
     end while
 
     if it.year <> invalid then addMetaText(it.year.toStr())
+    if it.certification <> invalid and it.certification <> "" then addMetaCert(it.certification)
 
     if it.imdb_rating <> invalid then
         ' IMDb mark is ~2:1, so render it wide, not in a square box.
@@ -308,6 +309,31 @@ sub buildMeta(it as object)
     q = qualityTag(it)
     if q <> "" then addMetaText(q)
     centerFullscreenInfo()
+end sub
+
+' Content rating (PG-13, R …) in an outlined box, like the TV's ratings bug.
+' Labels can't draw borders: an outline rectangle, a dark inset, the text.
+sub addMetaCert(s as string)
+    h = 40
+    w = Len(s) * 15 + 26
+    g = m.meta.createChild("Group")
+    outer = g.createChild("Rectangle")
+    outer.width = w
+    outer.height = h
+    outer.color = "0xEEF1FFFF"
+    inner = g.createChild("Rectangle")
+    inner.translation = [3, 3]
+    inner.width = w - 6
+    inner.height = h - 6
+    inner.color = "0x0A0E27FF"
+    lbl = g.createChild("Label")
+    lbl.width = w
+    lbl.height = h
+    lbl.horizAlign = "center"
+    lbl.vertAlign = "center"
+    lbl.text = s
+    lbl.color = "0xEEF1FFFF"
+    lbl.font = "font:SmallBoldSystemFont"
 end sub
 
 sub addMetaText(s as string)
