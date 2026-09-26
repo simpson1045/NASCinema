@@ -7,7 +7,28 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-26 late night) — Batch 2: Roku 0.2.1 (complete)
+## Latest (2026-09-26, ~23:00 UTC) — Batch 3: Track Manager Phase A (built, not deployed)
+
+**Done (pushed, NOT deployed):** 63bda4d backend (app/track_rules.py = spec §3
+verbatim; /api/track-manager/plan, /file/{id}, PUT /protect/{movie}; migration
+0014 movies.track_protect; backend/tests/test_track_rules.py — 9 pass, run
+`python3 -m unittest discover tests` in backend/), 8c613aa Big Picture screens
+(menu → Track Manager; list + per-movie detail; Y = protect).
+**Dry run on the live DB (read-only, in-container):** 79 files to strip,
+70.1 GB, 2 foreign-default, 15 protected (all genuine), 0 no-English, 164 clean.
+
+**Waiting on:** the other Claude (manual strip run in progress) to confirm
+nothing of theirs runs in the `nascinema` container → then plain deploy.sh
+(runs migration 0014) → release 0.9.0 (app) → reprobe the files they
+stripped so the preview isn't stale.
+**Phase B (writes files) needs Matt's separate go:** separate strip-worker
+container (rw mount; main backend stays ro), stage on /mnt/scratch SSD,
+verify, originals renamed `.pre-strip` until Matt presses "Confirm & free
+space" (no automatic deletes). Must also carry attachments (`-map 0:t?`,
+ASS fonts) — the DB doesn't store attachment streams.
+**Open rule question:** untagged "Russian"-titled tracks survive the regex.
+
+## Earlier (2026-09-26 late night) — Batch 2: Roku 0.2.1 (complete)
 
 **Done**
 - Roku had **no movie page** (every poster played instantly; git shows it never

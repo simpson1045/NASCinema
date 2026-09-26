@@ -99,3 +99,11 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 - [ ] 👀 Home has a **Franchises** row (first row, or right after Continue Watching): wide cards with the franchise backdrop and its logo centered on it; name instead of a logo for Batman (DC Animated), Almighty, Jump Street, Peanuts. Label underneath "Harry Potter · 8 movies".
 - [ ] 👀 OK on a card → franchise page: logo centered over "8 movies · 2001–2011", overview, posters in release order. OK on a poster → its movie page; **Back returns to the franchise page**, Back again → home.
 - [ ] 👀 * on the franchise page → Flag a problem.
+
+## Batch 3 — Track Manager, Phase A (preview only; needs backend deploy + app 0.9.0) — ✅ 9 rule tests, analyze, real-font renders
+
+- [ ] 👀 Big Picture home → Back → **Track Manager**: "79 movies · 70.1 GB to reclaim" (numbers may differ after the other Claude's manual strips + a reprobe), "N start in a foreign language · 15 protected · 164 already clean", violet "Preview — nothing on disk changes yet."
+- [ ] 👀 Tabs (◀▶ or LB/RB): **To strip** biggest first (Independence Day / Star Wars sequels ~5.5 GB), **Protected** (Harmy, 4K77/80/83, 35mm, Open Matte — check none are wrong), **No English audio**.
+- [ ] 👀 A on a movie → every track with KEEP/DROP + why, sizes, **PLAYS FIRST** on the track that becomes default. Sanity-check a few: nothing English marked DROP, no foreign dub marked KEEP.
+- [ ] 👀 Y → "Protected — never stripped"; Back → it moved to the Protected tab. Y again removes it.
+- [ ] ❓ Rule question: an **untagged** track titled just "Russian" (spelled out) is KEPT by the spec's regex (it only knows rus/ukr/dvo/mvo…). Add "russian|ukrainian" etc.?
