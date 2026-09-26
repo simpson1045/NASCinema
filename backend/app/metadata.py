@@ -307,6 +307,46 @@ def logo_subtitle(title: str, collection_name: str | None) -> str | None:
     return (rest[:1].upper() + rest[1:]) if rest else None
 
 
+# tmdb_id -> {"cast": [...], "related": [tmdb ids]}; cached per process.
+_related_cache: dict[int, dict] = {}
+
+
+async def get_related(tmdb_id: int) -> dict | None:
+    """Top-billed cast (name, character, headshot) and TMDB's recommended +
+    similar titles (as TMDB ids, best first) — one call, cached."""
+    if tmdb_id in _related_cache:
+        return _related_cache[tmdb_id]
+    key = get_settings().tmdb_api_key
+    if not key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{TMDB_BASE}/movie/{tmdb_id}",
+                params={"api_key": key,
+                        "append_to_response": "credits,recommendations,similar"},
+            )
+            r.raise_for_status()
+            d = r.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    img = "https://image.tmdb.org/t/p/w185"
+    cast = [
+        {"name": c.get("name"), "character": c.get("character") or None,
+         "photo": f"{img}{c['profile_path']}" if c.get("profile_path") else None}
+        for c in sorted((d.get("credits") or {}).get("cast", []),
+                        key=lambda c: c.get("order", 999))[:12]
+    ]
+    related: list[int] = []
+    for block in ("recommendations", "similar"):
+        for m in (d.get(block) or {}).get("results", []):
+            if m.get("id") and m["id"] not in related:
+                related.append(m["id"])
+    out = {"cast": cast, "related": related}
+    _related_cache[tmdb_id] = out
+    return out
+
+
 # collection id -> {"name", "overview", "logo", "backdrop", "poster"}.
 _collection_art: dict[int, dict] = {}
 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/cast_member.dart';
 import '../../models/extra.dart';
 import '../../models/franchise.dart';
 import '../../models/movie.dart';
@@ -37,7 +38,7 @@ class BpMovieScreen extends StatefulWidget {
   State<BpMovieScreen> createState() => _BpMovieScreenState();
 }
 
-enum _Row { buttons, series, extras }
+enum _Row { buttons, series, more, cast, extras }
 
 class _BpMovieScreenState extends State<BpMovieScreen> {
   late final ApiService _api = ApiService(widget.baseUrl);
@@ -51,6 +52,10 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   TrackPick? _pick; // version + audio + subtitles Play will use
   Franchise? _series; // "More in this series" (includes this movie)
   int _seriesIdx = 0;
+  List<Movie> _more = const []; // "More like this" (library only)
+  int _moreIdx = 0;
+  List<CastMember> _cast = const [];
+  int _castIdx = 0;
 
   _Row _row = _Row.buttons;
   int _button = 0;
@@ -96,6 +101,13 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       });
       final pick = await TrackPick.load(_m.id, d.files);
       if (mounted) setState(() => _pick = pick);
+      final rel = await _api.getRelated(_m.id);
+      if (mounted) {
+        setState(() {
+          _more = rel.moreLikeThis;
+          _cast = rel.cast;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loaded = true);
     }
@@ -106,27 +118,42 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
 
   bool get _hasSeries => (_series?.movies.length ?? 0) > 1;
 
+  /// The rows ↓/↑ step through, in order — only the ones that have content.
+  List<_Row> get _rows => [
+        _Row.buttons,
+        if (_hasSeries) _Row.series,
+        if (_more.isNotEmpty) _Row.more,
+        if (_cast.isNotEmpty) _Row.cast,
+        if (_extras.isNotEmpty) _Row.extras,
+      ];
+
+  /// What the bottom band shows: the row you're on, or (on the buttons) the
+  /// first one below them.
+  _Row? get _bandRow {
+    if (_row != _Row.buttons) return _row;
+    final rows = _rows;
+    return rows.length > 1 ? rows[1] : null;
+  }
+
   void _move(int dx, int dy) {
     setState(() {
-      if (dy > 0) {
-        // buttons → series → extras (skipping what isn't there).
-        if (_row == _Row.buttons && _hasSeries) {
-          _row = _Row.series;
-        } else if (_row != _Row.extras && _extras.isNotEmpty) {
-          _row = _Row.extras;
-        }
-      } else if (dy < 0) {
-        if (_row == _Row.extras && _hasSeries) {
-          _row = _Row.series;
-        } else if (_row != _Row.buttons) {
-          _row = _Row.buttons;
-        }
-      } else if (_row == _Row.buttons) {
-        _button = (_button + dx).clamp(0, _buttonCount - 1);
-      } else if (_row == _Row.series) {
-        _seriesIdx = (_seriesIdx + dx).clamp(0, _series!.movies.length - 1);
-      } else {
-        _extra = (_extra + dx).clamp(0, _extras.length - 1);
+      if (dy != 0) {
+        final rows = _rows;
+        final i = rows.indexOf(_row).clamp(0, rows.length - 1);
+        _row = rows[(i + dy).clamp(0, rows.length - 1)];
+        return;
+      }
+      switch (_row) {
+        case _Row.buttons:
+          _button = (_button + dx).clamp(0, _buttonCount - 1);
+        case _Row.series:
+          _seriesIdx = (_seriesIdx + dx).clamp(0, _series!.movies.length - 1);
+        case _Row.more:
+          _moreIdx = (_moreIdx + dx).clamp(0, _more.length - 1);
+        case _Row.cast:
+          _castIdx = (_castIdx + dx).clamp(0, _cast.length - 1);
+        case _Row.extras:
+          _extra = (_extra + dx).clamp(0, _extras.length - 1);
       }
     });
   }
@@ -137,6 +164,10 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       if (m.id != _m.id) {
         _open(BpMovieScreen(movie: m, baseUrl: widget.baseUrl));
       }
+    } else if (_row == _Row.more && _more.isNotEmpty) {
+      _open(BpMovieScreen(movie: _more[_moreIdx], baseUrl: widget.baseUrl));
+    } else if (_row == _Row.cast) {
+      // Browsing only (an actor page is a later idea).
     } else if (_row == _Row.extras && _extras.isNotEmpty) {
       final e = _extras[_extra];
       _open(PlayerScreen(fileId: e.id, baseUrl: widget.baseUrl, title: e.title));
@@ -390,11 +421,15 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
             ],
           ),
         ),
-        // One band at the bottom: the series row, or Extras once you go
-        // down to them (or when there's no series).
-        if (_hasSeries && _row != _Row.extras)
+        // One band at the bottom, showing the row you're on (series → more
+        // like this → cast → extras).
+        if (_bandRow == _Row.series)
           _seriesRail()
-        else if (_extras.isNotEmpty)
+        else if (_bandRow == _Row.more)
+          _moreRail()
+        else if (_bandRow == _Row.cast)
+          _castRail()
+        else if (_bandRow == _Row.extras)
           _extrasRail(),
       ],
     );
@@ -472,6 +507,86 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       ),
     );
   }
+
+  Widget _moreRail() {
+    const cardW = 320.0, cardH = 180.0, gap = 24.0;
+    final focused = _row == _Row.more;
+    return _band(
+      title: 'More like this',
+      offset: (focused ? _moreIdx : 0) * (cardW + gap),
+      children: [
+        for (int i = 0; i < _more.length; i++) ...[
+          if (i > 0) const SizedBox(width: gap),
+          _SeriesCard(
+            movie: _more[i],
+            width: cardW,
+            height: cardH,
+            current: false,
+            focused: focused && i == _moreIdx,
+            onTap: () {
+              setState(() {
+                _row = _Row.more;
+                _moreIdx = i;
+              });
+              _activate();
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _castRail() {
+    const cardW = 170.0, gap = 22.0;
+    final focused = _row == _Row.cast;
+    return _band(
+      title: 'Cast',
+      offset: (focused ? _castIdx : 0) * (cardW + gap),
+      children: [
+        for (int i = 0; i < _cast.length; i++) ...[
+          if (i > 0) const SizedBox(width: gap),
+          _CastCard(member: _cast[i], width: cardW, focused: focused && i == _castIdx),
+        ],
+      ],
+    );
+  }
+
+  /// A bottom-band rail: title + a row that slides so the focused card stays
+  /// in the left slot.
+  Widget _band({
+    required String title,
+    required double offset,
+    required List<Widget> children,
+  }) =>
+      Positioned(
+        left: 0,
+        right: 0,
+        top: 800,
+        height: 260,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 90,
+              top: 0,
+              child: Text(title,
+                  style: const TextStyle(
+                      color: NasColors.text,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w600)),
+            ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              left: 90 - offset,
+              top: 56,
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: children),
+            ),
+          ],
+        ),
+      );
 
   Widget _extrasRail() {
     const cardW = 420.0, gap = 24.0;
@@ -691,6 +806,64 @@ class _SeriesCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A Cast card: round headshot, name, character.
+class _CastCard extends StatelessWidget {
+  const _CastCard(
+      {required this.member, required this.width, required this.focused});
+
+  final CastMember member;
+  final double width;
+  final bool focused;
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = member.photo;
+    return SizedBox(
+      width: width,
+      child: Column(
+        children: [
+          AnimatedScale(
+            duration: const Duration(milliseconds: 150),
+            scale: focused ? 1.08 : 1,
+            child: Container(
+              width: 128,
+              height: 128,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: NasColors.surface,
+                border: Border.all(
+                    color: focused ? Colors.white : Colors.transparent, width: 4),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: photo == null
+                  ? const Icon(Icons.person, color: NasColors.muted, size: 64)
+                  : Image.network(photo,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const Icon(Icons.person,
+                          color: NasColors.muted, size: 64)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(member.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: focused ? Colors.white : NasColors.text,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700)),
+          if (member.character != null)
+            Text(member.character!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: NasColors.muted, fontSize: 17)),
+        ],
       ),
     );
   }

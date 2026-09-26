@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/cast_member.dart';
 import '../models/extra.dart';
 import '../models/franchise.dart';
 import '../models/home.dart';
@@ -126,6 +127,28 @@ class ApiService {
               'count': ((data['series'] as Map)['movies'] as List).length,
             })
           : null,
+    );
+  }
+
+  /// Cast + "More like this" (library movies only) for a movie page.
+  Future<({List<CastMember> cast, List<Movie> moreLikeThis})> getRelated(
+      int id) async {
+    final r = await http
+        .get(_u('/api/movies/$id/related'))
+        .timeout(const Duration(seconds: 20));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    final d = jsonDecode(r.body) as Map<String, dynamic>;
+    return (
+      cast: [
+        for (final c in (d['cast'] as List? ?? const []))
+          CastMember.fromJson(c as Map<String, dynamic>),
+      ],
+      moreLikeThis: [
+        for (final m in (d['more_like_this'] as List? ?? const []))
+          Movie.fromJson(m as Map<String, dynamic>),
+      ],
     );
   }
 

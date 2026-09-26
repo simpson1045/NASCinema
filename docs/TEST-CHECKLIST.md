@@ -59,3 +59,9 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 - [ ] 👀 Movie page (e.g. any Harry Potter): bottom band shows **"More in Harry Potter · 8"** — 16:9 cards, this movie tagged NOW VIEWING. ▼ into it, ◀▶ browse, A opens another; ▼ again switches the band to Extras, ▲ back.
 - [ ] 👀 Franchise logos/backdrops look right (TMDB collection art) — note any wrong/missing ones.
 
+### Movie page: Cast + More like this (ELKO) — ✅ analyze/tests
+- [ ] 👀 Bottom band steps with ▼/▲ through **More in <series> → More like this → Cast → Extras** (only the rows that exist; on the Play buttons it previews the first one).
+- [ ] 👀 **More like this** shows only movies in your library (TMDB recommendations, topped up with same-genre movies) — never the movie itself or its own franchise. A opens one.
+- [ ] 👀 **Cast**: round headshots, name, character, top-billed first (browse only for now).
+- [ ] 👀 Page opens fast — cast/more-like-this fill in a moment after.
+

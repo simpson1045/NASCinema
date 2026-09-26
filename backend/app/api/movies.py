@@ -23,6 +23,7 @@ from ..metadata import (
     franchise_name,
     get_collection_art,
     get_movie_logo_info,
+    get_related,
     get_movie_videos,
     logo_subtitle,
 )
@@ -558,4 +559,39 @@ async def get_collection(
         "backdrop": a.get("backdrop"),
         "overview": a.get("overview"),
         "movies": [summ[m.id] for m in ordered],
+    }
+
+
+@router.get("/movies/{movie_id}/related")
+async def movie_related(
+    movie_id: int, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Cast + "More like this" — only movies in the library: TMDB's
+    recommended/similar titles first, topped up with same-genre movies;
+    never this movie or its own franchise (the series row covers those)."""
+    movie = await session.get(Movie, movie_id)
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    rel = (await get_related(movie.tmdb_id)) if movie.tmdb_id else None
+    library = (await session.scalars(select(Movie).options(selectinload(Movie.files)))).all()
+
+    def eligible(m: Movie) -> bool:
+        return m.id != movie.id and not (
+            movie.collection_id and m.collection_id == movie.collection_id)
+
+    by_tmdb = {m.tmdb_id: m for m in library if m.tmdb_id and eligible(m)}
+    picks: list[Movie] = [by_tmdb[t] for t in (rel or {}).get("related", []) if t in by_tmdb]
+    if len(picks) < 12 and movie.genres:
+        mine = set(movie.genres)
+        chosen = {m.id for m in picks}
+        extra = sorted(
+            (m for m in library if eligible(m) and m.id not in chosen
+             and len(mine & set(m.genres or [])) >= min(2, len(mine))),
+            key=lambda m: (len(mine & set(m.genres or [])), m.popularity or 0),
+            reverse=True,
+        )
+        picks += extra[: 12 - len(picks)]
+    return {
+        "cast": (rel or {}).get("cast", []),
+        "more_like_this": [_summary(m) for m in picks[:12]],
     }
