@@ -42,6 +42,7 @@ end sub
 ' dots), homeScrim fades the picture into the rails. Fullscreen (hero focused) =
 ' the same picture, info moved to the lower-left, no overview or dots.
 sub setMode(fs as boolean)
+    m.fs = fs
     m.homeScrim.visible = not fs
     m.scrim.visible = fs
     m.overview.visible = not fs
@@ -56,12 +57,49 @@ sub setMode(fs as boolean)
         m.logo.translation = [90, 790]
         m.title.translation = [92, 850]
         m.meta.translation = [92, 975]   ' clears the 150px-tall logo slot + a gap
+        centerFullscreenInfo()
     else
         m.logo.translation = [90, 110]
         m.title.translation = [92, 170]
         m.meta.translation = [92, 288]
     end if
 end sub
+
+' Fullscreen: the logo sits centered over the year/IMDb/RT/quality row. The
+' block is as wide as the wider of the two (the 520px logo box draws its image
+' centered) and both center in it, so nothing moves left of the usual edge.
+sub centerFullscreenInfo()
+    if m.fs = invalid or not m.fs then return
+    w = metaWidth()
+    if w <= 0 then return
+    b = 520
+    if w > b then b = w
+    m.logo.translation = [90 + Int((b - 520) / 2), 790]
+    m.meta.translation = [92 + Int((b - w) / 2), 975]
+end sub
+
+' The meta row's width, summed from its children (a LayoutGroup's own
+' boundingRect can lag behind children added this frame).
+function metaWidth() as float
+    return groupWidth(m.meta, 18)
+end function
+
+function groupWidth(g as object, gap as integer) as float
+    n = g.getChildCount()
+    total = 0
+    for i = 0 to n - 1
+        nd = g.getChild(i)
+        if nd.subtype() = "LayoutGroup" then
+            total = total + groupWidth(nd, 8)
+        else if nd.subtype() = "Poster" then
+            total = total + nd.width
+        else
+            total = total + nd.boundingRect().width
+        end if
+    end for
+    if n > 1 then total = total + gap * (n - 1)
+    return total
+end function
 
 sub onFeatured()
     src = m.top.featured
@@ -269,6 +307,7 @@ sub buildMeta(it as object)
 
     q = qualityTag(it)
     if q <> "" then addMetaText(q)
+    centerFullscreenInfo()
 end sub
 
 sub addMetaText(s as string)
