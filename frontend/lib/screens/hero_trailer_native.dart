@@ -42,9 +42,27 @@ class TrailerPlayer {
 
   bool get supported => true;
 
-  /// Where the current trailer is, in seconds (for flags).
+  /// Where the current trailer is, in seconds (for flags + the progress bar).
   double get positionSeconds =>
       (_player?.state.position.inMilliseconds ?? 0) / 1000;
+
+  double get durationSeconds =>
+      (_player?.state.duration.inMilliseconds ?? 0) / 1000;
+
+  bool get paused => !(_player?.state.playing ?? false);
+
+  Future<void> togglePause() => _run(() async => _player?.playOrPause());
+
+  /// Relative seek, clamped to the trailer.
+  Future<void> seekBy(double seconds) => _run(() async {
+        final p = _player;
+        if (p == null) return;
+        final d = p.state.duration;
+        var to = p.state.position + Duration(milliseconds: (seconds * 1000).round());
+        if (to < Duration.zero) to = Duration.zero;
+        if (d > Duration.zero && to > d) to = d;
+        await p.seek(to);
+      });
 
   /// Serialize every player operation — no two ever overlap.
   Future<void> _run(Future<void> Function() op) =>

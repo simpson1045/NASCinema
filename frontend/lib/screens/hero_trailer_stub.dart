@@ -17,6 +17,10 @@ class TrailerPlayer {
   bool get supported => false;
 
   double get positionSeconds => 0;
+  double get durationSeconds => 0;
+  bool get paused => false;
+  Future<void> togglePause() async {}
+  Future<void> seekBy(double seconds) async {}
 
   Future<void> open(String url, {required bool muted}) async {}
 

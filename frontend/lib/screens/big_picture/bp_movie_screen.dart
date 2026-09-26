@@ -539,12 +539,16 @@ class _BpTrailerScreen extends StatefulWidget {
 
 class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   final _focus = FocusNode(debugLabel: 'bp-trailer');
-  // SDR: the in-app texture player. HDR (Windows, HDR wanted): native mpv —
-  // the same pipeline as the movies, the only one that shows HDR properly.
+  // SDR: the in-app texture player, with our own controls drawn over it.
+  // HDR (Windows, HDR wanted, trailer is HDR): native mpv — the movie
+  // pipeline, the only one that shows HDR; its uosc UI is the controls.
   TrailerPlayer? _player;
   Widget? _native;
   Timer? _endPoll;
+  Timer? _hide;
+  Timer? _tick;
   bool _playing = false;
+  bool _controls = true;
 
   bool get _hdr => _native != null;
 
@@ -596,12 +600,34 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
       });
     } else {
       _player = TrailerPlayer(
-        onFirstFrame: () => mounted ? setState(() => _playing = true) : null,
+        onFirstFrame: () {
+          if (!mounted) return;
+          setState(() => _playing = true);
+          _poke(); // controls up for a moment as it starts
+        },
         onFinished: _close,
         onError: _close,
       );
       unawaited(_player!.open(widget.url, muted: false));
+      // Progress bar + time refresh while the controls are showing.
+      _tick = Timer.periodic(const Duration(milliseconds: 250), (_) {
+        if (mounted && _controls) setState(() {});
+      });
     }
+  }
+
+  /// Bring the controls up; they fade after 3 s unless paused.
+  void _poke() {
+    _hide?.cancel();
+    if (!_controls) setState(() => _controls = true);
+    _hide = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      if (_player?.paused == true) {
+        _poke();
+        return;
+      }
+      setState(() => _controls = false);
+    });
   }
 
   @override
@@ -609,6 +635,8 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
     PadDispatch.remove(_onPad);
     FlagService.unregister(this);
     _endPoll?.cancel();
+    _hide?.cancel();
+    _tick?.cancel();
     _player?.dispose();
     _focus.dispose();
     super.dispose();
@@ -619,24 +647,120 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
     if (mounted) Navigator.of(context).maybePop();
   }
 
+  /// Every button is claimed here — nothing may fall through to the movie
+  /// page underneath (which backed out of the trailer on any press).
   bool _onPad(PadButton b) {
     if (_hdr) {
-      // Native player: the movie controls (A pause, ←/→ skip, menus…);
-      // B leaves once no menu is open. mpv's window holds OS focus here, so
-      // don't gate on Flutter focus.
-      if (playerPad(b)) return true;
-      if (b == PadButton.b) {
-        _close();
-        return true;
-      }
-      return false;
-    }
-    if (!_focus.hasPrimaryFocus) return false;
-    if (b == PadButton.b || b == PadButton.a) {
-      _close();
+      // Native player: the movie controls (A pause, ←/→ skip, menus…); B
+      // leaves once no menu is open.
+      if (!playerPad(b) && b == PadButton.b) _close();
       return true;
     }
-    return false;
+    final p = _player;
+    switch (b) {
+      case PadButton.b:
+        _close();
+        return true;
+      case PadButton.a:
+        p?.togglePause();
+      case PadButton.left:
+        p?.seekBy(-10);
+      case PadButton.right:
+        p?.seekBy(10);
+      default:
+        break;
+    }
+    _poke();
+    return true;
+  }
+
+  static String _fmt(double s) {
+    final t = s.isFinite && s > 0 ? s.round() : 0;
+    return '${t ~/ 60}:${(t % 60).toString().padLeft(2, '0')}';
+  }
+
+  Widget _overlay() {
+    final p = _player;
+    final pos = p?.positionSeconds ?? 0;
+    final dur = p?.durationSeconds ?? 0;
+    final paused = p?.paused ?? false;
+    const shadow = [Shadow(blurRadius: 10, color: Colors.black)];
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: _controls ? 1 : 0,
+        duration: const Duration(milliseconds: 250),
+        child: Stack(
+          children: [
+            if (paused)
+              const Center(
+                child: Icon(Icons.pause_circle_filled,
+                    size: 140, color: Color(0xCCFFFFFF), shadows: shadow),
+              ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(64, 90, 64, 48),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xCC000000)],
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${widget.movie.title} — Trailer',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w800,
+                            shadows: shadow)),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Text(_fmt(pos),
+                            style: const TextStyle(
+                                color: NasColors.text,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0,
+                              minHeight: 8,
+                              color: NasColors.amber,
+                              backgroundColor: const Color(0x55FFFFFF),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Text('-${_fmt(dur - pos)}',
+                            style: const TextStyle(
+                                color: NasColors.text,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('A  Pause    ◀ ▶  Skip 10s    B  Back',
+                        style: TextStyle(
+                            color: NasColors.muted,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -649,13 +773,35 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
         bindings: {
           const SingleActivator(LogicalKeyboardKey.escape): _close,
           const SingleActivator(LogicalKeyboardKey.backspace): _close,
+          const SingleActivator(LogicalKeyboardKey.space): () {
+            _player?.togglePause();
+            _poke();
+          },
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
+            _player?.seekBy(-10);
+            _poke();
+          },
+          const SingleActivator(LogicalKeyboardKey.arrowRight): () {
+            _player?.seekBy(10);
+            _poke();
+          },
         },
         child: Focus(
           focusNode: _focus,
           autofocus: true,
-          child: view ??
-              const Center(
-                  child: CircularProgressIndicator(color: NasColors.amber)),
+          child: MouseRegion(
+            onHover: (_) => _poke(),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                view ??
+                    const Center(
+                        child: CircularProgressIndicator(
+                            color: NasColors.amber)),
+                if (!_hdr && _playing) _overlay(),
+              ],
+            ),
+          ),
         ),
       ),
     );
