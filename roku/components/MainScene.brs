@@ -254,19 +254,19 @@ sub onMoviePlay()
         externals: ext
         subSaved: strOf(m.movie.subSaved)
     }
-    pos = 0
-    if req.position <> invalid then pos = req.position
-    startPlayback(pos)
+    sec = 0
+    if req.position <> invalid then sec = req.position
+    startPlayback(sec)
 end sub
 
-sub startPlayback(pos as dynamic)
+sub startPlayback(sec as dynamic)
     f = m.cur.files[m.cur.fileIdx]
     m.audioPicked = false   ' re-pick the audio track for this file
     vc = createObject("roSGNode", "ContentNode")
     vc.url = m.base + "/api/stream/" + f.id.toStr() + "/direct"
     vc.streamFormat = streamFormatFor(f.container)
     vc.title = m.cur.title
-    if pos > 0 then vc.playStart = Int(pos)
+    if sec > 0 then vc.playStart = Int(sec)
     ' Downloaded subtitles ride along as side-loaded WebVTT tracks.
     subs = []
     for each x in m.cur.externals
@@ -274,7 +274,7 @@ sub startPlayback(pos as dynamic)
     end for
     if subs.count() > 0 then vc.subtitleTracks = subs
 
-    logmsg("play " + vc.url + " at " + Int(pos).toStr() + "s (container=" + firstStr(f.container) + " -> " + vc.streamFormat + ", audio=" + m.cur.audio.toStr() + ", subs=" + m.cur.subKey + ")")
+    logmsg("play " + vc.url + " at " + Int(sec).toStr() + "s (container=" + firstStr(f.container) + " -> " + vc.streamFormat + ", audio=" + m.cur.audio.toStr() + ", subs=" + m.cur.subKey + ")")
 
     m.hero.suspended = true   ' stop the hero trailer so two videos don't fight
     m.movie.visible = false
@@ -303,12 +303,12 @@ sub stopVideo(reason as string)
     m.saveTimer.control = "stop"
     saved = invalid
     if m.cur <> invalid then
-        pos = m.video.position
+        sec = m.video.position
         dur = m.video.duration
-        if reason = "finished" or (dur > 0 and pos > dur * 0.95) then
+        if reason = "finished" or (dur > 0 and sec > dur * 0.95) then
             saved = putProgress(0)   ' watched to the credits: no Resume
-        else if pos > 5 then
-            saved = putProgress(pos)
+        else if sec > 5 then
+            saved = putProgress(sec)
         end if
     end if
     m.video.control = "stop"
@@ -334,9 +334,9 @@ sub onSavedRefresh()
     m.movie.refresh = true
 end sub
 
-function putProgress(pos as dynamic) as object
+function putProgress(sec as dynamic) as object
     f = m.cur.files[m.cur.fileIdx]
-    body = { position: pos }
+    body = { position: sec }
     ' Keep the subtitle another app remembered for this file.
     if m.cur.subSaved <> "" then body.subtitle = m.cur.subSaved
     return http("PUT", "/api/progress/" + f.id.toStr(), FormatJson(body))
@@ -345,8 +345,8 @@ end function
 sub onSaveTick()
     if m.screen <> "video" or m.cur = invalid then return
     if m.video.state <> "playing" then return
-    pos = m.video.position
-    if pos > 5 then putProgress(pos)
+    sec = m.video.position
+    if sec > 5 then putProgress(sec)
 end sub
 
 sub onSubTracks()
@@ -463,14 +463,14 @@ sub onPanelChanged()
         m.movie.choice = c   ' keep the page in step for when playback ends
         idx = Int(c.fileIdx)
         if idx <> m.cur.fileIdx or Int(c.audio) <> m.cur.audio then
-            pos = m.video.position
+            sec = m.video.position
             ' Downloaded subtitles belong to one version.
             if idx <> m.cur.fileIdx then m.cur.externals = []
             m.cur.fileIdx = idx
             m.cur.audio = Int(c.audio)
             m.cur.subKey = strOf(c.subKey)
             m.video.control = "stop"
-            startPlayback(pos)
+            startPlayback(sec)
             m.panel.setFocus(true)   ' the panel stays open over the restart
         else if strOf(c.subKey) <> m.cur.subKey then
             m.cur.subKey = strOf(c.subKey)

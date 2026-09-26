@@ -9,7 +9,7 @@ sub metaBuild(g as object, it as object, quality as string)
     if it.year <> invalid then metaText(g, it.year.toStr())
     if it.certification <> invalid and it.certification <> "" then metaCert(g, it.certification)
     if it.imdb_rating <> invalid then
-        ' IMDb mark is ~2:1, so render it wide, not in a square box.
+        ' IMDb mark is ~2:1, so render it wide, not in a square badge.
         metaRating(g, "pkg:/images/imdb.png", it.imdb_rating.toStr(), 60, 30)
     else if it.rating <> invalid then
         metaText(g, it.rating.toStr())
@@ -27,21 +27,21 @@ sub metaBuild(g as object, it as object, quality as string)
     if quality <> "" then metaText(g, quality)
 end sub
 
-' Content rating (PG-13, R …) in an outlined box, like the TV's ratings bug.
+' Content rating (PG-13, R …) in an outlined badge, like the TV's ratings bug.
 sub metaCert(g as object, s as string)
     h = 40
     w = Len(s) * 15 + 26
-    box = g.createChild("Group")
-    outer = box.createChild("Rectangle")
+    badge = g.createChild("Group")
+    outer = badge.createChild("Rectangle")
     outer.width = w
     outer.height = h
     outer.color = "0xEEF1FFFF"
-    inner = box.createChild("Rectangle")
+    inner = badge.createChild("Rectangle")
     inner.translation = [3, 3]
     inner.width = w - 6
     inner.height = h - 6
     inner.color = "0x0A0E27FF"
-    lbl = box.createChild("Label")
+    lbl = badge.createChild("Label")
     lbl.width = w
     lbl.height = h
     lbl.horizAlign = "center"

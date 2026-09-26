@@ -141,9 +141,9 @@ end sub
 sub onProgress()
     json = ParseJson(m.progTask.response)
     if json = invalid then return
-    pos = 0
-    if json.position <> invalid then pos = Int(json.position)
-    m.resume = pos
+    sec = 0
+    if json.position <> invalid then sec = Int(json.position)
+    m.resume = sec
     m.top.subSaved = strOf(json.subtitle)
     m.focus = 0   ' land on Resume/Play after a (re)load
     buildButtons()
