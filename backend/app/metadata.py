@@ -361,16 +361,19 @@ async def get_collection_art(collection_id: int) -> dict | None:
         return None
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(
-                f"{TMDB_BASE}/collection/{collection_id}",
-                params={"api_key": key, "append_to_response": "images",
-                        "include_image_language": "en,null"},
-            )
+            r = await client.get(f"{TMDB_BASE}/collection/{collection_id}",
+                                 params={"api_key": key})
             r.raise_for_status()
             d = r.json()
+            # The collection endpoint ignores append_to_response — images are
+            # their own request.
+            ri = await client.get(
+                f"{TMDB_BASE}/collection/{collection_id}/images",
+                params={"api_key": key, "include_image_language": "en,null"},
+            )
+            logos = ri.json().get("logos", []) if ri.status_code == 200 else []
     except (httpx.HTTPError, ValueError):
         return None
-    logos = (d.get("images") or {}).get("logos", [])
     best = max(logos, key=lambda lg: (lg.get("iso_639_1") == "en",
                                       str(lg.get("file_path", "")).endswith(".png"),
                                       lg.get("vote_average") or 0), default=None)

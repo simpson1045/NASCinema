@@ -240,7 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _prefs?.setBool(kDenonEnabledPref, v);
               }),
               if (_denonEnabled) ...[
-                _field(_denonHost, 'Receiver address', '192.168.0.67',
+                _field(_denonHost, 'Receiver address', '192.168.1.50',
                     kDenonHostPref),
                 _field(_denonInput, 'Input source name', '8K', kDenonInputPref),
                 _toggle('Power on first', 'Send main-zone power before the '
@@ -260,7 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _prefs?.setBool(kTvEnabledPref, v);
               }),
               if (_tvEnabled) ...[
-                _field(_tvHost, 'TV address', '192.168.0.244', kTvHostPref),
+                _field(_tvHost, 'TV address', '192.168.1.60', kTvHostPref),
                 _field(_tvInput, 'Input to guard', kDefaultTvInput, kTvInputPref),
                 _field(_tvLabel, 'Label to apply', kDefaultTvLabel, kTvLabelPref),
                 _toggle('Also switch the TV to this input on Play',

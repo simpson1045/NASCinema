@@ -290,7 +290,7 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
 - **`nascinema.simpson1045.com` was DEAD since the TrueNAS move (~July):** no NPM
   proxy host existed for it (NPM #7 was an old mcp.* host, not NASCinema). The
   Roku (`MainScene.brs` m.base), ELKO's saved server, and the cast HTTPS base
-  all use that hostname. **Matt added NPM proxy host Sept 24** → 192.168.0.248:8400,
+  all use that hostname. **Matt added NPM proxy host Sept 24** → the NAS (:8400),
   LE cert (to Dec 23), websockets on, block-exploits off, advanced:
   read/send timeout 3600, proxy_buffering off, client_max_body_size 0.
   Verified: public health 200, update/check 200 from ELKO, Range → 206.
@@ -318,7 +318,7 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
 - ELKO had **no shortcut** to NASCinema (only `C:\NASCinema\renderer\nascinema.exe`);
   added Desktop (OneDrive) + Start Menu shortcuts Sept 24.
 - Roku channel repackaged (`roku/roku-channel.zip`, no Thumbs.db) and copied to
-  ELKO `Downloads\NASCinema-roku.zip`; Matt sideloads via http://192.168.0.78
+  ELKO `Downloads\NASCinema-roku.zip`; Matt sideloads via the Roku's dev page
   (rokudev — password is Matt's, Claude doesn't enter it). Roku has developer
   mode on.
 
@@ -387,7 +387,7 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   PLACE (files re-pointed, no file rows deleted, watch progress kept): 126
   files moved, 118 fake movies removed; library = 206 movies, 0 extras-only.
   Backup: `/mnt/NAS Storage/apps/nascinema/nascinema-20260925-prerepair.dump`.
-- **Big picture web preview ✅:** `http://192.168.0.248:8400/?bp=1` (auto-
+- **Big picture web preview ✅:** `http://the NAS (:8400)/?bp=1` (auto-
   connects; no trailers on web). `&keys=down,down,right,up,back,enter` replays
   presses after load, so Claude checks layout from screenshots — the browser
   pane PROMPTS on every click/typed key (no always-allow), so never type into
@@ -401,7 +401,7 @@ ordered.** TV shows (Jellyfin parity) will be needed eventually; not started.
   (1) restart the trailer backfill: `/tmp/alltrailers.py` lived in the container
   and is GONE after reboot — rewrite it (loop all movies by popularity; skip
   `is_cached` / `_recently_found_nothing`; `ensure_trailer(id, tmdb, override,
-  title, year)`), run via ADMS start_job -> ssh admin@192.168.0.248 `sudo docker
+  title, year)`), run via ADMS start_job -> ssh to the NAS `sudo docker
   exec ... nice -n 15 python -u`. ~175 movies needed one; any `.part` leftovers
   are harmless. Then make the home hero pick featured movies from ALL movies
   with a cached trailer (currently random 8 of the top-30 popular).
@@ -554,7 +554,7 @@ remote channel), XInput controller, "Who is that?" X-Ray overlay (memory
   rested on a VLC-through-backend bat Matt never ran (his flawless VLC test was
   **direct off the NAS**).
 - **Direct-NAS is the renderer's byte path.** ELKO plays from
-  `\\192.168.0.248\Totally Legal Movies_2\...` directly (VLC's flawless path). Note the
+  `\\NAS\Totally Legal Movies_2\...` directly (VLC's flawless path). Note the
   **`_2`** share, and that **only Matt's interactive login has NAS creds** — the MCP
   connector's service session can't see the share (its `Test-Path` fails; a bat Matt
   double-clicks works). The native renderer should **direct-play off the NAS**, not via
@@ -660,7 +660,7 @@ remote channel), XInput controller, "Who is that?" X-Ray overlay (memory
   rescanned after the NAS consolidation, so every `media_files.path` was stale
   (`\\NorthsideNAS\...\Totally Legal Movies\Totally Legal Movies\...` doubled
   hostname path) → `/api/stream/{id}/direct` 404'd → Roku bailed at pos=0s.
-  Reran the scan (287 files re-added at `\\192.168.0.248\...`), then deleted 439
+  Reran the scan (287 files re-added at `\\NAS\...`), then deleted 439
   stale `NorthsideNAS` media_files the prune guard skipped. Stream now serves
   HTTP 206 w/ range, direct + via NPM.
 - **Side effect:** Continue Watching emptied (its progress was pinned to the
@@ -787,12 +787,12 @@ Python 3.14, runs on **ALPINE**; `/api/health` → `db:true`):
 
 ### New this session (2026-06-29) — native Roku channel browsing on hardware ✅ + NAS recovery
 - **VISION REFRAME (now in memory [[vision-native-renderer-is-flagship]]):** the flagship is the **native Roku channel** on the **Roku Ultra 4802X** — Roku passes **Dolby Vision + TrueHD/Atmos** through to the Denon/C2 natively, which is the whole "install an app on the TV, direct-play the file, let the home theater do the work" dream. The ELKO native PC renderer **and** the browser/cast paths are now both *fallbacks*. (Fire TV/Android TV/webOS/tvOS all rejected — see memory.)
-- **Roku channel scaffolded + running** (BrightScript/SceneGraph) under [roku/](roku/): `manifest`, `source/main.brs`, `components/{MainScene,MoviePoster,HttpTask}.{xml,brs}`. Talks to the backend at `m.base = http://192.168.0.150:8400`. Sideload via `http://192.168.0.78` (rokudev; IP reserved in router). Debug = POST to `/cast/log` (`logmsg`), no telnet needed.
+- **Roku channel scaffolded + running** (BrightScript/SceneGraph) under [roku/](roku/): `manifest`, `source/main.brs`, `components/{MainScene,MoviePoster,HttpTask}.{xml,brs}`. Talks to the backend at `m.base = http://<server>:8400`. Sideload via `the Roku's dev page` (rokudev; IP reserved in router). Debug = POST to `/cast/log` (`logmsg`), no telnet needed.
 - **Home is now a server-driven carousel ✅** — `/api/home` composes ranked rails (Continue Watching, Popular, Recently Added, Top Rated, 8 genre rails) and the Roku renders them in a `RowList` of `MoviePoster` tiles. **Two brutal SceneGraph gotchas, both now fixed + commented in code:** (1) array-typed fields (`rowItemSize` etc.) parse to garbage as XML attribute strings — set them in BrightScript; (2) **`RowList` needs `itemSize` set** (the list's overall width × row height) or it collapses to ~44px wide and silently renders **zero** tiles while still drawing a focus box. Diagnosed by reading the device console over **telnet 8085** (`scripts`-style capture from FRAMEWORK via `python` socket + ECP `launch/dev`) — not by guessing. The old single `MarkupGrid` (also needed `itemSize`+`itemComponentName`) is retired; that tile component is reused in the rails.
 - **Ratings/popularity backend ✅** — `Movie` gained `popularity`, `vote_count`, `imdb_id`, `imdb_rating`, `rt_score`, `metacritic`, `collection_id/name` (migration **0007**). TMDB capture grabs popularity/votes/imdb_id/collection free from the details call; **OMDb** (`omdbapi.com`, key in `.env`, verified live) adds IMDB/RT/Metacritic. `/api/backfill-ratings` populated 206 movies. Google ratings dropped (no clean API).
 - **NEXT: featured hero block** — a full-bleed auto-advancing top hero (backdrop + clearlogo + badges) above the rails, NASRadio-style. Decision: play **real trailers** via **yt-dlp** (reuse the NASRadio wiring) — backend downloads/caches the TMDB trailer (YouTube) as MP4 and serves it, since Roku can't stream YouTube directly. Backend (trailer cache + featured endpoint) first, then the `FeaturedHero` SceneGraph component + hero↔rails focus management.
 - **Direct-play wired but NOT yet working at 4K** — `Video` node + `/api/stream/{id}/direct`, `streamFormat` from container (`mkv` for matroska). **Open bug (deferred):** 4K TrueHD title plays ~10s then **freezes with no audio** (state flapping playing↔paused). Suspect throughput vs. TrueHD-over-channel; instrumentation (pos/bitrate/underrun) added in `onVideoState`. Diagnose AFTER the NAS library copy finishes (a 4K direct-stream now would fight the copy for NAS read bandwidth and pollute the result).
-- **NAS hardware scare → recovered.** A volume2 NVMe (Samsung 990) died, then its mirror thermal-dropped; a cool-down reboot brought both back. Docker stack (Vaultwarden/NPM/etc.) was safe on volume1 the whole time. The movie library was **consolidated to a single clean `/volume1/Totally Legal Movies` (deduped)**; the "Totally Legal Movies" SMB share was re-registered onto volume1. `NASCINEMA_MEDIA_DIRS` repointed to the **LAN IP** `\\192.168.0.248\Totally Legal Movies` (the `NorthsideNAS` hostname → Tailscale, slow). **PENDING:** a D:→NAS copy is bringing the NAS to ~208 movies; **one** clean rescan (add+prune) is on hold until that copy lands, then the backend restarts to pick up the new path. Decision: NAS = the single complete library; D: is NOT a second `MEDIA_DIRS` root (it gets mirrored as backup instead).
+- **NAS hardware scare → recovered.** A volume2 NVMe (Samsung 990) died, then its mirror thermal-dropped; a cool-down reboot brought both back. Docker stack (Vaultwarden/NPM/etc.) was safe on volume1 the whole time. The movie library was **consolidated to a single clean `/volume1/Totally Legal Movies` (deduped)**; the "Totally Legal Movies" SMB share was re-registered onto volume1. `NASCINEMA_MEDIA_DIRS` repointed to the **LAN IP** `\\NAS\Totally Legal Movies` (the `NorthsideNAS` hostname → Tailscale, slow). **PENDING:** a D:→NAS copy is bringing the NAS to ~208 movies; **one** clean rescan (add+prune) is on hold until that copy lands, then the backend restarts to pick up the new path. Decision: NAS = the single complete library; D: is NOT a second `MEDIA_DIRS` root (it gets mirrored as backup instead).
 
 ### On-vision vs fallback-only (so nothing gets re-polished by mistake)
 - **Spine, reused everywhere:** scanner, probe data, TMDB, schema, browse API, decision engine + "why" badge, OpenSubtitles download, the Flutter shell.
@@ -829,7 +829,7 @@ the **Extras DB**, and the **cinema-experience soul**. Almost all of it is still
 ## Environment & gotchas (verified this session)
 
 - **Machine topology:** ALPINE = server (backend/PG17/ffmpeg); FRAMEWORK = dev box; **ELKO = renderer** (TV-wired PC → C2 + Denon); NAS = storage only. Run backend commands on ALPINE.
-- **NAS access uses the LAN IP `192.168.0.248`, NOT the `NorthsideNAS` hostname** (it resolves to a Tailscale IP → SMB tunnels → flaps between fast/direct and ~0.7 MB/s relayed; this caused inconsistent playback). `NASCINEMA_CACHE_DIR=//192.168.0.248/movie_cache` is pinned. **Still on the hostname:** `media_dirs` + stored `mf.path` source paths — transcoding *uncached* content reads source over Tailscale; pin it (media_dirs → IP + `UPDATE media_file SET path=replace(path,'NorthsideNAS','192.168.0.248')`) if that's slow.
+- **NAS access uses the NAS's LAN IP, NOT the `NorthsideNAS` hostname** (it resolves to a Tailscale IP → SMB tunnels → flaps between fast/direct and ~0.7 MB/s relayed; this caused inconsistent playback). `NASCINEMA_CACHE_DIR=//<nas>/movie_cache` is pinned. **Still on the hostname:** `media_dirs` + stored `mf.path` source paths — transcoding *uncached* content reads source over Tailscale; pin it (media_dirs → IP + `UPDATE media_file SET path=replace(path,'NorthsideNAS','<nas-lan-ip>')`) if that's slow.
 - **Windows desktop build host is ALPINE, not the share.** `flutter build windows` can't create media_kit's plugin symlinks on the NAS share (`Y:` = `\\Desktop-alpine\d`); build from ALPINE's local `D:` via the connector (cold media_kit build > the connector's 120s cap → launch detached + poll). See [[windows-build-needs-local-disk]].
 - `socketio.ASGIApp` does **not** forward ASGI lifespan to the wrapped FastAPI app → startup work (`startup_cleanup`) lives in `nascinema_run.py`, not the lifespan.
 - Windows needs `SelectorEventLoopPolicy` for psycopg.

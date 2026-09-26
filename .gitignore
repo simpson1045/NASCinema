@@ -11,3 +11,6 @@ backend/updates/*.zip
 backend/updates/*.tar.xz
 backend/updates/version.json
 roku-channel.zip
+
+# Private machine notes (IPs, users, key paths) — the repo is public
+CLAUDE.local.md
