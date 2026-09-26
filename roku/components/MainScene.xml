@@ -23,6 +23,7 @@
         visible="false" />
     <!-- Every poster and the hero open the movie page; Play hands off to the
          video below with the page's version/audio/subtitle picks. -->
+    <FranchiseScreen id="franchise" visible="false" />
     <MovieScreen id="movie" visible="false" />
     <Video id="video" width="1920" height="1080" translation="[0,0]"
         visible="false" />

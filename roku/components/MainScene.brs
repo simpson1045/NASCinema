@@ -40,6 +40,11 @@ sub init()
     m.audioPicked = false
 
     m.movie = m.top.findNode("movie")
+    m.franchise = m.top.findNode("franchise")
+    m.franchise.base = m.base
+    m.franchise.observeField("openMovie", "onFranchiseMovie")
+    m.franchise.observeField("closed", "onFranchiseClosed")
+    m.movieFrom = "home"   ' where Back on the movie page returns: "home" | "franchise"
     m.panel = m.top.findNode("panel")
     m.toast = m.top.findNode("toast")
     m.toastText = m.top.findNode("toastText")
@@ -56,7 +61,7 @@ sub init()
     m.toastTimer.observeField("fire", "onToastDone")
     m.saveTimer.observeField("fire", "onSaveTick")
     m.video.observeField("availableSubtitleTracks", "onSubTracks")
-    m.screen = "home"   ' "home" | "movie" | "video"
+    m.screen = "home"   ' "home" | "franchise" | "movie" | "video"
     ' What's playing: {movieId, title, files, fileIdx, audio, subKey, externals, subSaved}.
     m.cur = invalid
     m.panelMode = ""
@@ -122,7 +127,16 @@ sub onHomeLoaded()
     total = 0
     itemSizes = []
     heights = []
+    ' Franchises row (like ELKO's): right after Continue Watching, or first
+    ' when there's nothing to continue.
+    fAt = 0
+    for i = 0 to json.rails.count() - 1
+        if json.rails[i].key = "continue" then fAt = i + 1
+    end for
+    ri = 0
     for each rail in json.rails
+        if ri = fAt then addFranchiseRow(root, json.collections, itemSizes, heights)
+        ri = ri + 1
         ' A rail whose movies carry a resume point (Continue Watching) gets wide
         ' backdrop cards with a progress bar; everything else gets posters.
         wide = false
@@ -145,6 +159,8 @@ sub onHomeLoaded()
             heights.push(410)
         end if
     end for
+
+    if fAt >= json.rails.count() then addFranchiseRow(root, json.collections, itemSizes, heights)
 
     logmsg("home: " + json.rails.count().toStr() + " rails, " + total.toStr() + " tiles")
 
@@ -173,6 +189,23 @@ sub onHomeLoaded()
     end if
 end sub
 
+' Franchise cards: the franchise backdrop with its logo on top (name when no
+' logo), "Harry Potter · 8 movies" underneath.
+sub addFranchiseRow(root as object, cols as dynamic, itemSizes as object, heights as object)
+    if cols = invalid or cols.count() = 0 then return
+    row = root.createChild("ContentNode")
+    row.title = "Franchises"
+    for each c in cols
+        item = row.createChild("ContentNode")
+        item.title = strOf(c.name) + "  ·  " + strOf(c.count) + " movies"
+        bd = strOf(c.backdrop)
+        if bd <> "" then item.HDPOSTERURL = bd.replace("/original/", "/w780/")
+        item.addFields({ movieId: 0, collectionId: c.id, wide: true, progress: 0.0, franchise: true, logo: strOf(c.logo), name: strOf(c.name) })
+    end for
+    itemSizes.push([480, 320])
+    heights.push(370)
+end sub
+
 function firstStr(v as dynamic) as string
     if v = invalid then return "(none)"
     return v.toStr()
@@ -196,7 +229,7 @@ sub appendMovie(row as object, mv as object, wide as boolean)
             item.HDPOSTERURL = "https://image.tmdb.org/t/p/w500" + mv.poster_path
         end if
     end if
-    item.addFields({ movieId: mv.id, wide: wide, progress: progress })
+    item.addFields({ movieId: mv.id, wide: wide, progress: progress, franchise: false })
 end sub
 
 sub onItemSelected()
@@ -206,7 +239,34 @@ sub onItemSelected()
     if row = invalid then return
     item = row.getChild(sel[1])
     if item = invalid then return
-    openMovie(item.movieId)
+    if item.franchise = true then
+        openFranchise(item.collectionId)
+    else
+        openMovie(item.movieId)
+    end if
+end sub
+
+sub openFranchise(id as dynamic)
+    if id = invalid then return
+    m.hero.suspended = true
+    m.rows.visible = false
+    m.franchise.visible = true
+    m.franchise.collectionId = id
+    m.franchise.setFocus(true)
+    m.screen = "franchise"
+    logmsg("open franchise " + id.toStr())
+end sub
+
+sub onFranchiseClosed()
+    m.franchise.visible = false
+    m.screen = "home"
+    m.hero.suspended = false
+    restoreHome()
+end sub
+
+sub onFranchiseMovie()
+    id = m.franchise.openMovie
+    if id <> invalid and id > 0 then openMovie(id)
 end sub
 
 ' OK pressed on the featured hero -> that movie's page.
@@ -217,6 +277,9 @@ end sub
 
 sub openMovie(movieId as dynamic)
     if movieId = invalid then return
+    m.movieFrom = "home"
+    if m.screen = "franchise" then m.movieFrom = "franchise"
+    m.franchise.visible = false
     m.hero.suspended = true   ' stop the hero trailer behind the page
     m.rows.visible = false
     m.movie.visible = true
@@ -228,6 +291,12 @@ end sub
 
 sub onMovieClosed()
     m.movie.visible = false
+    if m.movieFrom = "franchise" then
+        m.screen = "franchise"
+        m.franchise.visible = true
+        m.franchise.setFocus(true)
+        return
+    end if
     m.screen = "home"
     m.hero.suspended = false   ' resume the hero (restarts its trailer)
     restoreHome()
@@ -442,10 +511,12 @@ end sub
 
 sub onPanelClosed()
     m.panel.visible = false
-    if m.panelMode = "movie" then
+    if m.screen = "movie" then
         m.movie.setFocus(true)
-    else if m.panelMode = "video" and m.screen = "video" then
+    else if m.screen = "video" then
         m.video.setFocus(true)
+    else if m.screen = "franchise" then
+        m.franchise.setFocus(true)
     else
         restoreHome()
     end if
@@ -508,6 +579,8 @@ sub sendFlag(mode as string)
             body.movie_id = d.id
             body.movie_title = strOf(d.title)
         end if
+    else if mode = "franchise" then
+        ctx.collection_id = m.franchise.collectionId
     end if
     body.context = ctx
     http("POST", "/api/flags", FormatJson(body))
@@ -663,6 +736,13 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return false
     end if
     if m.screen = "movie" then return false   ' MovieScreen handles its own keys
+    if m.screen = "franchise" then
+        if key = "options" then
+            openPanel("franchise")
+            return true
+        end if
+        return false
+    end if
 
     if key = "options" then
         openPanel("home")

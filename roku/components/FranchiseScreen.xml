@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Franchise page (from the home screen's Franchises row): backdrop, the
+     franchise logo centered over its "8 movies · 2001–2011" line, overview,
+     and its movies in release order. OK on a poster opens that movie's page. -->
+<component name="FranchiseScreen" extends="Group">
+  <script type="text/brightscript" uri="pkg:/components/FranchiseScreen.brs" />
+  <interface>
+    <field id="base" type="string" />
+    <field id="collectionId" type="integer" alwaysNotify="true" onChange="onCollectionId" />
+    <!-- Out: OK on a poster. -->
+    <field id="openMovie" type="integer" alwaysNotify="true" />
+    <field id="closed" type="boolean" alwaysNotify="true" />
+  </interface>
+  <children>
+    <Rectangle id="bg" width="1920" height="1080" color="0x0A0E27FF" />
+    <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToFill" />
+    <Poster id="scrim" width="1920" height="1080" loadDisplayMode="scaleToFill"
+        uri="pkg:/images/home_scrim2.png" />
+    <Poster id="logo" translation="[90,110]" width="520" height="150"
+        loadDisplayMode="scaleToFit" visible="false" />
+    <Label id="title" translation="[92,150]" width="1300"
+        color="0xFFFFFFFF" font="font:LargeBoldSystemFont" visible="false" />
+    <Label id="info" translation="[92,280]" color="0xEEF1FFFF"
+        font="font:MediumBoldSystemFont" />
+    <Label id="overview" translation="[92,340]" width="1000" wrap="true"
+        maxLines="4" lineSpacing="4" color="0xDDE2F5FF"
+        font="font:SmallSystemFont" />
+    <!-- Array fields (rowItemSize, itemSize …) are set in init(). -->
+    <RowList id="list" translation="[90,560]" itemComponentName="MoviePoster"
+        numRows="1" rowFocusAnimationStyle="floatingFocus" />
+    <Label id="hint" translation="[92,990]" width="1400"
+        text="OK  Open      *  Flag      Back  Home"
+        color="0x9AA3C7FF" font="font:SmallestSystemFont" />
+    <Label id="status" translation="[0,520]" width="1920" horizAlign="center"
+        color="0xEEF1FFFF" font="font:MediumBoldSystemFont" visible="false" />
+  </children>
+</component>

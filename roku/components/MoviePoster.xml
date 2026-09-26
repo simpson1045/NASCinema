@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- One rail tile. Two shapes, picked per item in MoviePoster.brs: a 200x300
-     poster with a two-line title (most rails), or a 480x270 backdrop card with a
-     progress bar and a one-line title (Continue Watching). -->
+<!-- One rail tile. Three shapes, picked per item in MoviePoster.brs: a 200x300
+     poster with a two-line title (most rails), a 480x270 backdrop card with a
+     progress bar and a one-line title (Continue Watching), or a 480x270
+     franchise card — backdrop, darkened, with the franchise logo centered on
+     it (its name instead when there's no logo). -->
 <component name="MoviePoster" extends="Group">
   <script type="text/brightscript" uri="pkg:/components/MoviePoster.brs" />
   <interface>
@@ -11,6 +13,14 @@
     <!-- Placeholder box so an item is visible even before/without an image. -->
     <Rectangle id="ph" width="200" height="300" color="0x1B2046FF" />
     <Poster id="poster" width="200" height="300" loadDisplayMode="scaleToFill" />
+    <!-- Franchise card: shade + logo (or name) over the backdrop. -->
+    <Rectangle id="fshade" width="480" height="270" color="0x0A0E2788"
+        visible="false" />
+    <Poster id="flogo" translation="[60,55]" width="360" height="160"
+        loadDisplayMode="scaleToFit" visible="false" />
+    <Label id="fname" width="480" height="270" horizAlign="center"
+        vertAlign="center" wrap="true" maxLines="2" color="0xFFFFFFFF"
+        font="font:LargeBoldSystemFont" visible="false" />
     <!-- Continue Watching progress: dark track + amber fill along the card's
          bottom edge. Hidden on posters. -->
     <Rectangle id="track" translation="[0,262]" width="480" height="8"
