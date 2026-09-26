@@ -301,6 +301,41 @@ class ApiService {
     return ((d['results'] ?? []) as List).cast<Map<String, dynamic>>();
   }
 
+  /// Track Manager plan for the whole library: {totals, strip, protected,
+  /// no_english} — rows sorted by space saved. Read-only on the server.
+  Future<Map<String, dynamic>> getTrackPlan() async {
+    final r = await http
+        .get(_u('/api/track-manager/plan'))
+        .timeout(const Duration(seconds: 40));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// One file's plan: every track with keep/drop and why.
+  Future<Map<String, dynamic>> getTrackFile(int fileId) async {
+    final r = await http
+        .get(_u('/api/track-manager/file/$fileId'))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// Track Manager's "Protect this movie" (never strip it).
+  Future<void> setTrackProtect(int movieId, bool on) async {
+    final r = await http
+        .put(_u('/api/track-manager/protect/$movieId'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'protected': on}))
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+  }
+
   /// Download a chosen subtitle; returns {id, label, lang, url}.
   Future<Map<String, dynamic>> downloadSubtitle(
       int fileId, int osFileId, String language) async {

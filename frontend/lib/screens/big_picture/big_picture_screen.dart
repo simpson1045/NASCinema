@@ -19,6 +19,7 @@ import 'bp_franchise_tile.dart';
 import 'bp_hero.dart';
 import 'bp_movie_screen.dart';
 import 'bp_search_screen.dart';
+import 'bp_track_manager.dart';
 
 /// Big picture mode: the 10-foot, fullscreen home for the couch PC, built to
 /// match the Roku channel (the design source of truth). Everything is laid out
@@ -350,6 +351,8 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
         ));
       case 'settings':
         await _push(const SettingsScreen());
+      case 'tracks':
+        await _push(BpTrackManager(baseUrl: widget.baseUrl));
       case 'quit':
         await quitApp();
       default:
@@ -631,7 +634,7 @@ class _BpTile extends StatelessWidget {
   }
 }
 
-/// Back on home: leave big picture, open Settings, or quit.
+/// Back on home: leave big picture, Track Manager, Settings, or quit.
 class _BpMenu extends StatelessWidget {
   const _BpMenu();
 
@@ -670,6 +673,7 @@ class _BpMenu extends StatelessWidget {
             children: [
               option('exit', Icons.desktop_windows_outlined, 'Exit Big Picture',
                   autofocus: true),
+              option('tracks', Icons.graphic_eq, 'Track Manager'),
               option('settings', Icons.settings_outlined, 'Settings'),
               option('quit', Icons.power_settings_new, 'Quit NASCinema'),
             ],
