@@ -395,6 +395,24 @@ class _Info extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      // Fullscreen: logo and rating row share one centre line — the block is
+      // as wide as the wider of the two (420–620 px) and both centre in it.
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 420, maxWidth: 620),
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 150, child: _logoOrTitle(centered: true)),
+              const SizedBox(height: 22),
+              Center(child: bpMetaRow(movie)),
+            ],
+          ),
+        ),
+      );
+    }
     final overview = movie.overview ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -424,13 +442,14 @@ class _Info extends StatelessWidget {
     );
   }
 
-  Widget _logoOrTitle() {
+  Widget _logoOrTitle({bool centered = false}) {
     final title = Align(
-      alignment: Alignment.bottomLeft,
+      alignment: centered ? Alignment.bottomCenter : Alignment.bottomLeft,
       child: Text(
         movie.title,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
+        textAlign: centered ? TextAlign.center : TextAlign.start,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 60,
@@ -441,7 +460,7 @@ class _Info extends StatelessWidget {
     );
     final logo = this.logo;
     if (logo == null || logo.isEmpty) return title;
-    return bpLogo(logo, logoSubtitle, title);
+    return bpLogo(logo, logoSubtitle, title, centered: centered);
   }
 }
 
@@ -449,16 +468,17 @@ class _Info extends StatelessWidget {
 /// the franchise's shared wordmark, so a sequel still reads as itself
 /// ("THE LAND BEFORE TIME" / "VIII · The Big Freeze").
 Widget bpLogo(String logo, String? subtitle, Widget fallback,
-    {double subtitleSize = 34}) {
+    {double subtitleSize = 34, bool centered = false}) {
   final image = Image.network(
     logo,
     fit: BoxFit.contain,
-    alignment: Alignment.bottomLeft,
+    alignment: centered ? Alignment.bottomCenter : Alignment.bottomLeft,
     errorBuilder: (_, _, _) => fallback,
   );
   if (subtitle == null || subtitle.isEmpty) return image;
   return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+    crossAxisAlignment:
+        centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
     children: [
       Expanded(child: image),
       const SizedBox(height: 6),
