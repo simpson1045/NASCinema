@@ -3,11 +3,34 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.7.3+34 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built release) — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-26 evening) — 0.7.3; ALPINE crash post-mortem
+## Latest (2026-09-26 afternoon) — Batch 1 built; releases moved to GitHub Actions
+
+- **Batch 1 (0.8.0):** Big Picture search (Y), Franchises row (animated
+  BpFranchiseTile) + franchise pages + "More in <series>", Cast + "More like
+  this" (/api/movies/{id}/related), My List (watchlist, migration 0013),
+  online subtitles in the picker (BpSubtitleSearch). Checklist for Matt's
+  batched test session: docs/TEST-CHECKLIST.md.
+- **ALPINE post-mortem (measured):** repo + build output on D: = 10 TB
+  5400-rpm HDD; Gradle's 16 workers saturated it → AAPT2 daemon timeouts,
+  and (with my heavy SMB traffic) whole-machine freezes. My first "memory"
+  theory was wrong (48 GB RAM, 42 free). Fixes: gradle.properties (2 workers,
+  no resident daemons, 3g heap), release.bat guard/priority/error handlers
+  (08cdf92, 47e3074) — and **builds moved off ALPINE entirely**.
+- **Releases = GitHub Actions** (.github/workflows/release.yml, a554aef):
+  tag vX.Y.Z → Windows/Android/web built on GitHub → GitHub Release; NAS
+  `deploy.sh --release vX.Y.Z` (installed 13:14; old one backed up
+  deploy.sh.bak-20260926-1314-pre-ghrelease). Plain deploys = backend code
+  only now. Repo is PUBLIC (github.com/simpson1045/NASCinema); pushed.
+- Open: Android signing — CI uses its own debug key unless an
+  ANDROID_DEBUG_KEYSTORE secret is added (phones need a one-time reinstall
+  otherwise). CLAUDE.md/HANDOFF contain internal network detail and are public
+  — scrub before any real public launch.
+
+## Earlier (2026-09-26 evening) — 0.7.3; ALPINE crash post-mortem
 
 - 0.7.3: logo centred over the rating row on Big Picture's home hero + the
   mouse-UI home hero (every logo-over-a-line uses bpLogoOver now); Roku 0.1.11

@@ -11,9 +11,8 @@ guessing (e.g. defaulting to "Administrator").
   (start_mcp.bat connects as matth too). A `1909`/"locked out" or `C$`
   "does not exist" means a bad/stale **stored** credential — `cmdkey /list` to
   check, never assume Administrator.
-- Build the Windows app on ALPINE (local disk), deploy the `Release` folder to
-  `C:\NASCinema\renderer`. Once ELKO runs a build with the in-app updater
-  (>= 0.3.8), future updates are in-app — no `C$` needed.
+- ELKO updates itself in-app (installed at `C:\NASCinema\renderer`) — no `C$`
+  needed. Releases are built by GitHub Actions (see "Releases" below).
 
 ### NorthsideNAS (192.168.0.248) — storage
 - SSH: `ssh -i C:\Users\matth\.ssh\nas_key root@192.168.0.248`
@@ -31,9 +30,22 @@ guessing (e.g. defaulting to "Administrator").
 - Backend commands run on ALPINE via the connector's `run_command`.
 
 ## Topology recap
-ALPINE = server (backend / PostgreSQL 17 / ffmpeg) **and** the Windows build host;
-FRAMEWORK = dev box (no Visual Studio — can't build the Windows app);
-ELKO = renderer; NAS = storage only.
+NAS = backend (Docker `nascinema` :8400 + `nascinema-postgres`) and media;
+ALPINE = the git checkout (`D:\Programming\NASCinema`, mounted on the Mac
+over SMB) that `deploy.sh` pulls backend code from — **not a build machine any
+more**; FRAMEWORK = dev box; ELKO = renderer.
+
+## Releases (GitHub Actions — never build on ALPINE)
+Release builds on ALPINE froze it twice on 2026-09-26 (repo on a slow HDD +
+Gradle; hard resets). Now:
+1. Set `version:` in `frontend/pubspec.yaml` (X.Y.Z+N), add `## X.Y.Z - date`
+   notes at the top of `CHANGELOG.md`, commit, push.
+2. `git tag vX.Y.Z && git push origin vX.Y.Z` → `.github/workflows/release.yml`
+   builds Windows/Android/web on GitHub and publishes a GitHub Release.
+   Watch: `https://api.github.com/repos/simpson1045/NASCinema/actions/runs`.
+3. On NASHOST: `sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" --release vX.Y.Z`
+   (no restart). Backend code changes still need a plain `deploy.sh` (restart).
+`backend/release.bat` is the old ALPINE path — emergencies only.
 
 > Passwords are NOT stored in this file (it's in git). The ALPINE→ELKO `net use`
 > mapping is persisted, and start_mcp.bat re-establishes it.
