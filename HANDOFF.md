@@ -63,6 +63,24 @@ actually are and what's next." Current version: **v0.5.9+25 published (in-app up
   done; rides along with the next deploy. The two files above were corrected
   by hand.
 
+**Apple TV trailers — researched Sept 25 (not built yet):**
+- Pipeline that works: TMDB id → Wikidata SPARQL (P4947 → P9586 "Apple TV
+  movie ID", batch all ids in ONE query; WDQS was rate-limiting 1 req/min) →
+  `https://tv.apple.com/api/uts/v3/movies/<umc>?caller=web&sf=143441&v=90&pfm=web&locale=en-US&utscf=…&utsk=…`
+  (utsk/utscf scraped from any tv.apple.com page) → `playables.*.itunesMediaApiData.movieClips[].hlsUrl`
+  → yt-dlp on the m3u8 directly (yt-dlp refuses tv.apple.com URLs as "DRM";
+  trailer HLS has NO keys). Pick audio by `ba[format_id*=ac3]` (acodec shows
+  "unknown"). Use `aec=UHD`. Prefer the SDR variant for the hero (HDR PQ
+  variants exist; the texture path is SDR).
+- Apple web search / iTunes Search API do NOT work for store movies (web search
+  = Apple TV+ only; iTunes search returns 0 movies). iTunes lookup-by-id works.
+- Survey of 219 library titles (script was /tmp/apple_survey.py on NASHOST):
+  203 have an Apple trailer. vs current YouTube: 64 same-tier 1080p where Apple
+  is ~2.5–3x bitrate (7–11 Mbps vs 2–4) usually with 5.1 AC-3; 15 Apple 4K
+  (many HDR, 12–25 Mbps); 35 toss-ups (Apple 1080p vs YouTube 4K); 41 Apple
+  worse (SD 480p ~2 Mbps — keep YouTube); 28 movies with no trailer today get
+  an HD/4K Apple one. Waiting on Matt re: whether YouTube 4K looks soft.
+
 **Later, Sept 25 — dubbed trailer audio (0.5.8+24):**
 - **Root cause of German trailers:** YouTube auto-dubs trailers (8+ audio
   tracks); `-S res,br` outranked yt-dlp's default `lang` sort, so the audio
