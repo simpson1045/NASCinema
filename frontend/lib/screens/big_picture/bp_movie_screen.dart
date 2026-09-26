@@ -17,6 +17,7 @@ import '../player/player_view.dart';
 import '../player_screen.dart';
 import 'bp_hero.dart' show bpLogo, bpMetaRow;
 import 'bp_track_picker.dart';
+import '../../widgets/pad_hints.dart';
 
 /// Big picture's movie page — the Netflix treatment, on the same fixed
 /// 1920x1080 canvas as the home: full backdrop, logo, ratings, overview, big
@@ -814,11 +815,11 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
                       ],
                     ),
                     const SizedBox(height: 14),
-                    const Text('A  Pause    ◀ ▶  Skip 10s    B  Back',
-                        style: TextStyle(
-                            color: NasColors.muted,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600)),
+                    const PadHints([
+                      (PadGlyph.a, 'Pause'),
+                      (PadGlyph.dpadHorizontal, 'Skip 10s'),
+                      (PadGlyph.b, 'Back'),
+                    ], size: 30, fontSize: 20),
                   ],
                 ),
               ),

@@ -8,6 +8,7 @@ import '../../models/movie_file.dart';
 import '../../services/flag_service.dart';
 import '../../services/gamepad/pad_dispatch.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/pad_hints.dart';
 import 'bp_hero.dart' show bpLogo;
 
 /// What Play will use: a version (file) and its audio/subtitle tracks, as mpv
@@ -348,12 +349,12 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
                         ],
                       ),
                     ),
-                    const Text(
-                        'A  Choose      ◀ ▶  Column      ▲ ▼  Move      B  Done',
-                        style: TextStyle(
-                            color: NasColors.muted,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600)),
+                    const PadHints([
+                      (PadGlyph.a, 'Choose'),
+                      (PadGlyph.dpadHorizontal, 'Column'),
+                      (PadGlyph.dpadVertical, 'Move'),
+                      (PadGlyph.b, 'Done'),
+                    ]),
                   ],
                 ),
               ),

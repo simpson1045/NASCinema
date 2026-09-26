@@ -372,16 +372,34 @@ class MpvController {
       _ipc?.command(['script-message-to', 'uosc', 'open-menu', jsonEncode(menu)]);
 
   /// The button legend, drawn by mpv just above the timeline — the only way
-  /// to put text over the native video. A few seconds, then it fades.
+  /// to put anything over the native video. Buttons are the Kenney Xbox
+  /// prompt font (bundled in mpv-config/fonts, CC0) tinted Xbox colors; a few
+  /// seconds, then it fades.
   void showHints({bool versions = false}) {
-    final keys = [
-      'A  Pause', '◀ ▶  Skip 10s', 'LB / RB  Chapters', 'X  Audio',
-      'Y  Subtitles', if (versions) '▼  Versions', 'Start  Menu', 'B  Back',
-    ].join('      ');
+    String glyph(int codepoint, int rgb) {
+      // ASS colours are &HBBGGRR&.
+      final bgr = ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF);
+      return '{\\fnKenney Input Xbox Series}{\\fs34}'
+          '{\\1c&H${bgr.toRadixString(16).padLeft(6, '0')}&}'
+          '${String.fromCharCode(codepoint)}'
+          '{\\fnSegoe UI Semibold}{\\fs22}{\\1c&HFFF1EE&} ';
+    }
+
+    const light = 0xEEF1FF;
+    final items = [
+      '${glyph(0xE00C, 0x3CB44A)}Pause', // A (green)
+      '${glyph(0xE026, light)}Skip 10s', // d-pad ◀▶
+      '${glyph(0xE043, light)}${glyph(0xE049, light)}Chapters', // LB RB
+      '${glyph(0xE010, 0x2D7EDC)}Audio', // X (blue)
+      '${glyph(0xE012, 0xF2C230)}Subtitles', // Y (yellow)
+      if (versions) '${glyph(0xE024, light)}Versions', // d-pad ▼
+      '${glyph(0xE014, light)}Menu', // Menu (Start)
+      '${glyph(0xE00E, 0xE0413A)}Back', // B (red)
+    ];
     _ipc?.command([
       'show-text',
-      '\${osd-ass-cc/0}{\\an2}{\\fs22}{\\bord2}{\\3c&H270E0A&}'
-          '{\\1c&HFFF1EE&}$keys\\N\\N\\N\\N',
+      '\${osd-ass-cc/0}{\\an2}{\\bord2}{\\3c&H270E0A&}'
+          '${items.join('      ')}\\N\\N\\N\\N',
       4500,
     ]);
   }
