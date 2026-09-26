@@ -4,14 +4,22 @@
 # (2026-09-26 — slow HDD + Gradle, two hard resets). Now nobody's machine
 # builds anything; anyone who forks the repo gets the same builds.
 #
-# Release flow:
-#   1. Set `version:` in frontend/pubspec.yaml (e.g. 0.8.0+35) and put the
-#      notes at the top of CHANGELOG.md ("## 0.8.0 - YYYY-MM-DD" …); commit.
-#   2. Tag and push:  git tag v0.8.0 && git push origin main v0.8.0
-#   3. This workflow builds Windows, Android and web in parallel, then
-#      publishes Release v0.8.0 with nascinema-windows.zip,
-#      nascinema-android.apk, nascinema-web.tar.gz and version.json.
-#   4. The server pulls them: deploy.sh --release v0.8.0
+# Two kinds of release (README "Versioning is earned"):
+#   - Version release, tag vX.Y.Z: a finished, meaningful feature set. Bump
+#     `version:` in frontend/pubspec.yaml (e.g. 0.10.0+38) and start a new
+#     "## 0.10.0 - YYYY-MM-DD" section at the top of CHANGELOG.md.
+#   - Build-only release, tag vX.Y.Z-bN: just ships fixes/polish to the apps.
+#     Keep the version, raise only the build number (0.9.0+37 -> tag
+#     v0.9.0-b37) and add the notes to the current "## 0.9.0" section.
+#   The apps' updater compares build numbers only, so both reach every device;
+#   the build number must always go up.
+#
+# Flow: commit the pubspec + CHANGELOG change, then
+#   git tag v0.9.0-b37 && git push origin main v0.9.0-b37
+# This workflow builds Windows, Android and web in parallel and publishes the
+# GitHub Release (nascinema-windows.zip, nascinema-android.apk,
+# nascinema-web.tar.gz, version.json). The server pulls it:
+#   deploy.sh --release v0.9.0-b37
 #
 # Android signing: if the ANDROID_DEBUG_KEYSTORE secret (base64 of a
 # debug.keystore) is set, it's used so installed phones accept the update;
@@ -25,7 +33,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build (e.g. v0.8.0) — must already exist"
+        description: "Tag to build (e.g. v0.9.0 or v0.9.0-b37) — must already exist"
         required: true
 
 permissions:
@@ -45,6 +53,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       build: ${{ steps.v.outputs.build }}
+      label: ${{ steps.v.outputs.label }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,14 +66,25 @@ jobs:
           version=${full%%+*}
           build=${full##*+}
           echo "pubspec: $full   tag: $TAG"
-          if [ "v$version" != "$TAG" ]; then
+          # vX.Y.Z = version release; vX.Y.Z-bN = build-only release.
+          tagver=${TAG#v}
+          case "$tagver" in
+            *-b*) tag_version=${tagver%%-b*}; tag_build=${tagver##*-b}
+                  label="$version (build $build)" ;;
+            *)    tag_version=$tagver; tag_build=""; label="$version" ;;
+          esac
+          if [ "$tag_version" != "$version" ]; then
             echo "::error::Tag $TAG doesn't match pubspec version $version"; exit 1
+          fi
+          if [ -n "$tag_build" ] && [ "$tag_build" != "$build" ]; then
+            echo "::error::Tag $TAG is build $tag_build but pubspec says +$build"; exit 1
           fi
           if ! grep -q "^## $version " CHANGELOG.md; then
             echo "::error::CHANGELOG.md has no '## $version' section"; exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "label=$label" >> "$GITHUB_OUTPUT"
 
   windows:
     needs: version
@@ -196,7 +216,7 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG }}
-          name: NASCinema ${{ needs.version.outputs.version }}
+          name: NASCinema ${{ needs.version.outputs.label }}
           body_path: notes.md
           files: |
             dist/nascinema-windows.zip

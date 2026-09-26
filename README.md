@@ -43,6 +43,7 @@ NASCinema is built for **many users on one server**, not one person's setup. The
 - We start **pre-v1.0** and stay there until NASCinema is genuinely remarkable. `v1.0.0` is a milestone, not a default.
 - **Version numbers are reserved for real, shipped features or critical bug fixes.** One-line fixes, refactors, doc tweaks, and chores **do not** bump the version.
 - Semantic-ish within 0.x: `0.MINOR.0` for a meaningful feature set, `0.x.PATCH` only for critical fixes. Everyday commits just land on `main` with no version change.
+- Shipping a build is not earning a version: fixes and polish reach the apps as **build-only releases** (same version, higher build number, tag `v0.9.0-b37`). The in-app updater goes by build number.
 
 ---
 

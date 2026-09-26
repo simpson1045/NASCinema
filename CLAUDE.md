@@ -17,12 +17,21 @@ part of building or deploying any more.
 ## Releases (GitHub Actions — never build on ALPINE)
 Release builds on ALPINE froze it twice on 2026-09-26 (repo on a slow HDD +
 Gradle; hard resets). Now:
-1. Set `version:` in `frontend/pubspec.yaml` (X.Y.Z+N), add `## X.Y.Z - date`
-   notes at the top of `CHANGELOG.md`, commit, push.
-2. `git tag vX.Y.Z && git push origin vX.Y.Z` → `.github/workflows/release.yml`
-   builds Windows/Android/web on GitHub and publishes a GitHub Release.
+**Versioning is earned (README rule 2) — most releases are build-only.**
+- *Build-only* (fixes/polish Matt wants on the couch): keep the version, bump
+  only the build number in `frontend/pubspec.yaml` (0.9.0+36 → 0.9.0+37), add
+  the notes to the current `## 0.9.0` section of `CHANGELOG.md`, tag
+  `v0.9.0-b37`. The updater compares build numbers, so every device updates.
+- *Version* (a finished, meaningful feature set — ask Matt if unsure): bump
+  X.Y.Z (+ build), new `## X.Y.Z - date` section, tag `vX.Y.Z`.
+Never bump the version just to ship a build (0.5 → 0.9 in two days, 2026-09-26).
+
+1. Update pubspec + CHANGELOG as above, commit, push.
+2. `git tag <tag> && git push origin <tag>` → `.github/workflows/release.yml`
+   builds Windows/Android/web on GitHub and publishes a GitHub Release (it
+   checks the tag against pubspec version/build).
    Watch: `https://api.github.com/repos/simpson1045/NASCinema/actions/runs`.
-3. On NASHOST: `sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" --release vX.Y.Z`
+3. On NASHOST: `sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" --release <tag>`
    (no restart).
 Backend changes: **push to GitHub first**, then plain `deploy.sh` (pulls main
 from GitHub, or `--ref <tag|sha>`, then restarts; records DEPLOYED_COMMIT).
