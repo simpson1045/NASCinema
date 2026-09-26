@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.9.0 - 2026-09-26
+- **Track Manager (preview):** press **Back** on the Big Picture home and choose **Track Manager** to see which foreign dubs and subtitles could be stripped from your movies — biggest space savings first, with a warning on movies that currently start in the wrong language. Open a movie to see every track marked Keep or Drop (and why), and press **Y** to protect a movie so it's never touched. It's a preview: nothing on disk changes yet.
+- **Franchise logos:** the Franchises row now shows each franchise's real logo (borrowed from its movies — TMDB doesn't publish franchise logos).
+
 ## 0.8.0 - 2026-09-26
 - **Search:** press **Y** on the Big Picture home — type with the on-screen keyboard (or a real one) and results appear as you type. Works for titles and whole series ("potter", "jur park").
 - **Franchises:** a new row on the home screen, Disney+ style — highlight a franchise and its tile comes alive with a slow slideshow of its movies. Open one for a franchise page with every movie in release order.
