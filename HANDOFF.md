@@ -3,11 +3,21 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.7.1+32 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.7.2+33 — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-26 ~07:30 UTC) — 0.7.1 Xbox glyphs, picker polish
+## Latest (2026-09-26 ~08:00 UTC) — 0.7.2 content ratings, logo rule
+
+- movies.certification (migration 0012) from TMDB release_dates in
+  settings.rating_region; backfill done (212 rated, 7 none). Badge after the
+  year in bpMetaRow (hero, fullscreen, movie page, picker) + Roku 0.1.10.
+- UI rule (memory logo-centered-over-line): logos centre over the line
+  beneath via bpLogoOver() — hero fullscreen, picker header, movie page.
+- Deploy note: after starting deploy detached, confirm the container
+  StartedAt changed — health 200 can be the OLD process before the restart.
+
+## Earlier (2026-09-26 ~07:30 UTC) — 0.7.1 Xbox glyphs, picker polish
 
 - Kenney Input Prompts 1.5 (CC0) — full pack in frontend/third_party/
   kenney-input-prompts (4,667 files; copy big trees on ALPINE, not over SMB).
