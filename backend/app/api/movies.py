@@ -398,7 +398,7 @@ async def _run_upgrade(replace_pins: bool, limit: int | None) -> None:
         for m in todo:
             st["current"] = m.title
             result = await upgrade_to_apple(m.id, m.tmdb_id)
-            st[result] += 1
+            st[result] = st.get(result, 0) + 1
             if result == "apple" and m.trailer_youtube:
                 # Apple replaced a YouTube pin — drop the pin so it stays Apple.
                 async with SessionLocal() as session:

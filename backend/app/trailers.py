@@ -484,31 +484,50 @@ async def ensure_trailer(
         async with _download_sem:
             if is_cached(movie_id):
                 return trailer_file(movie_id)
-            if not override and await _fetch_apple(movie_id, tmdb_id):
+            apple = None if override else await apple_trailers.find(tmdb_id)
+            if apple and not _apple_weak(apple) and await _fetch_apple(movie_id, apple):
                 return trailer_file(movie_id)
-            if not yt_dlp_path():
-                return None
-            offers = await _ranked_offers(tmdb_id, override)
-            manual = _youtube_key(override) if override else None
-            tries = offers[:_MAX_CANDIDATES + 1]
-            # The manual pick always gets a turn, even if it ranked lower.
-            tries += [o for o in offers[_MAX_CANDIDATES + 1:] if o["key"] == manual]
-            for offer in tries:
-                pinned = offer["key"] == manual
-                if await _fetch(movie_id, offer, require_bar=not pinned, pinned=pinned):
-                    return trailer_file(movie_id)
-            # Nothing cleared the bar: the sharpest official 1080p+ trailer.
-            best = next((o for o in offers if o["height"] >= _MIN_HEIGHT), None)
-            if best and await _fetch(movie_id, best, require_bar=False):
+            if await _fetch_youtube(movie_id, tmdb_id, override):
                 return trailer_file(movie_id)
-            _none_file(movie_id).write_text(json.dumps({"offers": len(offers)}))
+            # Apple's 480p cut still beats a static backdrop.
+            if apple and await _fetch_apple(movie_id, apple):
+                return trailer_file(movie_id)
+            _none_file(movie_id).write_text(json.dumps({"apple": bool(apple)}))
     return None
 
 
-async def _fetch_apple(movie_id: int, tmdb_id: int | None) -> bool:
-    """Try Apple TV. Downloads beside the current trailer (if any) and swaps
-    only on success, so a failed attempt never costs a movie its trailer."""
-    offer = await apple_trailers.find(tmdb_id)
+# Apple sometimes only has a 480p trailer (with 32 kbps audio): that loses to
+# YouTube's official HD trailer, and is used only when YouTube has nothing.
+_APPLE_WEAK_LINES = 700
+
+
+def _apple_weak(offer: dict) -> bool:
+    return apple_trailers.best_lines(offer) < _APPLE_WEAK_LINES
+
+
+async def _fetch_youtube(movie_id: int, tmdb_id: int | None,
+                         override: str | None) -> bool:
+    """TMDB's official YouTube trailers (plus a manual pin): one that clears
+    the quality bar wins; else the sharpest official 1080p+."""
+    if not yt_dlp_path():
+        return False
+    offers = await _ranked_offers(tmdb_id, override)
+    manual = _youtube_key(override) if override else None
+    tries = offers[:_MAX_CANDIDATES + 1]
+    # The manual pick always gets a turn, even if it ranked lower.
+    tries += [o for o in offers[_MAX_CANDIDATES + 1:] if o["key"] == manual]
+    for offer in tries:
+        pinned = offer["key"] == manual
+        if await _fetch(movie_id, offer, require_bar=not pinned, pinned=pinned):
+            return True
+    best = next((o for o in offers if o["height"] >= _MIN_HEIGHT), None)
+    return bool(best) and await _fetch(movie_id, best, require_bar=False)
+
+
+async def _fetch_apple(movie_id: int, offer: dict | None) -> bool:
+    """Install Apple's trailer. Downloads beside the current trailer (if any)
+    and swaps only on success, so a failed attempt never costs a movie its
+    trailer."""
     if not offer:
         return False
     d = trailers_dir()
@@ -535,14 +554,37 @@ async def _fetch_apple(movie_id: int, tmdb_id: int | None) -> bool:
 
 
 async def upgrade_to_apple(movie_id: int, tmdb_id: int | None) -> str:
-    """Replace a movie's current trailer with Apple's, if Apple has one.
-    Returns "apple" (upgraded), "already", or "none" (kept what it had)."""
+    """Give a movie its best trailer. Apple at 720p+ replaces anything;
+    Apple's 480p only when YouTube has no official HD trailer. Returns
+    "apple", "already", "youtube" (HD YouTube beat Apple's 480p), "apple-sd",
+    "kept" (current trailer stays) or "none"."""
     src = trailer_source(movie_id) or {}
-    if src.get("source") == "apple" and is_cached(movie_id):
-        return "already"
+    offer = await apple_trailers.find(tmdb_id)
+    if not offer:
+        return "none"
+    cached = is_cached(movie_id)
+    on_apple = cached and src.get("source") == "apple"
     lock = _locks.setdefault(movie_id, asyncio.Lock())
     async with lock, _download_sem:
-        return "apple" if await _fetch_apple(movie_id, tmdb_id) else "none"
+        if not _apple_weak(offer):
+            if on_apple:
+                return "already"
+            return "apple" if await _fetch_apple(movie_id, offer) else "none"
+        if cached and not on_apple:
+            return "kept"  # an existing (YouTube) trailer beats Apple's 480p
+        # On Apple's 480p (or nothing): try YouTube's official HD trailer,
+        # with the current file set aside and restored if YouTube can't.
+        keep = trailers_dir() / f"{movie_id}.keep.mkv"
+        if cached:
+            os.replace(trailer_file(movie_id), keep)
+        if await _fetch_youtube(movie_id, tmdb_id, None):
+            keep.unlink(missing_ok=True)
+            sdr_file(movie_id).unlink(missing_ok=True)
+            return "youtube"
+        if cached:
+            os.replace(keep, trailer_file(movie_id))
+            return "apple-sd"
+        return "apple-sd" if await _fetch_apple(movie_id, offer) else "none"
 
 
 async def _fetch(movie_id: int, offer: dict, require_bar: bool,

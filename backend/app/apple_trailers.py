@@ -239,6 +239,12 @@ def parse_master(text: str, base: str, max_lines: int, lang: str) -> dict:
     return {"hdr": hdr, "sdr": sdr, "audio": audio}
 
 
+def best_lines(offer: dict) -> int:
+    """16:9-equivalent lines of the best video in an offer (0 if none)."""
+    return max((_lines(v["res"]) for v in (offer.get("hdr"), offer.get("sdr")) if v),
+               default=0)
+
+
 async def find(tmdb_id: int | None) -> dict | None:
     """The movie's Apple trailer (variants picked), or None. Cached per process."""
     s = get_settings()
