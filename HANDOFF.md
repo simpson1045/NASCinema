@@ -3,11 +3,26 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.6.0+26 (Apple trailers + HDR) — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.6.1+27 (player glow-up) — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-25, late night) — Apple TV trailers + HDR (0.6.0, Roku 0.1.8)
+## Latest (2026-09-26 ~05:20 UTC) — player glow-up (0.6.1), Apple upgrade done
+
+- **Apple trailer upgrade finished:** 219 checked → 195 now Apple, 22 kept
+  their YouTube/none (Apple has nothing), 2 already Apple.
+- **Movie player UI (0.6.1):** uosc 5.13.0 + thumbfast bundled in
+  `frontend/windows/mpv-config/` (CMake installs it next to the exe; mpv gets
+  `--config-dir`). Before this, ELKO's mpv-config held only an empty mpv.conf
+  → no on-video UI at all. Theme: `script-opts/uosc.conf` (navy + amber,
+  scale 1.4). thumbfast gets `--script-opts=thumbfast-mpv_path=<mpv>`.
+  Controller in the player: `playerPad()` in player_view_native.dart (A pause,
+  ←/→ ±10 s, LB/RB chapter, X audio, Y subs, Start menu, ↑/↓ flash UI; menu
+  open → keypress UP/DOWN/ENTER/ESC; menu state from
+  `user-data/uosc/menu/type` + a local hint). **Untested on the TV** — Matt
+  is updating mid-movie (National Treasure); watch for flags.
+
+## Earlier (2026-09-25, late night) — Apple TV trailers + HDR (0.6.0, Roku 0.1.8)
 
 - **Apple TV is the first trailer source** (`backend/app/apple_trailers.py`):
   TMDB → Wikidata P9586 → tv.apple.com uts catalog → HLS master → ffmpeg copy.

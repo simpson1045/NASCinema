@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.6.1 - 2026-09-25
+- **The movie player got a glow-up.** New on-screen controls in NASCinema's navy and gold: a title bar, a slim gold timeline with preview thumbnails when you scrub, chapter marks, and time remaining — all fading away while you watch.
+- **Full controller control while watching:** **A** play/pause · **←/→** skip 10 seconds · **LB/RB** previous/next chapter · **X** audio track · **Y** subtitles · **Start** menu · **↑/↓** show the controls · **B** back out (or close a menu) · **View** flag a problem.
+
 ## 0.6.0 - 2026-09-25
 - **Trailers now come from Apple TV** — the studio's own trailers instead of YouTube uploads: the real theatrical trailer (no "now in 4K" re-release promos), 2–3× the picture quality, 5.1 surround, and 4K HDR when Apple has it. The whole library is being switched over in the background; movies Apple doesn't cover keep their YouTube trailer.
 - **HDR trailers** — Settings → Display → *HDR trailers*: **Auto** (default — uses HDR when it's switched on for your display), Always, or Never. In Big Picture, HDR trailers play full screen through the same player as your 4K HDR movies.
