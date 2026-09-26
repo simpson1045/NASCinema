@@ -445,6 +445,25 @@ async def fingerprint_extras() -> dict:
     return stats
 
 
+async def apply_probe(session, mf: MediaFile, probe: dict) -> None:
+    """Write a fresh probe onto a file row: its track rows, size/codec facts
+    and edition. The old track rows are deleted and flushed FIRST — assigning
+    a new list lets SQLAlchemy insert before it deletes, which trips the
+    (file, index) unique constraint on any file that already had rows."""
+    mf.streams.clear()
+    await session.flush()
+    mf.streams = _stream_rows(probe)
+    for key in ("container", "video_codec", "audio_codec", "width",
+                "height", "duration", "bit_depth", "size_bytes"):
+        if probe.get(key) is not None:
+            setattr(mf, key, probe[key])
+    mf.hdr = probe.get("hdr", False)
+    mf.probed_at = datetime.now(timezone.utc)
+    if mf.kind == "feature" and mf.edition is None:
+        folder = os.path.basename(os.path.dirname(mf.path))
+        mf.edition = _edition(os.path.basename(mf.path), folder)
+
+
 async def reprobe(limit: int | None = None, only_missing: bool = True) -> dict:
     """Re-run ffprobe over files already in the library and (re)write their
     media_streams rows + edition label. The scan skips known paths, so this is
@@ -471,16 +490,7 @@ async def reprobe(limit: int | None = None, only_missing: bool = True) -> dict:
                 stats["failed"] += 1
                 continue
             try:
-                mf.streams = _stream_rows(probe)
-                for key in ("container", "video_codec", "audio_codec", "width",
-                            "height", "duration", "bit_depth", "size_bytes"):
-                    if probe.get(key) is not None:
-                        setattr(mf, key, probe[key])
-                mf.hdr = probe.get("hdr", False)
-                mf.probed_at = datetime.now(timezone.utc)
-                if mf.kind == "feature" and mf.edition is None:
-                    folder = os.path.basename(os.path.dirname(mf.path))
-                    mf.edition = _edition(os.path.basename(mf.path), folder)
+                await apply_probe(session, mf, probe)
                 await session.commit()
                 stats["probed"] += 1
             except Exception:

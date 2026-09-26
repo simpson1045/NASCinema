@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     # Whose content ratings to show (two-letter country: us → PG-13/R, gb →
     # 12A/15, de → FSK …).
     rating_region: str = "us"
+    # Track Manager strip worker: SSD staging dir (write the stripped copy
+    # here, verify, then move it onto the HDD pool — reading and writing the
+    # same HDD pool at once thrashes it), and the 1-minute load average above
+    # which it waits before starting a job (the HDDs are busy — e.g. another
+    # strip or a scan).
+    strip_dir: str = "/scratch"
+    strip_max_load: float = 8.0
 
     # Wired renderer (the theater PC). MAC enables POST /api/renderer/wake —
     # the phone wakes the sleeping renderer before "Play on <renderer>".
