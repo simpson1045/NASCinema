@@ -45,8 +45,7 @@ actually are and what's next." Current version: **v0.5.8+24 published (in-app up
 - The 16 trailers with dub tracks were re-downloaded (same video key). Empire,
   Inglourious Basterds and Star Wars came back 1080p (YouTube stopped
   offering 4K), so their old 4K video was remuxed with the new original
-  audio. Originals kept as `data/trailers/<id>.mkv.bak`; the 1080p
-  re-downloads as `<id>.mkv.1080`. **Not deleted — awaiting Matt's "delete".**
+  audio. Backups (`.mkv.bak`, `.mkv.1080`) deleted on Matt's say-so.
 - **Whisper audit of all 166 cached trailers** (faster-whisper small, CPU,
   venv `D:\Temp\whisper-venv` on ALPINE; `D:\Temp\langcheck.py`,
   results `D:\Temp\langcheck.tsv`): everything English except
@@ -60,9 +59,8 @@ actually are and what's next." Current version: **v0.5.8+24 published (in-app up
   stick or key hides the cursor app-wide via a translucent top MouseRegion
   (beats buttons' own click cursor); mouse movement shows it. Test:
   `cursor_auto_hide_test.dart`.
-- Stale leftovers in `data/trailers`: ~12 old `*.part` files from Sept 24–25
-  aborted downloads; `data/langclips`, `data/bhc3`, `data/lang_scan.*`,
-  `data/redub.*` scratch. Not deleted.
+- NAS scratch + stale `*.part` downloads deleted (1.9 GB). Still on ALPINE:
+  `D:\Temp\langclips*`, `D:\Temp\whisper-venv` (reusable for audits).
 
 **Still open:** 13 movies on search-picked trailers (all passed the Whisper English check) (Land Before Time, Big
 Daddy, Big Fat Liar, Coming to America, Home Alone 2, Lethal Weapon 2 & 3,
