@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Movie page: backdrop, clearlogo (+ the sequel line under a franchise
+     wordmark), rating row, overview, the chosen version/audio/subtitles, and
+     Play / Resume / Audio & Subtitles / My List. Every poster and the hero open
+     it. MainScene owns playback and the options panel; this page holds the
+     picks (`choice`) and hands them over on Play. -->
+<component name="MovieScreen" extends="Group">
+  <script type="text/brightscript" uri="pkg:/components/MovieScreen.brs" />
+  <script type="text/brightscript" uri="pkg:/components/MetaRow.brs" />
+  <script type="text/brightscript" uri="pkg:/components/Tracks.brs" />
+  <interface>
+    <field id="base" type="string" />
+    <field id="movieId" type="integer" alwaysNotify="true" onChange="onMovieId" />
+    <!-- Out: the movie as /api/movies/{id} returns it. -->
+    <field id="detail" type="assocarray" />
+    <!-- Both ways: {fileIdx, audio, subKey} — MainScene sets it from the panel. -->
+    <field id="choice" type="assocarray" onChange="onChoice" />
+    <!-- Out: downloaded subtitles + saved progress for the chosen version. -->
+    <field id="externals" type="array" />
+    <field id="subSaved" type="string" />
+    <!-- Out: Play pressed — {position}. -->
+    <field id="play" type="assocarray" alwaysNotify="true" />
+    <field id="wantOptions" type="boolean" alwaysNotify="true" />
+    <field id="closed" type="boolean" alwaysNotify="true" />
+    <!-- In: back from playback — re-read the resume point. -->
+    <field id="refresh" type="boolean" alwaysNotify="true" onChange="onRefresh" />
+  </interface>
+  <children>
+    <Rectangle id="bg" width="1920" height="1080" color="0x0A0E27FF" />
+    <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToFill" />
+    <Poster id="scrim" width="1920" height="1080" loadDisplayMode="scaleToFill"
+        uri="pkg:/images/home_scrim2.png" />
+    <Poster id="logo" translation="[90,250]" width="520" height="150"
+        loadDisplayMode="scaleToFit" />
+    <Label id="title" translation="[92,300]" width="1300" wrap="true" maxLines="2"
+        color="0xFFFFFFFF" font="font:LargeBoldSystemFont" visible="false" />
+    <!-- "VIII · The Big Freeze" under a shared franchise logo; centered with it. -->
+    <Label id="logoSub" translation="[90,408]" width="520" horizAlign="center"
+        color="0xEEF1FFFF" font="font:MediumSystemFont" visible="false" />
+    <!-- itemSpacings set in code (array field). -->
+    <LayoutGroup id="meta" translation="[92,470]" layoutDirection="horiz"
+        vertAlignment="center" />
+    <Label id="overview" translation="[92,530]" width="1000" wrap="true"
+        maxLines="4" lineSpacing="4" color="0xDDE2F5FF"
+        font="font:SmallSystemFont" />
+    <Label id="summary" translation="[92,720]" width="1500"
+        color="0x9AA3C7FF" font="font:SmallSystemFont" />
+    <Group id="buttons" translation="[92,780]" />
+    <Label id="hint" translation="[92,990]" width="1400"
+        text="OK  Select      *  Audio, subtitles &amp; flag      Back  Home"
+        color="0x9AA3C7FF" font="font:SmallestSystemFont" />
+    <Label id="status" translation="[0,520]" width="1920" horizAlign="center"
+        color="0xEEF1FFFF" font="font:MediumBoldSystemFont" visible="false" />
+  </children>
+</component>

@@ -1,5 +1,7 @@
-' NASCinema main scene: load the server-composed home (carousel rails) and play
-' on select. The backend decides what rails exist (Continue Watching, Popular,
+' NASCinema main scene: load the server-composed home (carousel rails); a poster
+' or the hero opens the movie page, whose Play starts the video with the
+' page's version/audio/subtitle picks. The * key opens the options panel
+' everywhere (switch tracks mid-movie, flag a problem). The backend decides what rails exist (Continue Watching, Popular,
 ' Recently Added, Top Rated, genres) — the TV just renders them.
 
 sub init()
@@ -37,6 +39,28 @@ sub init()
     m.video.observeField("availableAudioTracks", "onAudioTracks")
     m.audioPicked = false
 
+    m.movie = m.top.findNode("movie")
+    m.panel = m.top.findNode("panel")
+    m.toast = m.top.findNode("toast")
+    m.toastText = m.top.findNode("toastText")
+    m.toastTimer = m.top.findNode("toastTimer")
+    m.saveTimer = m.top.findNode("saveTimer")
+    m.movie.base = m.base
+    m.movie.observeField("play", "onMoviePlay")
+    m.movie.observeField("wantOptions", "onMovieOptions")
+    m.movie.observeField("closed", "onMovieClosed")
+    m.movie.observeField("externals", "onMovieExternals")
+    m.panel.observeField("changed", "onPanelChanged")
+    m.panel.observeField("flag", "onPanelFlag")
+    m.panel.observeField("closed", "onPanelClosed")
+    m.toastTimer.observeField("fire", "onToastDone")
+    m.saveTimer.observeField("fire", "onSaveTick")
+    m.video.observeField("availableSubtitleTracks", "onSubTracks")
+    m.screen = "home"   ' "home" | "movie" | "video"
+    ' What's playing: {movieId, title, files, fileIdx, audio, subKey, externals, subSaved}.
+    m.cur = invalid
+    m.panelMode = ""
+
     logmsg("channel init; base=" + m.base)
     loadHome()
 end sub
@@ -51,7 +75,19 @@ sub logmsg(s as string)
     t.body = FormatJson({ msg: "[roku] " + s })
     t.control = "RUN"
     m.logTasks.push(t)   ' keep a reference so it isn't collected mid-flight
+    if m.logTasks.count() > 40 then m.logTasks.shift()
 end sub
+
+function http(method as string, path as string, body as string) as object
+    t = createObject("roSGNode", "HttpTask")
+    t.url = m.base + path
+    t.method = method
+    t.body = body
+    t.control = "RUN"
+    m.logTasks.push(t)   ' keep a reference so it isn't collected mid-flight
+    if m.logTasks.count() > 40 then m.logTasks.shift()
+    return t
+end function
 
 sub loadHome()
     m.status.text = "Loading your library…"
@@ -170,64 +206,324 @@ sub onItemSelected()
     if row = invalid then return
     item = row.getChild(sel[1])
     if item = invalid then return
-    playMovie(item.movieId)
+    openMovie(item.movieId)
 end sub
 
-' OK pressed on the featured hero -> play that movie.
+' OK pressed on the featured hero -> that movie's page.
 sub onHeroPlay()
     id = m.hero.playMovieId
-    if id <> invalid and id > 0 then playMovie(id)
+    if id <> invalid and id > 0 then openMovie(id)
 end sub
 
-sub playMovie(movieId as dynamic)
+sub openMovie(movieId as dynamic)
     if movieId = invalid then return
-    m.status.text = "Loading…"
-    m.status.visible = true
-    m.detailTask = createObject("roSGNode", "HttpTask")
-    m.detailTask.url = m.base + "/api/movies/" + movieId.toStr()
-    m.detailTask.observeField("response", "onDetailLoaded")
-    m.detailTask.control = "RUN"
+    m.hero.suspended = true   ' stop the hero trailer behind the page
+    m.rows.visible = false
+    m.movie.visible = true
+    m.movie.movieId = movieId
+    m.movie.setFocus(true)
+    m.screen = "movie"
+    logmsg("open movie " + movieId.toStr())
 end sub
 
-sub onDetailLoaded()
-    resp = m.detailTask.response
-    json = ParseJson(resp)
-    if json = invalid or json.files = invalid or json.files.count() = 0 then
-        m.status.text = "No playable file"
-        m.status.visible = true
-        logmsg("detail: no playable file")
-        return
-    end if
-
-    chosen = json.files[0]
-    for each f in json.files
-        if f.kind <> invalid then
-            if f.kind = "feature" then
-                chosen = f
-                exit for
-            end if
-        end if
-    end for
-
-    playFile(chosen, json.title)
+sub onMovieClosed()
+    m.movie.visible = false
+    m.screen = "home"
+    m.hero.suspended = false   ' resume the hero (restarts its trailer)
+    restoreHome()
 end sub
 
-sub playFile(file as object, title as dynamic)
-    m.audioPicked = false   ' re-pick the audio track for this movie
+' Play on the movie page: its detail + picks -> the video.
+sub onMoviePlay()
+    d = m.movie.detail
+    c = m.movie.choice
+    req = m.movie.play
+    if d = invalid or c = invalid or req = invalid then return
+    if d.files = invalid or d.files.count() = 0 then return
+    idx = Int(c.fileIdx)
+    if idx < 0 or idx >= d.files.count() then idx = 0
+    ext = m.movie.externals
+    if ext = invalid then ext = []
+    m.cur = {
+        movieId: d.id
+        title: strOf(d.title)
+        files: d.files
+        fileIdx: idx
+        audio: Int(c.audio)
+        subKey: strOf(c.subKey)
+        externals: ext
+        subSaved: strOf(m.movie.subSaved)
+    }
+    pos = 0
+    if req.position <> invalid then pos = req.position
+    startPlayback(pos)
+end sub
+
+sub startPlayback(pos as dynamic)
+    f = m.cur.files[m.cur.fileIdx]
+    m.audioPicked = false   ' re-pick the audio track for this file
     vc = createObject("roSGNode", "ContentNode")
-    vc.url = m.base + "/api/stream/" + file.id.toStr() + "/direct"
-    vc.streamFormat = streamFormatFor(file.container)
-    if title <> invalid then vc.title = title
+    vc.url = m.base + "/api/stream/" + f.id.toStr() + "/direct"
+    vc.streamFormat = streamFormatFor(f.container)
+    vc.title = m.cur.title
+    if pos > 0 then vc.playStart = Int(pos)
+    ' Downloaded subtitles ride along as side-loaded WebVTT tracks.
+    subs = []
+    for each x in m.cur.externals
+        subs.push({ Language: lang3(strOf(x.lang)), TrackName: m.base + strOf(x.url), Description: strOf(x.label) + " (downloaded)" })
+    end for
+    if subs.count() > 0 then vc.subtitleTracks = subs
 
-    logmsg("play " + vc.url + " (container=" + firstStr(file.container) + " -> " + vc.streamFormat + ")")
+    logmsg("play " + vc.url + " at " + Int(pos).toStr() + "s (container=" + firstStr(f.container) + " -> " + vc.streamFormat + ", audio=" + m.cur.audio.toStr() + ", subs=" + m.cur.subKey + ")")
 
     m.hero.suspended = true   ' stop the hero trailer so two videos don't fight
-
-    m.video.content = vc
+    m.movie.visible = false
+    m.rows.visible = false
     m.status.visible = false
+    m.video.content = vc
     m.video.visible = true
     m.video.setFocus(true)
     m.video.control = "play"
+    m.screen = "video"
+    m.saveTimer.control = "start"
+    applySubs()
+end sub
+
+' Roku wants ISO 639-2 codes on side-loaded tracks; downloads are named "en".
+function lang3(l as string) as string
+    map = { "en": "eng", "es": "spa", "fr": "fre", "de": "ger", "it": "ita", "pt": "por", "nl": "dut", "sv": "swe", "da": "dan", "fi": "fin", "pl": "pol", "ru": "rus", "ja": "jpn", "ko": "kor", "zh": "chi" }
+    k = LCase(l)
+    if map.doesExist(k) then return map[k]
+    return l
+end function
+
+' Leave playback (Back, the end, or an error) for the movie page, saving where
+' we got to first so its Resume button is right.
+sub stopVideo(reason as string)
+    m.saveTimer.control = "stop"
+    saved = invalid
+    if m.cur <> invalid then
+        pos = m.video.position
+        dur = m.video.duration
+        if reason = "finished" or (dur > 0 and pos > dur * 0.95) then
+            saved = putProgress(0)   ' watched to the credits: no Resume
+        else if pos > 5 then
+            saved = putProgress(pos)
+        end if
+    end if
+    m.video.control = "stop"
+    m.video.visible = false
+    if m.movie.detail <> invalid then
+        m.screen = "movie"
+        m.movie.visible = true
+        m.movie.setFocus(true)
+        ' Re-read the resume point once the save has landed.
+        if saved <> invalid then
+            saved.observeField("response", "onSavedRefresh")
+        else
+            m.movie.refresh = true
+        end if
+    else
+        m.screen = "home"
+        m.hero.suspended = false
+        restoreHome()
+    end if
+end sub
+
+sub onSavedRefresh()
+    m.movie.refresh = true
+end sub
+
+function putProgress(pos as dynamic) as object
+    f = m.cur.files[m.cur.fileIdx]
+    body = { position: pos }
+    ' Keep the subtitle another app remembered for this file.
+    if m.cur.subSaved <> "" then body.subtitle = m.cur.subSaved
+    return http("PUT", "/api/progress/" + f.id.toStr(), FormatJson(body))
+end function
+
+sub onSaveTick()
+    if m.screen <> "video" or m.cur = invalid then return
+    if m.video.state <> "playing" then return
+    pos = m.video.position
+    if pos > 5 then putProgress(pos)
+end sub
+
+sub onSubTracks()
+    applySubs()
+end sub
+
+' Turn on the picked subtitle once Roku has listed the tracks. Embedded text
+' tracks map by order among the file's Roku-playable ones; downloaded ones by
+' URL.
+sub applySubs()
+    if m.cur = invalid then return
+    key = m.cur.subKey
+    if key = "" or key = "off" then
+        m.video.globalCaptionMode = "Off"
+        return
+    end if
+    tracks = m.video.availableSubtitleTracks
+    if tracks = invalid or tracks.count() = 0 then return
+    target = ""
+    if Left(key, 2) = "x:" then
+        url = m.base + Mid(key, 3)
+        for each t in tracks
+            if strOf(t.TrackName) = url then target = url
+        end for
+    else if Left(key, 2) = "e:" then
+        n = Mid(key, 3).toInt()
+        k = -1
+        cnt = 0
+        f = m.cur.files[m.cur.fileIdx]
+        if f.subtitle_tracks <> invalid then
+            for each s in f.subtitle_tracks
+                if rokuSubOk(s) then
+                    if s.id = n then k = cnt
+                    cnt = cnt + 1
+                end if
+            end for
+        end if
+        emb = []
+        for each t in tracks
+            if Left(strOf(t.TrackName), 4) <> "http" then emb.push(t)
+        end for
+        if k >= 0 and k < emb.count() then target = strOf(emb[k].TrackName)
+    end if
+    info = ""
+    for each t in tracks
+        info = info + " [" + strOf(t.TrackName) + "/" + strOf(t.Language) + "]"
+    end for
+    logmsg("subs: want " + key + " -> '" + target + "' of" + info)
+    if target <> "" then
+        m.video.subtitleTrack = target
+        m.video.globalCaptionMode = "On"
+    end if
+end sub
+
+sub onMovieOptions()
+    openPanel("movie")
+end sub
+
+sub onMovieExternals()
+    if m.panel.visible and m.panelMode = "movie" then m.panel.externals = m.movie.externals
+end sub
+
+' The * panel. "movie": picks for the next Play; "video": live switching;
+' "home": just "Flag a problem".
+sub openPanel(mode as string)
+    md = { files: [], fileIdx: 0, audio: 0, subKey: "off", externals: [], allowVersion: false, flag: true }
+    if mode = "movie" then
+        d = m.movie.detail
+        c = m.movie.choice
+        if d <> invalid and c <> invalid then
+            md.files = d.files
+            md.fileIdx = c.fileIdx
+            md.audio = c.audio
+            md.subKey = c.subKey
+            ext = m.movie.externals
+            if ext <> invalid then md.externals = ext
+            md.allowVersion = true
+        end if
+    else if mode = "video" and m.cur <> invalid then
+        md.files = m.cur.files
+        md.fileIdx = m.cur.fileIdx
+        md.audio = m.cur.audio
+        md.subKey = m.cur.subKey
+        md.externals = m.cur.externals
+        md.allowVersion = true
+    end if
+    m.panelMode = mode
+    m.panel.model = md
+    m.panel.visible = true
+    m.panel.setFocus(true)
+    logmsg("options panel (" + mode + ")")
+end sub
+
+sub onPanelClosed()
+    m.panel.visible = false
+    if m.panelMode = "movie" then
+        m.movie.setFocus(true)
+    else if m.panelMode = "video" and m.screen = "video" then
+        m.video.setFocus(true)
+    else
+        restoreHome()
+    end if
+end sub
+
+' A pick in the panel. On the movie page it just updates the page. During
+' playback subtitles switch live; audio/version restart at the same spot (a
+' mid-stream audio switch breaks Roku's MKV demuxer — "malformed data").
+sub onPanelChanged()
+    c = m.panel.changed
+    if c = invalid then return
+    if m.panelMode = "movie" then
+        m.movie.choice = c
+    else if m.panelMode = "video" and m.cur <> invalid then
+        m.movie.choice = c   ' keep the page in step for when playback ends
+        idx = Int(c.fileIdx)
+        if idx <> m.cur.fileIdx or Int(c.audio) <> m.cur.audio then
+            pos = m.video.position
+            ' Downloaded subtitles belong to one version.
+            if idx <> m.cur.fileIdx then m.cur.externals = []
+            m.cur.fileIdx = idx
+            m.cur.audio = Int(c.audio)
+            m.cur.subKey = strOf(c.subKey)
+            m.video.control = "stop"
+            startPlayback(pos)
+            m.panel.setFocus(true)   ' the panel stays open over the restart
+        else if strOf(c.subKey) <> m.cur.subKey then
+            m.cur.subKey = strOf(c.subKey)
+            applySubs()
+        end if
+    end if
+end sub
+
+sub onPanelFlag()
+    mode = m.panelMode
+    m.panel.visible = false
+    onPanelClosed()
+    sendFlag(mode)
+end sub
+
+' Same flags list as the Windows app's View button (GET /api/flags), with
+' where we were and what was playing.
+sub sendFlag(mode as string)
+    body = { app_version: createObject("roAppInfo").GetVersion(), platform: "roku", screen: "roku-" + mode, kind: "roku" }
+    ctx = { zone: m.zone }
+    if mode = "video" and m.cur <> invalid then
+        f = m.cur.files[m.cur.fileIdx]
+        body.movie_id = m.cur.movieId
+        body.movie_title = m.cur.title
+        body.media_file_id = f.id
+        body.position_seconds = m.video.position
+        ctx.version = strOf(f.label)
+        ctx.audio = m.cur.audio
+        ctx.subtitles = m.cur.subKey
+        ctx.state = m.video.state
+        ctx.audio_format = firstStr(m.video.audioFormat)
+    else if mode = "movie" then
+        d = m.movie.detail
+        if d <> invalid then
+            body.movie_id = d.id
+            body.movie_title = strOf(d.title)
+        end if
+    end if
+    body.context = ctx
+    http("POST", "/api/flags", FormatJson(body))
+    showToast("Flag sent — thanks")
+    logmsg("flag sent (" + mode + ")")
+end sub
+
+sub showToast(s as string)
+    m.toastText.text = s
+    m.toast.visible = true
+    m.toastTimer.control = "stop"
+    m.toastTimer.control = "start"
+end sub
+
+sub onToastDone()
+    m.toast.visible = false
 end sub
 
 function streamFormatFor(container as dynamic) as string
@@ -254,10 +550,11 @@ sub onVideoState()
 
     if st = "error" then
         logmsg("video ERROR code=" + m.video.errorCode.toStr() + " msg=" + firstStr(m.video.errorMsg) + extra)
-        backToRows()
+        stopVideo("error")
+        showToast("Couldn't play this version")
     else if st = "finished" then
         logmsg("video finished" + extra)
-        backToRows()
+        stopVideo("finished")
     else
         logmsg("video state=" + st + extra)
     end if
@@ -278,6 +575,18 @@ sub pickAudio()
     if m.audioPicked = true then return
     tracks = m.video.availableAudioTracks
     if tracks = invalid or tracks.count() = 0 then return
+
+    ' The viewer picked a track (movie page or * panel): use it. Track ids are
+    ' 1-based in file order, the same order Roku lists them.
+    if m.cur <> invalid then
+        if m.cur.audio > 0 and m.cur.audio <= tracks.count() then
+            want = m.cur.audio - 1
+            logmsg("audio: viewer picked " + m.cur.audio.toStr() + " -> '" + firstStr(tracks[want].Name) + "'")
+            if want > 0 then m.video.audioTrack = tracks[want].Track
+            m.audioPicked = true
+            return
+        end if
+    end if
 
     best = -1
     bestScore = -1000000
@@ -329,11 +638,8 @@ function scoreAudio(name as string) as integer
     return 0
 end function
 
-sub backToRows()
-    m.video.control = "stop"
-    m.video.visible = false
-    m.hero.suspended = false   ' resume the hero (restarts its trailer)
-    ' Restore focus + rail visibility for whichever zone we launched from.
+' Back on the home screen: focus whichever zone we left from.
+sub restoreHome()
     if m.zone = "hero" then
         m.rows.visible = false   ' hero is fullscreen
         m.hero.setFocus(true)
@@ -346,12 +652,21 @@ end sub
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
 
-    if m.video.visible then
+    if m.screen = "video" then
         if key = "back" then
-            backToRows()
+            stopVideo("back")
+            return true
+        else if key = "options" then
+            openPanel("video")
             return true
         end if
         return false
+    end if
+    if m.screen = "movie" then return false   ' MovieScreen handles its own keys
+
+    if key = "options" then
+        openPanel("home")
+        return true
     end if
 
     ' Zone switching between the hero and the rails. The hero bubbles "down"

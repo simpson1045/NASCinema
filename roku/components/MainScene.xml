@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="MainScene" extends="Scene">
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+  <script type="text/brightscript" uri="pkg:/components/Tracks.brs" />
   <children>
     <Rectangle id="bg" width="1920" height="1080" color="0x0A0E27FF" />
     <FeaturedHero id="hero" visible="false" />
@@ -20,7 +21,21 @@
         vertFocusAnimationStyle="fixedFocus"
         rowFocusAnimationStyle="fixedFocusWrap"
         visible="false" />
+    <!-- Every poster and the hero open the movie page; Play hands off to the
+         video below with the page's version/audio/subtitle picks. -->
+    <MovieScreen id="movie" visible="false" />
     <Video id="video" width="1920" height="1080" translation="[0,0]"
         visible="false" />
+    <!-- The * key, on top of everything (home, movie page, playback). -->
+    <OptionsPanel id="panel" visible="false" />
+    <Group id="toast" visible="false">
+      <Rectangle translation="[610,930]" width="700" height="76" color="0x000000D0" />
+      <Label id="toastText" translation="[610,930]" width="700" height="76"
+          horizAlign="center" vertAlign="center" color="0xEEF1FFFF"
+          font="font:MediumBoldSystemFont" />
+    </Group>
+    <Timer id="toastTimer" duration="2.5" repeat="false" />
+    <!-- Saves the playback position every 10s so Resume works everywhere. -->
+    <Timer id="saveTimer" duration="10" repeat="true" />
   </children>
 </component>

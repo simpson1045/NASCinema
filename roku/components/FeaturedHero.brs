@@ -1,6 +1,6 @@
 ' Featured hero: cycles through the backend's featured list, showing each movie's
 ' backdrop + clearlogo (or title) + ratings/quality, with paging dots. Auto-advances
-' on a timer; Left/Right cycle manually; OK asks MainScene to play the movie.
+' on a timer; Left/Right cycle manually; OK asks MainScene to open the movie page.
 
 sub init()
     m.content = m.top.findNode("content")
@@ -12,6 +12,7 @@ sub init()
     m.homeScrim = m.top.findNode("homeScrim")
     m.overview = m.top.findNode("overview")
     m.logo = m.top.findNode("logo")
+    m.logoSub = m.top.findNode("logoSub")
     m.title = m.top.findNode("title")
     m.meta = m.top.findNode("meta")
     m.dotsGroup = m.top.findNode("dots")
@@ -81,8 +82,23 @@ sub centerInfo()
         logoY = 790
         metaY = 975
     end if
+    ' A sequel line under the logo takes 44px: home pushes the rest down,
+    ' fullscreen lifts the logo (the meta row already sits near the bottom).
+    extra = 0
+    if m.logoSub.visible then
+        if m.fs then
+            logoY = logoY - 44
+        else
+            extra = 44
+        end if
+    end if
+    metaY = metaY + extra
     m.logo.translation = [90 + Int((b - 520) / 2), logoY]
+    m.logoSub.width = b
+    m.logoSub.translation = [90, logoY + 154]
     m.meta.translation = [92 + Int((b - w) / 2), metaY]
+    m.overview.translation = [92, 338 + extra]
+    m.dotsGroup.translation = [92, 478 + extra]
 end sub
 
 ' The meta row's width, summed from its children (a LayoutGroup's own
@@ -151,9 +167,13 @@ sub showItem()
         m.logo.uri = lg
         m.logo.visible = true
         m.title.visible = false
+        sb = firstStr(it.logo_subtitle)
+        m.logoSub.text = sb
+        m.logoSub.visible = sb <> ""
     else
         m.logo.uri = ""
         m.logo.visible = false
+        m.logoSub.visible = false
         m.title.text = firstStr(it.title)
         m.title.visible = true
     end if

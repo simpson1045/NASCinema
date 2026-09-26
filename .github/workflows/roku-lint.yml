@@ -1,0 +1,19 @@
+# Checks the Roku channel's BrightScript/SceneGraph on every push that touches
+# it (syntax, undefined functions, bad script imports) — there's no Roku in CI,
+# so this is the safety net before a sideload.
+name: Roku lint
+
+on:
+  push:
+    paths: ["roku/**", ".github/workflows/roku-lint.yml"]
+  pull_request:
+    paths: ["roku/**"]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      # The runner image ships Node; brighterscript's compiler does the checks.
+      - run: npx --yes brighterscript@0 --rootDir roku --createPackage false

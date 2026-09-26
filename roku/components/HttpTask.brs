@@ -1,4 +1,5 @@
-' Async HTTP off the render thread. Set `url` (+ optional `method`/`body`),
+' Async HTTP off the render thread. Set `url` (+ optional `method` GET/POST/
+' PUT/DELETE and `body`),
 ' observe `response` (body as a string; "" on failure).
 sub init()
     m.top.functionName = "fetch"
@@ -11,8 +12,10 @@ sub fetch()
     ut.setCertificatesFile("common:/certs/ca-bundle.crt")
     ut.initClientCertificates()
 
-    if m.top.method = "POST"
-        ut.setRequest("POST")
+    ' POST / PUT / DELETE all send the JSON body (roUrlTransfer uses the
+    ' method set here for postFromString).
+    if m.top.method = "POST" or m.top.method = "PUT" or m.top.method = "DELETE"
+        ut.setRequest(m.top.method)
         ut.addHeader("Content-Type", "application/json")
         resp = ut.postFromString(m.top.body)
         if type(resp) = "Integer" then resp = ""   ' postFromString returns a code

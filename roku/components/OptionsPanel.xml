@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The remote's * key: a right-hand panel with Version / Audio / Subtitles
+     radio lists and "Flag a problem". MainScene owns one instance and opens it
+     from the home screen, the movie page, or during playback. Rows are a fixed
+     pool re-filled as the list scrolls (movies can carry 30+ subtitle tracks). -->
+<component name="OptionsPanel" extends="Group">
+  <script type="text/brightscript" uri="pkg:/components/OptionsPanel.brs" />
+  <script type="text/brightscript" uri="pkg:/components/Tracks.brs" />
+  <interface>
+    <!-- In: {files, fileIdx, audio (0 = auto, else track id), subKey
+         ("off" | "e:<id>" embedded | "x:<url>" downloaded), externals,
+         allowVersion, flag}. Setting it rebuilds the list. -->
+    <field id="model" type="assocarray" onChange="onModel" />
+    <!-- In: downloaded subtitles for the current version (arrive late). -->
+    <field id="externals" type="array" onChange="onExternals" />
+    <!-- Out: {fileIdx, audio, subKey} after every pick. -->
+    <field id="changed" type="assocarray" alwaysNotify="true" />
+    <field id="flag" type="boolean" alwaysNotify="true" />
+    <field id="closed" type="boolean" alwaysNotify="true" />
+  </interface>
+  <children>
+    <Rectangle id="shade" width="1920" height="1080" color="0x00000066" />
+    <Rectangle id="panel" translation="[1240,0]" width="680" height="1080"
+        color="0x0A0E27F2" />
+    <Label id="heading" translation="[1286,64]" width="580" text="OPTIONS"
+        color="0xFFB020FF" font="font:SmallBoldSystemFont" />
+    <Group id="rows" translation="[1266,120]" />
+    <Label id="more" translation="[1286,1000]" width="580"
+        color="0x9AA3C7FF" font="font:SmallestSystemFont" />
+  </children>
+</component>

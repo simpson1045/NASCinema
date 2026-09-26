@@ -15,7 +15,7 @@
     <field id="active" type="boolean" value="false" onChange="onActiveChange" />
     <!-- Set true while a fullscreen movie plays, so the hero stops its trailer. -->
     <field id="suspended" type="boolean" value="false" onChange="onSuspendedChange" />
-    <!-- Set to the chosen movie id when OK is pressed on the hero. -->
+    <!-- Set to the chosen movie id when OK is pressed (opens its movie page). -->
     <field id="playMovieId" type="integer" alwaysNotify="true" />
   </interface>
   <children>
@@ -40,6 +40,10 @@
           uri="pkg:/images/hero_scrim.png" visible="false" />
       <Poster id="logo" translation="[90,110]" width="520" height="150"
           loadDisplayMode="scaleToFit" />
+      <!-- "VIII · The Big Freeze" under a franchise's shared logo; centered
+           with the logo (centerInfo). -->
+      <Label id="logoSub" width="520" horizAlign="center" visible="false"
+          color="0xEEF1FFFF" font="font:MediumSystemFont" />
       <Label id="title" translation="[92,170]" width="1200"
           color="0xFFFFFFFF" font="font:LargeBoldSystemFont" visible="false" />
       <!-- Built in code (buildMeta): year + IMDb logo·rating + RT logo·score +
