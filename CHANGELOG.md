@@ -2,6 +2,10 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.6.0 - 2026-09-25
+- **Trailers now come from Apple TV** — the studio's own trailers instead of YouTube uploads: the real theatrical trailer (no "now in 4K" re-release promos), 2–3× the picture quality, 5.1 surround, and 4K HDR when Apple has it. The whole library is being switched over in the background; movies Apple doesn't cover keep their YouTube trailer.
+- **HDR trailers** — Settings → Display → *HDR trailers*: **Auto** (default — uses HDR when it's switched on for your display), Always, or Never. In Big Picture, HDR trailers play full screen through the same player as your 4K HDR movies.
+
 ## 0.5.9 - 2026-09-25
 - **New: the flag button.** Something look or sound wrong? Press **View** (the two-squares button) on the controller — or **F8** on the keyboard — right when it happens. NASCinema saves a screenshot plus which movie or trailer was playing and exactly where, shows "Flagged ✓", and gets out of your way. No need to stop and describe it; Claude reads the flags and fixes them.
 - View no longer works as Back — use **B** (it always did the same thing).
