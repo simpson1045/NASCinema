@@ -2,6 +2,14 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.8.0 - 2026-09-26
+- **Search:** press **Y** on the Big Picture home — type with the on-screen keyboard (or a real one) and results appear as you type. Works for titles and whole series ("potter", "jur park").
+- **Franchises:** a new row on the home screen, Disney+ style — highlight a franchise and its tile comes alive with a slow slideshow of its movies. Open one for a franchise page with every movie in release order.
+- **More in this series, More like this, and Cast** on every movie page (▼ steps through them).
+- **My List:** press the **+** on a movie page to save it for later; your list shows up on the home screen.
+- **Online subtitles:** in the Versions & Audio picker, choose **Search online…** to find and download subtitles for the exact version you're playing.
+- The home screen shows **Y Search · Menu** hints so the shortcuts are easy to find.
+
 ## 0.7.3 - 2026-09-26
 - **Logos line up on the home screen too:** the movie logo at the top of the home screen (and the mouse layout's home) now sits centered over the year · rating · IMDb · RT · quality row.
 

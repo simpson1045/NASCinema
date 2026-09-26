@@ -1,0 +1,202 @@
+# Builds NASCinema's apps on GitHub's machines and publishes a GitHub Release.
+#
+# Why: release builds used to run on a home PC (ALPINE) and could starve it
+# (2026-09-26 — slow HDD + Gradle, two hard resets). Now nobody's machine
+# builds anything; anyone who forks the repo gets the same builds.
+#
+# Release flow:
+#   1. Set `version:` in frontend/pubspec.yaml (e.g. 0.8.0+35) and put the
+#      notes at the top of CHANGELOG.md ("## 0.8.0 - YYYY-MM-DD" …); commit.
+#   2. Tag and push:  git tag v0.8.0 && git push origin main v0.8.0
+#   3. This workflow builds Windows, Android and web in parallel, then
+#      publishes Release v0.8.0 with nascinema-windows.zip,
+#      nascinema-android.apk, nascinema-web.tar.gz and version.json.
+#   4. The server pulls them: deploy.sh --release v0.8.0
+#
+# Android signing: if the ANDROID_DEBUG_KEYSTORE secret (base64 of a
+# debug.keystore) is set, it's used so installed phones accept the update;
+# otherwise the runner's own debug key signs (a one-time reinstall).
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.8.0) — must already exist"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.47.1"
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - id: v
+        name: Read and check the version
+        run: |
+          line=$(grep -E '^version:' frontend/pubspec.yaml | head -1)
+          full=${line#version: }
+          version=${full%%+*}
+          build=${full##*+}
+          echo "pubspec: $full   tag: $TAG"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG doesn't match pubspec version $version"; exit 1
+          fi
+          if ! grep -q "^## $version " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $version' section"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      # The jni plugin's Windows native links the JDK's jvm.lib — needs an x64 JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          architecture: x64
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Zip the Release folder
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath ../nascinema-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: nascinema-windows.zip
+          if-no-files-found: error
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Use the established signing key (if provided)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p ~/.android
+            echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+            echo "Using the provided signing key."
+          else
+            echo "::warning::No ANDROID_DEBUG_KEYSTORE secret — signing with this runner's debug key."
+          fi
+      - run: flutter pub get
+      - run: flutter build apk --release
+      - run: cp build/app/outputs/flutter-apk/app-release.apk ../nascinema-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: nascinema-android.apk
+          if-no-files-found: error
+
+  web:
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build web --pwa-strategy=none
+      - run: tar -czf ../nascinema-web.tar.gz -C build/web .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: nascinema-web.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: [version, windows, android, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: version.json + release notes
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD: ${{ needs.version.outputs.build }}
+        run: |
+          cat > dist/version.json <<EOF
+          {
+              "released_at": "$(date -u +%Y-%m-%d)",
+              "build_number": $BUILD,
+              "android_size": $(stat -c %s dist/nascinema-android.apk),
+              "version": "$VERSION",
+              "windows_size": $(stat -c %s dist/nascinema-windows.zip)
+          }
+          EOF
+          cat dist/version.json
+          # This version's CHANGELOG section becomes the release notes.
+          awk -v v="## $VERSION " 'index($0,v)==1{on=1} on&&/^## /&&index($0,v)!=1{exit} on' CHANGELOG.md > notes.md
+          cat notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: NASCinema ${{ needs.version.outputs.version }}
+          body_path: notes.md
+          files: |
+            dist/nascinema-windows.zip
+            dist/nascinema-android.apk
+            dist/nascinema-web.tar.gz
+            dist/version.json
