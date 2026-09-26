@@ -22,6 +22,7 @@ from ..db import SessionLocal, get_session
 from ..metadata import (
     franchise_name,
     get_collection_art,
+    get_franchise_logo,
     get_movie_logo_info,
     get_related,
     get_movie_videos,
@@ -518,6 +519,13 @@ async def _collections(movies: list[Movie], summ: dict[int, dict]) -> list[dict]
             return await get_collection_art(cid)
 
     arts = await asyncio.gather(*(art(cid) for cid in groups))
+    # Franchise logos take a few TMDB calls each the first time: never make
+    # the home screen wait — fill them in the background, show them next load.
+    for cid, a in zip(groups, arts):
+        if cid not in _franchise_logo_cache() and cid not in _logo_pending:
+            _logo_pending.add(cid)
+            name = franchise_name((a or {}).get("name") or groups[cid][0].collection_name)
+            asyncio.create_task(_fill_franchise_logo(cid, name))
     out = []
     for (cid, ms), a in zip(groups.items(), arts):
         ms = sorted(ms, key=lambda m: (m.year or 9999, m.title))
@@ -528,7 +536,7 @@ async def _collections(movies: list[Movie], summ: dict[int, dict]) -> list[dict]
             "count": len(ms),
             "years": (f"{min(years)}–{max(years)}" if years and min(years) != max(years)
                       else (str(years[0]) if years else None)),
-            "logo": (a or {}).get("logo"),
+            "logo": _franchise_logo_cache().get(cid),
             "backdrop": (a or {}).get("backdrop"),
             "poster": (a or {}).get("poster"),
             "overview": (a or {}).get("overview"),
@@ -538,6 +546,21 @@ async def _collections(movies: list[Movie], summ: dict[int, dict]) -> list[dict]
         })
     out.sort(key=lambda c: (c["popularity"], c["count"]), reverse=True)
     return out
+
+
+_logo_pending: set[int] = set()
+
+
+def _franchise_logo_cache() -> dict[int, str | None]:
+    from ..metadata import _franchise_logo
+    return _franchise_logo
+
+
+async def _fill_franchise_logo(cid: int, name: str) -> None:
+    try:
+        await get_franchise_logo(cid, name)
+    finally:
+        _logo_pending.discard(cid)
 
 
 @router.get("/collections")
@@ -561,12 +584,14 @@ async def get_collection(
     info = (await _collections(ms, summ) or [{}])[0] if len(ms) >= _MIN_FRANCHISE else {}
     a = await get_collection_art(collection_id) or {}
     ordered = sorted(ms, key=lambda m: (m.year or 9999, m.title))
+    name = info.get("name") or franchise_name(a.get("name") or ms[0].collection_name)
     return {
         "id": collection_id,
-        "name": info.get("name") or franchise_name(a.get("name") or ms[0].collection_name),
+        "name": name,
         "count": len(ms),
         "years": info.get("years"),
-        "logo": a.get("logo"),
+        # The franchise page can wait a moment for its logo.
+        "logo": await get_franchise_logo(collection_id, name),
         "backdrop": a.get("backdrop"),
         "overview": a.get("overview"),
         "movies": [summ[m.id] for m in ordered],

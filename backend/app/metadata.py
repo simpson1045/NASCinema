@@ -389,6 +389,70 @@ async def get_collection_art(collection_id: int) -> dict | None:
     return art
 
 
+# collection id -> franchise logo URL (or None when nothing fits).
+_franchise_logo: dict[int, str | None] = {}
+
+
+async def get_franchise_logo(collection_id: int, name: str) -> str | None:
+    """A franchise's logo. TMDB collections have no logos of their own, so:
+    1. a logo shared by 2+ of its movies (the series wordmark — LOTR, Land
+       Before Time), else
+    2. the logo of the movie titled exactly like the franchise ("Star Wars",
+       "Jurassic Park", "Rocky"), else
+    3. the earliest movie whose title starts with the franchise name
+       ("Harry Potter and the Sorcerer's Stone"). None → the tile shows text.
+    Cached per process; a few TMDB calls per franchise the first time."""
+    if collection_id in _franchise_logo:
+        return _franchise_logo[collection_id]
+    key = get_settings().tmdb_api_key
+    if not key:
+        return None
+    img = "https://image.tmdb.org/t/p/w500"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{TMDB_BASE}/collection/{collection_id}",
+                                 params={"api_key": key})
+            r.raise_for_status()
+            parts = [p for p in r.json().get("parts", []) if p.get("id")]
+            parts.sort(key=lambda p: p.get("release_date") or "9999")
+
+            async def english_logos(mid: int) -> list[str]:
+                rr = await client.get(f"{TMDB_BASE}/movie/{mid}/images",
+                                      params={"api_key": key,
+                                              "include_image_language": "en,null"})
+                if rr.status_code != 200:
+                    return []
+                logos = rr.json().get("logos", [])
+                logos.sort(key=lambda lg: (lg.get("iso_639_1") == "en",
+                                           str(lg.get("file_path", "")).endswith(".png"),
+                                           lg.get("vote_average") or 0), reverse=True)
+                return [lg["file_path"] for lg in logos if lg.get("file_path")]
+
+            per_movie = await asyncio.gather(*(english_logos(p["id"]) for p in parts))
+    except (httpx.HTTPError, ValueError):
+        return None  # uncached — retried later
+
+    counts: dict[str, int] = {}
+    for paths in per_movie:
+        for fp in set(paths):
+            counts[fp] = counts.get(fp, 0) + 1
+    shared = max(counts.items(), key=lambda kv: kv[1], default=(None, 0))
+    logo = f"{img}{shared[0]}" if shared[1] >= 2 else None
+
+    if not logo:
+        def norm(t: str) -> str:
+            return " ".join("".join(ch.lower() if ch.isalnum() else " " for ch in t).split())
+        target = norm(name)
+        exact = [i for i, p in enumerate(parts) if norm(p.get("title", "")) == target]
+        prefix = [i for i, p in enumerate(parts) if norm(p.get("title", "")).startswith(target)]
+        for i in exact + prefix:  # parts are already oldest first
+            if per_movie[i]:
+                logo = f"{img}{per_movie[i][0]}"
+                break
+    _franchise_logo[collection_id] = logo
+    return logo
+
+
 def franchise_name(collection_name: str | None) -> str:
     """"Harry Potter Collection" -> "Harry Potter"."""
     n = (collection_name or "").strip()
