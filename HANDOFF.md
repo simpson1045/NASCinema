@@ -3,7 +3,7 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.5.7+23 published (in-app updater); ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.5.8+24 published (in-app updater); ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
@@ -37,7 +37,34 @@ actually are and what's next." Current version: **v0.5.7+23 published (in-app up
   done; rides along with the next deploy. The two files above were corrected
   by hand.
 
-**Still open:** 13 movies on search-picked trailers (Land Before Time, Big
+**Later, Sept 25 — dubbed trailer audio (0.5.8+24):**
+- **Root cause of German trailers:** YouTube auto-dubs trailers (8+ audio
+  tracks); `-S res,br` outranked yt-dlp's default `lang` sort, so the audio
+  track was picked by bitrate and dubs edge out the original by ~0.004 kbps
+  (Empire picked pt-BR). Now `-S lang,res,br`. Deployed (full deploy).
+- The 16 trailers with dub tracks were re-downloaded (same video key). Empire,
+  Inglourious Basterds and Star Wars came back 1080p (YouTube stopped
+  offering 4K), so their old 4K video was remuxed with the new original
+  audio. Originals kept as `data/trailers/<id>.mkv.bak`; the 1080p
+  re-downloads as `<id>.mkv.1080`. **Not deleted — awaiting Matt's "delete".**
+- **Whisper audit of all 166 cached trailers** (faster-whisper small, CPU,
+  venv `D:\Temp\whisper-venv` on ALPINE; `D:\Temp\langcheck.py`,
+  results `D:\Temp\langcheck.tsv`): everything English except
+  **Beverly Hills Cop III** (German — the cached file was `hakuZ8xvJ4Q`
+  "Kino Trailer Deutsch" though source.json said `XH3VbQMv-Nk`). Pinned
+  `BhfZMtv9XuE` (1080p, English by Whisper, frames clean). Low-confidence =
+  no dialogue (Freddie Mercury concert, JW Rebirth teaser, Die Hard 5 promo).
+- **Recipe for future hand-picks:** frames AND Whisper on the audio
+  (`D:\Temp\langcheck_dir.py <folder>`).
+- **0.5.8:** `CursorAutoHide` (frontend/lib/widgets) — any pad press, right
+  stick or key hides the cursor app-wide via a translucent top MouseRegion
+  (beats buttons' own click cursor); mouse movement shows it. Test:
+  `cursor_auto_hide_test.dart`.
+- Stale leftovers in `data/trailers`: ~12 old `*.part` files from Sept 24–25
+  aborted downloads; `data/langclips`, `data/bhc3`, `data/lang_scan.*`,
+  `data/redub.*` scratch. Not deleted.
+
+**Still open:** 13 movies on search-picked trailers (all passed the Whisper English check) (Land Before Time, Big
 Daddy, Big Fat Liar, Coming to America, Home Alone 2, Lethal Weapon 2 & 3,
 Miracle on 34th St, Christmas Vacation, Osmosis Jones, Space Jam, Santa
 Clause 2, Waterboy) — worth an audio-language re-check; Bruce Almighty +
