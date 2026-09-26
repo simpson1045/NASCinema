@@ -7,7 +7,31 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-26 afternoon) — Batch 1 built; releases moved to GitHub Actions
+## Latest (2026-09-26 night) — franchise logos, Mac clone, repo scrub
+
+**Done**
+- Franchise logos (5db3902, deployed 21:11 UTC): TMDB collections have no logos,
+  so `get_franchise_logo` borrows one from the franchise's movies (a logo shared
+  by 2+ parts, else the part titled like the franchise, else the earliest part
+  whose title starts with it). 35/39 franchises have one; Batman (DC Animated),
+  Almighty, Jump Street, Peanuts fall back to text (no usable TMDB logo).
+- Working copy moved: **~/Programming/NASCinema on the Mac**, cloned from GitHub
+  (the source of truth). CLAUDE.local.md copied in (git-ignored); Claude memory
+  copied to the new project path. The ALPINE checkout is no longer the working
+  copy — nothing in it was deleted.
+- Public-repo scrub (f3e7dfc): internal network details moved to CLAUDE.local.md.
+- deploy.sh pulls backend code from GitHub (push first, then deploy).
+
+**ALPINE checkout — untracked leftovers (not in git, kept; Matt decides):**
+backend/cleanup_stale.py, fix_trailer_audio.ps1, repair_run.py, repair_log.txt,
+repair_manifest.json, scan_once.py, scan_result.json, restart_*.log,
+release_out.log, frontend/build_web.pid, frontend/web/{favicon.png,icons/,manifest.json}.
+
+**Next:** bump GitHub Actions (Node 20 warnings); Batch 2 (Roku catch-up);
+Batch 3 (Track Manager, TV shows plan, Prowlarr/Transmission); library rescan
+(waiting on the other Claude); git-history scrub is Matt's call.
+
+## Earlier (2026-09-26 afternoon) — Batch 1 built; releases moved to GitHub Actions
 
 - **Batch 1 (0.8.0):** Big Picture search (Y), Franchises row (animated
   BpFranchiseTile) + franchise pages + "More in <series>", Cast + "More like
