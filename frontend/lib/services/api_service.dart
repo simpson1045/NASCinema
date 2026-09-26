@@ -336,6 +336,54 @@ class ApiService {
     }
   }
 
+  /// Queue Track Manager strips. `fileIds == null` = "Strip all" (every
+  /// worthwhile file). Returns {queued: [...], skipped: [...]}.
+  Future<Map<String, dynamic>> queueStrip(List<int>? fileIds) async {
+    final r = await http
+        .post(_u('/api/track-manager/strip'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'file_ids': fileIds}))
+        .timeout(const Duration(seconds: 40));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// Strip jobs + worker state: {worker, totals, jobs}.
+  Future<Map<String, dynamic>> getStripJobs() async {
+    final r = await http
+        .get(_u('/api/track-manager/jobs'))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return jsonDecode(r.body) as Map<String, dynamic>;
+  }
+
+  /// `action`: "cancel" (a queued job) or "undo" (a finished strip).
+  Future<void> stripJobAction(int jobId, String action) async {
+    final r = await http
+        .post(_u('/api/track-manager/jobs/$jobId/$action'))
+        .timeout(const Duration(seconds: 10));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+  }
+
+  /// "Confirm & free space": delete the kept originals of finished strips
+  /// (`jobIds == null` = all of them).
+  Future<void> confirmStrips(List<int>? jobIds) async {
+    final r = await http
+        .post(_u('/api/track-manager/confirm'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'job_ids': jobIds}))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+  }
+
   /// Download a chosen subtitle; returns {id, label, lang, url}.
   Future<Map<String, dynamic>> downloadSubtitle(
       int fileId, int osFileId, String language) async {
