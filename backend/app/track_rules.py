@@ -18,9 +18,14 @@ import re
 # Untagged tracks that are really dubs/voiceovers (Cyrillic, or the usual
 # Russian voiceover markers). Sorcerer's Stone had an untagged 'DVO, LDV /
 # "Легендарный"' track as audio #1 — it survived an "eng + und" rule and played
-# by default.
+# by default. Spelled-out language names count too (Matt, 2026-09-26): an
+# untagged track titled "Russian" or "Castellano" is as much a dub as "rus".
+# [Ѐ-ӿ] is the Cyrillic block, U+0400–U+04FF.
 DUB_RE = re.compile(
-    r"[Ѐ-ӿ]|\b(dvo|mvo|avo|dub|dubbed|voice.?over|gavrilov|volodarsky|rus|ukr)\b",
+    r"[Ѐ-ӿ]|\b(dvo|mvo|avo|dub|dubbed|voice.?over|gavrilov|volodarsky|rus|ukr"
+    r"|russian|ukrainian|french|fran[cç]ais|german|deutsch|spanish|espa[nñ]ol|castellano"
+    r"|latino|italian|italiano|portuguese|portugu[eê]s|japanese|chinese|mandarin|cantonese"
+    r"|korean|polish|polski|czech|hungarian|magyar|turkish|greek|hindi|thai)\b",
     re.IGNORECASE,
 )
 

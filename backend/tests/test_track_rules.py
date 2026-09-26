@@ -42,10 +42,13 @@ class Rules(unittest.TestCase):
         for title in ("", "Surround 5.1", "Original Mono", "Director's Commentary"):
             self.assertTrue(keep_track(a(1, "und", title))[0], title)
 
-    def test_spelled_out_language_names_are_not_dub_markers(self):
-        # Spec regex as written: \brus\b doesn't match "Russian". Pinned so a
-        # change is deliberate (asked Matt 2026-09-26).
-        self.assertTrue(keep_track(a(1, "und", "Russian"))[0])
+    def test_spelled_out_language_names_are_dubs(self):
+        # Matt, 2026-09-26: "Russian" spelled out is as foreign as "rus".
+        for title in ("Russian", "Ukrainian 5.1", "French", "Français", "Castellano",
+                      "Latino", "Español", "German DTS", "Japanese"):
+            self.assertFalse(keep_track(a(1, "und", title))[0], title)
+        for title in ("English", "Stereo", "Original", "Director's Commentary"):
+            self.assertTrue(keep_track(a(1, "und", title))[0], title)
 
     def test_foreign_tagged_tracks_drop(self):
         p = plan_file(MOVIE, 7200, [V, a(1, "eng", default=True), a(2, "rus"),
