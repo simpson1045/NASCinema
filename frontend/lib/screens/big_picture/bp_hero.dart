@@ -63,6 +63,24 @@ class BpHeroState extends State<BpHero> {
   Movie? get current =>
       _follow ?? (_items.isEmpty ? null : _items[_i]);
 
+  /// What the hero is showing, for a flag: the movie, and — if its trailer is
+  /// on screen — which cached trailer and how far into it.
+  Map<String, Object?> flagInfo() {
+    final m = current;
+    return {
+      'hero_movie_id': m?.id,
+      'hero_movie_title': m?.title,
+      'hero_fullscreen': _full,
+      if (_trailerShown && m != null) ...{
+        'kind': 'trailer',
+        'movie_id': m.id,
+        'movie_title': m.title,
+        'position_seconds': _trailer.positionSeconds,
+        'trailer_url': m.trailerUrl,
+      },
+    };
+  }
+
   /// Show [movie] (the highlighted rail tile) — or null to go back to the
   /// featured rotation. Backdrop crossfades after a short settle; its trailer
   /// follows after the usual beat if the server has one cached.

@@ -11,6 +11,7 @@ import '../models/video.dart';
 import '../services/api_service.dart';
 import '../services/cast_actions.dart';
 import '../services/cast_controller.dart';
+import '../services/flag_service.dart';
 import '../theme/app_theme.dart';
 import 'player_screen.dart';
 import 'trailer_picker.dart';
@@ -47,9 +48,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   @override
   void initState() {
     super.initState();
+    FlagService.register(this, 'movie-detail', widget.baseUrl,
+        () => {'movie_id': widget.movie.id, 'movie_title': widget.movie.title});
     _blurayUrl = widget.movie.blurayUrl;
     _trailerPin = widget.movie.trailerYoutube;
     _load();
+  }
+
+  @override
+  void dispose() {
+    FlagService.unregister(this);
+    super.dispose();
   }
 
   /// YouTube id from a URL or bare key (to match a pin against the video list).

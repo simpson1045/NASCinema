@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/home.dart';
 import '../services/api_service.dart';
 import '../services/cast_controller.dart';
+import '../services/flag_service.dart';
 import '../services/fullscreen.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
@@ -31,8 +32,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   void initState() {
     super.initState();
+    FlagService.register(this, 'library', widget.baseUrl);
     _future = _api.getHome();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
+  }
+
+  @override
+  void dispose() {
+    FlagService.unregister(this);
+    super.dispose();
   }
 
   Future<void> _refresh() async {

@@ -7,6 +7,7 @@ import '../../models/extra.dart';
 import '../../models/movie.dart';
 import '../../models/movie_file.dart';
 import '../../services/api_service.dart';
+import '../../services/flag_service.dart';
 import '../../services/gamepad/pad_dispatch.dart';
 import '../../theme/app_theme.dart';
 import '../hero_trailer.dart';
@@ -53,12 +54,15 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     super.initState();
     _logo = _m.logo;
     PadDispatch.add(_onPad);
+    FlagService.register(this, 'bp-movie', widget.baseUrl,
+        () => {'movie_id': _m.id, 'movie_title': _m.title});
     _load();
   }
 
   @override
   void dispose() {
     PadDispatch.remove(_onPad);
+    FlagService.unregister(this);
     _focus.dispose();
     super.dispose();
   }
@@ -104,6 +108,8 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     } else {
       _open(_BpTrailerScreen(
         url: '${widget.baseUrl}/api/movies/${_m.id}/trailer',
+        baseUrl: widget.baseUrl,
+        movie: _m,
       ));
     }
   }
@@ -133,7 +139,6 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       case PadButton.a:
         _activate();
       case PadButton.b:
-      case PadButton.view:
         Navigator.of(context).maybePop();
       default:
         return false;
@@ -516,9 +521,12 @@ class _ExtraCard extends StatelessWidget {
 /// A movie's trailer, fullscreen with sound, never cropped. B/Esc closes it;
 /// it closes itself when the trailer ends or can't be played.
 class _BpTrailerScreen extends StatefulWidget {
-  const _BpTrailerScreen({required this.url});
+  const _BpTrailerScreen(
+      {required this.url, required this.baseUrl, required this.movie});
 
   final String url;
+  final String baseUrl;
+  final Movie movie;
 
   @override
   State<_BpTrailerScreen> createState() => _BpTrailerScreenState();
@@ -537,12 +545,20 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   void initState() {
     super.initState();
     PadDispatch.add(_onPad);
+    FlagService.register(this, 'bp-trailer', widget.baseUrl, () => {
+          'kind': 'trailer',
+          'movie_id': widget.movie.id,
+          'movie_title': widget.movie.title,
+          'position_seconds': _player.positionSeconds,
+          'trailer_url': widget.url,
+        });
     unawaited(_player.open(widget.url, muted: false));
   }
 
   @override
   void dispose() {
     PadDispatch.remove(_onPad);
+    FlagService.unregister(this);
     _player.dispose();
     _focus.dispose();
     super.dispose();
@@ -554,7 +570,7 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
 
   bool _onPad(PadButton b) {
     if (!_focus.hasPrimaryFocus) return false;
-    if (b == PadButton.b || b == PadButton.view || b == PadButton.a) {
+    if (b == PadButton.b || b == PadButton.a) {
       _close();
       return true;
     }

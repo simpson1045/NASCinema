@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../models/home.dart';
 import '../../models/movie.dart';
 import '../../services/api_service.dart';
+import '../../services/flag_service.dart';
 import '../../services/fullscreen.dart';
 import '../../services/gamepad/pad_dispatch.dart';
 import '../../services/update_service.dart';
@@ -64,6 +65,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     super.initState();
     setFullscreen(true);
     PadDispatch.add(_onPad);
+    FlagService.register(this, 'bp-home', widget.baseUrl, _flagInfo);
     _load();
     if (widget.initialData == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
@@ -73,8 +75,23 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   @override
   void dispose() {
     PadDispatch.remove(_onPad);
+    FlagService.unregister(this);
     _focus.dispose();
     super.dispose();
+  }
+
+  /// For a flag: the highlighted tile, plus the hero (movie, trailer, time).
+  Map<String, Object?> _flagInfo() {
+    final rail = _rails.isEmpty ? null : _rails[_rail];
+    final m = rail == null || rail.movies.isEmpty
+        ? null
+        : rail.movies[_itemOf(_rail)];
+    return {
+      'movie_id': m?.id,
+      'movie_title': m?.title,
+      'rail': rail?.title,
+      ...?_heroKey.currentState?.flagInfo(),
+    };
   }
 
   Future<void> _load() async {
@@ -189,7 +206,6 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       case PadButton.a:
         _select();
       case PadButton.b:
-      case PadButton.view:
         _back();
       case PadButton.start:
         _openMenu();

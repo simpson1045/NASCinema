@@ -42,6 +42,10 @@ class TrailerPlayer {
 
   bool get supported => true;
 
+  /// Where the current trailer is, in seconds (for flags).
+  double get positionSeconds =>
+      (_player?.state.position.inMilliseconds ?? 0) / 1000;
+
   /// Serialize every player operation — no two ever overlap.
   Future<void> _run(Future<void> Function() op) =>
       _queue = _queue.then((_) => _disposed ? null : op()).catchError((_) {});

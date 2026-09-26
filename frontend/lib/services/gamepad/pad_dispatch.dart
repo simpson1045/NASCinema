@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../flag_service.dart';
 import 'gamepad.dart';
 
 export 'gamepad.dart';
@@ -65,6 +66,11 @@ class PadDispatch {
   static void remove(PadHandler h) => _handlers.remove(h);
 
   static void _dispatch(PadButton b) {
+    // View is the flag button everywhere — nothing else gets it.
+    if (b == PadButton.view) {
+      FlagService.flag();
+      return;
+    }
     for (final h in _handlers.reversed) {
       if (h(b)) return;
     }
@@ -82,7 +88,6 @@ class PadDispatch {
       case PadButton.a:
         if (ctx != null) Actions.maybeInvoke(ctx, const ActivateIntent());
       case PadButton.b:
-      case PadButton.view:
         if (ctx != null) Navigator.maybeOf(ctx)?.maybePop();
       default:
         break;

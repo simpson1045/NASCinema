@@ -16,6 +16,8 @@ class TrailerPlayer {
 
   bool get supported => false;
 
+  double get positionSeconds => 0;
+
   Future<void> open(String url, {required bool muted}) async {}
 
   Future<void> setMuted(bool muted) async {}

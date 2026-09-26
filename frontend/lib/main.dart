@@ -13,6 +13,7 @@ import 'services/gamepad/pad_dispatch.dart';
 import 'services/server_config.dart';
 import 'theme/app_theme.dart';
 import 'widgets/cursor_auto_hide.dart';
+import 'widgets/flag_host.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,8 +46,9 @@ class NasCinemaApp extends StatelessWidget {
         title: 'NASCinema',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,
-        // Cursor hides while the controller/keyboard drives the app.
-        builder: (_, child) => CursorAutoHide(child: child!),
+        // Cursor hides while the controller/keyboard drives the app; View / F8
+        // raises a flag from anywhere (FlagHost).
+        builder: (_, child) => CursorAutoHide(child: FlagHost(child: child!)),
         home: const ConnectScreen(),
       ),
     );

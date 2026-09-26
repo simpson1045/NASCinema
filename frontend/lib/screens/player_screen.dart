@@ -11,6 +11,7 @@ import '../services/api_service.dart';
 import '../services/cast/cast_device.dart';
 import '../services/cast_actions.dart';
 import '../services/cast_controller.dart';
+import '../services/flag_service.dart';
 import '../theme/app_theme.dart';
 import 'cast_picker.dart';
 import 'player/player_view.dart';
@@ -118,6 +119,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    FlagService.register(this, 'player', widget.baseUrl, () => {
+          'kind': 'movie',
+          'media_file_id': widget.fileId,
+          'movie_title': widget.title,
+          'position_seconds': _position,
+          'mode': _mode,
+          'source': _source,
+          'reason': _reason,
+          'paused': _paused,
+          'client_stats': _clientStats,
+        });
     _cast = context.read<CastController>();
     if (_nativeVideo) HardwareKeyboard.instance.addHandler(_screenKeys);
     _load();
@@ -157,6 +169,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    FlagService.unregister(this);
     _saveProgress(); // capture the resume point on the way out
     _poll?.cancel();
     _cachePoll?.cancel();
