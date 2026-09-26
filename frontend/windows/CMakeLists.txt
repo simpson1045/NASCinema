@@ -106,3 +106,12 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# The native movie player's on-video UI (uosc + thumbfast, NASCinema theme):
+# mpv is launched with --config-dir=<exe dir>/mpv-config. Re-copied fresh each
+# build so removed files don't linger.
+install(CODE "
+  file(REMOVE_RECURSE \"${CMAKE_INSTALL_PREFIX}/mpv-config\")
+  " COMPONENT Runtime)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/mpv-config"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)

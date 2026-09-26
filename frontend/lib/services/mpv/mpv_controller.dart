@@ -154,8 +154,11 @@ class MpvController {
         // fullscreen tests looked right because they mode-switched the TV).
         '--target-colorspace-hint=yes',
         if (Directory('$exeDir${Platform.pathSeparator}mpv-config')
-            .existsSync())
+            .existsSync()) ...[
           '--config-dir=$exeDir${Platform.pathSeparator}mpv-config',
+          // thumbfast decodes seek thumbnails in a second mpv — the same one.
+          '--script-opts=thumbfast-mpv_path=$mpvPath',
+        ],
       ] else ...[
         // Own-window (M1 stepping stone): mpv keeps its native keys + OSC so
         // the fullscreen window is controllable directly.
@@ -253,6 +256,10 @@ class MpvController {
     ipc.observe('audio-bitrate',
         (v) => audioBitrate = (v as num?)?.toDouble() ?? 0);
     ipc.observe('hwdec-current', (v) => hwdec = v?.toString() ?? '');
+    // uosc publishes the open menu's type here (null/absent when closed), so
+    // the controller can drive the menu instead of the movie.
+    ipc.observe('user-data/uosc/menu/type',
+        (v) => menuOpen = v != null && v.toString().isNotEmpty);
     // uosc's fullscreen button flips mpv's own property — undo it and hand
     // the intent to the app window instead.
     ipc.observe('fullscreen', (v) {
@@ -332,6 +339,23 @@ class MpvController {
 
   void togglePlay() => _ipc?.command(['cycle', 'pause']);
 
+  /// Relative seek (controller skips), keyframe-fast.
+  void seekBy(double seconds) => _ipc?.command(['seek', seconds, 'relative']);
+
+  /// Previous/next chapter.
+  void chapter(int delta) => _ipc?.command(['add', 'chapter', delta]);
+
+  /// Run a uosc binding: menu, audio, subtitles, chapters, flash-timeline,
+  /// flash-ui, flash-pause-indicator, toggle-ui …
+  void uosc(String binding) =>
+      _ipc?.command(['script-binding', 'uosc/$binding']);
+
+  /// Synthetic key into mpv's input (uosc's open menu binds UP/DOWN/ENTER/ESC).
+  void keypress(String key) => _ipc?.command(['keypress', key]);
+
+  /// True while a uosc menu is open (observed from uosc's user-data).
+  bool menuOpen = false;
+
   void setPaused(bool p) => _ipc?.set('pause', p);
 
   /// 0..1 like the web `<video>`; mpv wants 0..100.
@@ -364,8 +388,13 @@ class MpvController {
 
   /// Host-driven OSC visibility — deterministic show-on-move/hide-on-idle
   /// instead of trusting mpv's hover detection with synthetic events.
-  void setOscVisible(bool visible) => _ipc?.command(
-      ['script-message', 'osc-visibility', visible ? 'always' : 'never', 'no-osd']);
+  void setOscVisible(bool visible) {
+    _ipc?.command(['script-message', 'osc-visibility',
+        visible ? 'always' : 'never', 'no-osd']);
+    // uosc's own knob: hold every element visible, or let proximity decide.
+    _ipc?.command(['script-message-to', 'uosc', 'set-min-visibility',
+        visible ? '1' : '0']);
+  }
 
   /// mpv's built-in stats page, rendered inside the video itself — the only
   /// place an overlay can live above the native airspace.

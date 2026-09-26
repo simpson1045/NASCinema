@@ -12,6 +12,7 @@ import '../services/cast/cast_device.dart';
 import '../services/cast_actions.dart';
 import '../services/cast_controller.dart';
 import '../services/flag_service.dart';
+import '../services/gamepad/pad_dispatch.dart';
 import '../theme/app_theme.dart';
 import 'cast_picker.dart';
 import 'player/player_view.dart';
@@ -119,6 +120,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    PadDispatch.add(_onPad);
     FlagService.register(this, 'player', widget.baseUrl, () => {
           'kind': 'movie',
           'media_file_id': widget.fileId,
@@ -169,6 +171,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    PadDispatch.remove(_onPad);
     FlagService.unregister(this);
     _saveProgress(); // capture the resume point on the way out
     _poll?.cancel();
@@ -181,6 +184,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     removePlayerKeys();
     super.dispose();
   }
+
+  /// Controller → the native player (and its on-video menus). Unhandled
+  /// presses (B with no menu open) fall through to the default: back out.
+  bool _onPad(PadButton b) => _nativeVideo && playerPad(b);
 
   /// Persist the local playback position + active subtitle for resume. Skips
   /// the very start/end so we don't clobber a good resume point with 0.

@@ -4,6 +4,8 @@ import 'dart:ui_web' as ui_web;
 import 'package:flutter/widgets.dart';
 import 'package:web/web.dart' as web;
 
+import '../../services/gamepad/pad_button.dart';
+
 @JS('nascinemaAttachHls')
 external void _attachHls(web.HTMLVideoElement video, String url);
 
@@ -210,3 +212,6 @@ Map<String, String> playerStats() {
   if (v.videoWidth > 0) out['Video out'] = '${v.videoWidth}×${v.videoHeight}';
   return out;
 }
+
+/// No native player here — the screen handles the controller itself.
+bool playerPad(PadButton b) => false;

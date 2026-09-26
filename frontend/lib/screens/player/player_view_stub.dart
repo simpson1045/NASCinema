@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/gamepad/pad_button.dart';
+
 /// Native fallback. Desktop/mobile will use media_kit (libmpv) for real
 /// direct-play; until then, this is a placeholder.
 Widget buildPlayerView(String url, bool isHls) {
@@ -35,3 +37,6 @@ bool playerToggleNativeStats() => false;
 void playerSetSubtitle(String url) {}
 void playerClearSubtitle() {}
 void playerSetSubtitleOffset(double seconds) {}
+
+/// No native player here — the screen handles the controller itself.
+bool playerPad(PadButton b) => false;

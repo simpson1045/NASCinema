@@ -7,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../services/fullscreen.dart' as shell;
+import '../../services/gamepad/pad_button.dart';
 import '../../services/mpv/embed_window.dart';
 import '../../services/mpv/mpv_controller.dart';
 import '../../services/theater/theater_control.dart';
@@ -527,4 +528,69 @@ Map<String, String> playerStats() {
     out['Audio bitrate'] = '${(s.audioBitrate! / 1000).round()} kbps';
   }
   return out;
+}
+
+
+// ---------------------------------------------------------------------------
+// controller (Xbox pad) → the native player + its uosc UI
+// ---------------------------------------------------------------------------
+
+// Set when WE open a uosc menu, so the D-pad drives it even if uosc's
+// menu-state property isn't observable on some build. Cleared on close.
+bool _menuHint = false;
+
+/// Drive the movie player from the controller. Returns true when handled;
+/// false leaves the press to the screen (B = leave the player).
+///
+///   A play/pause · ←/→ skip 10 s · LB/RB chapter · X audio · Y subtitles ·
+///   Start menu · ↑/↓ show the controls. With a menu open, the D-pad/A/B
+///   navigate it instead.
+bool playerPad(PadButton b) {
+  final c = _mpv;
+  if (!_useMpv || c == null) return false;
+  if (c.menuOpen || _menuHint) {
+    const keys = {
+      PadButton.up: 'UP', PadButton.down: 'DOWN',
+      PadButton.left: 'LEFT', PadButton.right: 'RIGHT',
+      PadButton.a: 'ENTER', PadButton.b: 'ESC',
+    };
+    final k = keys[b];
+    if (k == null) return true; // swallow others while a menu is up
+    c.keypress(k);
+    if (b == PadButton.b || b == PadButton.a) _menuHint = false;
+    return true;
+  }
+  switch (b) {
+    case PadButton.a:
+      c.togglePlay();
+      c.uosc('flash-pause-indicator');
+      c.uosc('flash-timeline');
+    case PadButton.left:
+      c.seekBy(-10);
+      c.uosc('flash-timeline');
+    case PadButton.right:
+      c.seekBy(10);
+      c.uosc('flash-timeline');
+    case PadButton.lb:
+      c.chapter(-1);
+      c.uosc('flash-timeline');
+    case PadButton.rb:
+      c.chapter(1);
+      c.uosc('flash-timeline');
+    case PadButton.up:
+    case PadButton.down:
+      c.uosc('flash-ui');
+    case PadButton.x:
+      _menuHint = true;
+      c.uosc('audio');
+    case PadButton.y:
+      _menuHint = true;
+      c.uosc('subtitles');
+    case PadButton.start:
+      _menuHint = true;
+      c.uosc('menu');
+    default:
+      return false;
+  }
+  return true;
 }
