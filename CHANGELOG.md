@@ -2,6 +2,9 @@
 
 The in-app updater shows the newest `## ` section below. Newest on top.
 
+## 0.6.3 - 2026-09-25
+- **Fullscreen logos line up:** the movie logo now sits centered over the year · IMDb · Rotten Tomatoes · quality row, whatever their widths.
+
 ## 0.6.2 - 2026-09-25
 - **Trailer button fixed:** only true HDR trailers switch to the HDR player now — no more screen glitch on regular trailers. In HDR trailers the controller works (A pause, ←/→ skip, B back) and the controls show up.
 - **Sequel logos:** movies whose only logo is the series logo (like *The Land Before Time VIII*) now show their subtitle in gold underneath — and most sequels get their own proper logo instead of the series one.
