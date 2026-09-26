@@ -407,9 +407,11 @@ class _Info extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(width: 520, height: 150, child: _logoOrTitle()),
-        const SizedBox(height: 22),
-        bpMetaRow(movie),
+        // Logo centred over the rating row (house rule); overview stays left.
+        bpLogoOver(
+            logo: _logoOrTitle(centered: true),
+            below: bpMetaRow(movie),
+            maxWidth: 760),
         if (!compact && overview.isNotEmpty) ...[
           const SizedBox(height: 22),
           SizedBox(

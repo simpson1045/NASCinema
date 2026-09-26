@@ -1,6 +1,6 @@
 title=NASCinema
 major_version=0
 minor_version=1
-build_version=10
+build_version=11
 ui_resolutions=fhd
 # Backend base URL is set in components/MainScene.brs (m.base).

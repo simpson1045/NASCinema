@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/home.dart';
 import '../models/movie.dart';
 import '../theme/app_theme.dart';
+import 'big_picture/bp_hero.dart' show bpLogoOver;
 import 'hero_trailer.dart';
 import 'movie_detail_screen.dart';
 
@@ -385,9 +386,15 @@ class _HeroContent extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _titleOrLogo(movie),
-        const SizedBox(height: 14),
-        Wrap(spacing: 8, runSpacing: 8, children: ratingChips(movie)),
+        // Logo centred over the rating chips (house rule).
+        bpLogoOver(
+          logo: _titleOrLogo(movie),
+          below: Wrap(spacing: 8, runSpacing: 8, children: ratingChips(movie)),
+          logoHeight: 130,
+          gap: 14,
+          minWidth: 300,
+          maxWidth: 660,
+        ),
         if (movie.overview != null && movie.overview!.isNotEmpty) ...[
           const SizedBox(height: 14),
           ConstrainedBox(
@@ -419,25 +426,23 @@ class _HeroContent extends StatelessWidget {
 
   Widget _titleOrLogo(Movie m) {
     if (m.logo != null && m.logo!.isNotEmpty) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, maxHeight: 130),
-        child: Image.network(
-          m.logo!,
-          alignment: Alignment.centerLeft,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => _titleText(m),
-        ),
+      return Image.network(
+        m.logo!,
+        alignment: Alignment.bottomCenter,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => _titleText(m),
       );
     }
     return _titleText(m);
   }
 
-  Widget _titleText(Movie m) => ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 700),
+  Widget _titleText(Movie m) => Align(
+        alignment: Alignment.bottomCenter,
         child: Text(
           m.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 38,

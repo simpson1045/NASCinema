@@ -57,25 +57,32 @@ sub setMode(fs as boolean)
         m.logo.translation = [90, 790]
         m.title.translation = [92, 850]
         m.meta.translation = [92, 975]   ' clears the 150px-tall logo slot + a gap
-        centerFullscreenInfo()
     else
         m.logo.translation = [90, 110]
         m.title.translation = [92, 170]
         m.meta.translation = [92, 288]
     end if
+    centerInfo()
 end sub
 
-' Fullscreen: the logo sits centered over the year/IMDb/RT/quality row. The
-' block is as wide as the wider of the two (the 520px logo box draws its image
-' centered) and both center in it, so nothing moves left of the usual edge.
-sub centerFullscreenInfo()
-    if m.fs = invalid or not m.fs then return
+' Home and fullscreen: the logo sits centered over the year/rating/IMDb/RT/
+' quality row. The block is as wide as the wider of the two (the 520px logo
+' box draws its image centered) and both center in it, so nothing moves left
+' of the usual edge.
+sub centerInfo()
+    if m.fs = invalid then return
     w = metaWidth()
     if w <= 0 then return
     b = 520
     if w > b then b = w
-    m.logo.translation = [90 + Int((b - 520) / 2), 790]
-    m.meta.translation = [92 + Int((b - w) / 2), 975]
+    logoY = 110
+    metaY = 288
+    if m.fs then
+        logoY = 790
+        metaY = 975
+    end if
+    m.logo.translation = [90 + Int((b - 520) / 2), logoY]
+    m.meta.translation = [92 + Int((b - w) / 2), metaY]
 end sub
 
 ' The meta row's width, summed from its children (a LayoutGroup's own
@@ -308,7 +315,7 @@ sub buildMeta(it as object)
 
     q = qualityTag(it)
     if q <> "" then addMetaText(q)
-    centerFullscreenInfo()
+    centerInfo()
 end sub
 
 ' Content rating (PG-13, R …) in an outlined box, like the TV's ratings bug.
