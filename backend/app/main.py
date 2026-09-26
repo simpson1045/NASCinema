@@ -23,6 +23,7 @@ from .api.progress import router as progress_router
 from .api.renderer import router as renderer_router
 from .api.stream import router as stream_router
 from .api.subtitles import router as subtitles_router
+from .api.track_manager import router as track_manager_router
 from .api.update import router as update_router
 from .config import get_settings
 from .db import engine
@@ -81,6 +82,7 @@ def create_fastapi() -> FastAPI:
     app.include_router(progress_router)
     app.include_router(renderer_router)
     app.include_router(flags_router)
+    app.include_router(track_manager_router)
 
     # Cast receiver debug pipe: the branded receiver POSTs each on-screen debug
     # line here so we can read what happened on the TV without chrome://inspect.

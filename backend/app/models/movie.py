@@ -63,6 +63,8 @@ class Movie(Base):
     # A manual match the user locked in — must survive rescans (the thing
     # Jellyfin nukes). See README "Design principles".
     locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Track Manager: never strip this movie's tracks (docs/SPEC-track-manager.md).
+    track_protect: Mapped[bool] = mapped_column(Boolean, default=False)
 
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
