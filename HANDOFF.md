@@ -7,7 +7,7 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-26 late night) — Batch 2: Roku 0.2.0
+## Latest (2026-09-26 late night) — Batch 2: Roku 0.2.1 (complete)
 
 **Done**
 - Roku had **no movie page** (every poster played instantly; git shows it never
@@ -31,7 +31,12 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 playback; embedded-subtitle mapping (by order of text tracks) — /cast/log
 lines "subs: want …" and "audio: viewer picked …" show what happened.
 
-**Next:** Franchises row on Roku (needs a franchise page) — stretch; Batch 3.
+- 0.2.1: Franchises row (after Continue Watching, like ELKO) + FranchiseScreen
+  (logo over 'N movies · years', posters in release order; Back from a movie
+  returns to it).
+
+**Next:** Batch 3 — Track Manager (read docs/SPEC-track-manager.md first), TV
+shows plan (needs a session with Matt), Prowlarr/Transmission from NASRadio.
 
 ## Earlier (2026-09-26 night) — franchise logos, Mac clone, repo scrub
 

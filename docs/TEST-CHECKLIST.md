@@ -75,7 +75,7 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 - [ ] 👀 Subtitle sync is right (hash matches should be exact; title-only matches may drift — say which movie).
 
 
-## Batch 2 — Roku 0.2.0 (sideload ~/Downloads/NASCinema-roku.zip) — ✅ brighterscript lint (CI)
+## Batch 2 — Roku 0.2.1 (sideload ~/Downloads/NASCinema-roku.zip) — ✅ brighterscript lint (CI)
 
 ### Movie page
 - [ ] 👀 OK on any poster **or the hero** opens a movie page (no more instant play): backdrop, logo centered over the rating row, overview, then a line like "4K HDR · Audio: Auto · Subtitles: Off".
@@ -94,3 +94,8 @@ Legend: 🖥️ ELKO (Big Picture) · 📺 Roku · ✅ verified by Claude (tests
 ### Resume
 - [ ] 👀 Watch a few minutes, Back → the page now says **Resume <time>**; Resume picks up there. Same position shows in the ELKO app's Continue Watching.
 - [ ] 👀 Finish a movie (or stop in the last 5%) → back to plain **Play**.
+
+### Franchises (Roku)
+- [ ] 👀 Home has a **Franchises** row (first row, or right after Continue Watching): wide cards with the franchise backdrop and its logo centered on it; name instead of a logo for Batman (DC Animated), Almighty, Jump Street, Peanuts. Label underneath "Harry Potter · 8 movies".
+- [ ] 👀 OK on a card → franchise page: logo centered over "8 movies · 2001–2011", overview, posters in release order. OK on a poster → its movie page; **Back returns to the franchise page**, Back again → home.
+- [ ] 👀 * on the franchise page → Flag a problem.
