@@ -17,7 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ..db import get_session
+from .. import apple_trailers
+from ..db import SessionLocal, get_session
 from ..metadata import get_movie_logo, get_movie_videos
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
@@ -27,8 +28,11 @@ from ..trailers import (
     ensure_trailer,
     is_cached,
     measure_bars,
+    serve_file,
     trailer_bars,
+    trailer_source,
     trailer_version,
+    upgrade_to_apple,
 )
 
 router = APIRouter(prefix="/api", tags=["library"])
@@ -262,10 +266,11 @@ async def get_movie(
 
 @router.get("/movies/{movie_id}/trailer")
 async def movie_trailer(
-    movie_id: int, session: AsyncSession = Depends(get_session)
+    movie_id: int, variant: str = "sdr", session: AsyncSession = Depends(get_session)
 ) -> FileResponse:
-    """Serve the cached trailer MP4, downloading it via yt-dlp on first request.
-    The featured hero plays this. 404 if the movie has no usable trailer."""
+    """Serve the cached trailer, fetching it on first request. SDR by default —
+    every client can show it; `?variant=hdr` gets the HDR master when there is
+    one (Roku / the native player). 404 if the movie has no usable trailer."""
     movie = await session.scalar(select(Movie).where(Movie.id == movie_id))
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
@@ -275,7 +280,7 @@ async def movie_trailer(
     if not path:
         raise HTTPException(status_code=404, detail="No trailer available")
     return FileResponse(
-        path,
+        serve_file(movie_id, hdr=variant == "hdr"),
         media_type="video/x-matroska",
         headers={"Cache-Control": "no-cache"},
     )
@@ -366,3 +371,64 @@ async def trigger_reprobe(limit: int | None = None, all: bool = False) -> dict:
     """Fill media_streams (+ edition labels) for files already in the library.
     Default = only files with no stream rows; ?all=true re-probes everything."""
     return await reprobe(limit, only_missing=not all)
+
+
+# --- Apple TV trailer upgrade (library-wide, background) ----------------------
+
+_upgrade: dict = {"running": False}
+
+
+async def _run_upgrade(replace_pins: bool, limit: int | None) -> None:
+    st = _upgrade
+    try:
+        async with SessionLocal() as session:
+            movies = (await session.scalars(select(Movie).order_by(Movie.id))).all()
+        todo = [m for m in movies if m.tmdb_id and (replace_pins or not m.trailer_youtube)]
+        if limit:
+            todo = todo[:limit]
+        st.update(total=len(todo), done=0, apple=0, already=0, none=0, current=None)
+        # One batched Wikidata lookup for the whole library up front.
+        await apple_trailers.resolve_ids([m.tmdb_id for m in todo])
+        for m in todo:
+            st["current"] = m.title
+            result = await upgrade_to_apple(m.id, m.tmdb_id)
+            st[result] += 1
+            if result == "apple" and m.trailer_youtube:
+                # Apple replaced a YouTube pin — drop the pin so it stays Apple.
+                async with SessionLocal() as session:
+                    row = await session.get(Movie, m.id)
+                    if row:
+                        row.trailer_youtube = None
+                        await session.commit()
+                st.setdefault("unpinned", []).append({"id": m.id, "title": m.title,
+                                                      "was": m.trailer_youtube})
+            st["done"] += 1
+    except Exception as e:  # report, don't die silently
+        st["error"] = repr(e)
+    finally:
+        st["running"] = False
+        st["current"] = None
+
+
+@router.post("/trailers/apple-upgrade")
+async def start_apple_upgrade(replace_pins: bool = False, limit: int | None = None) -> dict:
+    """Swap every movie's trailer for Apple TV's where Apple has one (keeps the
+    current trailer otherwise). replace_pins also upgrades manually pinned
+    movies and clears their pin. Runs in the background — poll GET."""
+    if _upgrade.get("running"):
+        return _upgrade
+    _upgrade.clear()
+    _upgrade.update(running=True, replace_pins=replace_pins)
+    asyncio.create_task(_run_upgrade(replace_pins, limit))
+    return _upgrade
+
+
+@router.get("/trailers/apple-upgrade")
+async def apple_upgrade_status() -> dict:
+    return _upgrade
+
+
+@router.get("/movies/{movie_id}/trailer/source")
+async def movie_trailer_source(movie_id: int) -> dict:
+    """Where the cached trailer came from (Apple/YouTube, variants, audio)."""
+    return trailer_source(movie_id) or {}

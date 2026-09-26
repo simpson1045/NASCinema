@@ -23,6 +23,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import apple_trailers
 from .config import get_settings
 from .ffmpeg import ffmpeg_path, ffprobe_path, yt_dlp_path
 
@@ -65,6 +66,18 @@ def trailer_file(movie_id: int) -> Path:
     return trailers_dir() / f"{movie_id}.mkv"
 
 
+def sdr_file(movie_id: int) -> Path:
+    """SDR copy of an HDR trailer, for players that can't show HDR (the hero's
+    Flutter texture, older clients). Only exists when the main file is HDR."""
+    return trailers_dir() / f"{movie_id}.sdr.mkv"
+
+
+def serve_file(movie_id: int, hdr: bool = False) -> Path:
+    """What to hand a client: SDR unless it asked for HDR (and one exists)."""
+    s = sdr_file(movie_id)
+    return trailer_file(movie_id) if hdr or not s.exists() else s
+
+
 def is_cached(movie_id: int) -> bool:
     f = trailer_file(movie_id)
     return f.exists() and f.stat().st_size > 0
@@ -80,6 +93,7 @@ def trailer_version(movie_id: int) -> int:
 def clear_trailer(movie_id: int) -> None:
     """Drop the cached trailer so it re-downloads (e.g. after a manual override)."""
     trailer_file(movie_id).unlink(missing_ok=True)
+    sdr_file(movie_id).unlink(missing_ok=True)
 
 
 def _youtube_key(s: str) -> str | None:
@@ -449,14 +463,15 @@ async def ensure_trailer(
     title: str | None = None,
     year: int | None = None,
 ) -> Path | None:
-    """Cache + return the sharpest OFFICIAL trailer for a movie, or None (the
-    hero then shows the backdrop). One that clears the quality bar wins; if
-    none does, the sharpest official one at 1080p+ is still used — the right
-    movie beats pretty pixels. (title/year are accepted for callers but no
-    longer drive a search.)"""
+    """Cache + return a movie's trailer, or None (the hero then shows the
+    backdrop). Order: a manual pin → Apple TV (the distributor's own trailer,
+    see apple_trailers) → TMDB's official YouTube list, where one that clears
+    the quality bar wins, else the sharpest official 1080p+ — the right movie
+    beats pretty pixels. (title/year are accepted for callers but no longer
+    drive a search.)"""
     if is_cached(movie_id):
         return trailer_file(movie_id)
-    if not yt_dlp_path() or not (tmdb_id or override):
+    if not (tmdb_id or override):
         return None
     if not override and _recently_found_nothing(movie_id):
         return None
@@ -469,6 +484,10 @@ async def ensure_trailer(
         async with _download_sem:
             if is_cached(movie_id):
                 return trailer_file(movie_id)
+            if not override and await _fetch_apple(movie_id, tmdb_id):
+                return trailer_file(movie_id)
+            if not yt_dlp_path():
+                return None
             offers = await _ranked_offers(tmdb_id, override)
             manual = _youtube_key(override) if override else None
             tries = offers[:_MAX_CANDIDATES + 1]
@@ -484,6 +503,46 @@ async def ensure_trailer(
                 return trailer_file(movie_id)
             _none_file(movie_id).write_text(json.dumps({"offers": len(offers)}))
     return None
+
+
+async def _fetch_apple(movie_id: int, tmdb_id: int | None) -> bool:
+    """Try Apple TV. Downloads beside the current trailer (if any) and swaps
+    only on success, so a failed attempt never costs a movie its trailer."""
+    offer = await apple_trailers.find(tmdb_id)
+    if not offer:
+        return False
+    d = trailers_dir()
+    stage_main, stage_sdr = d / f"{movie_id}.apple.mkv", d / f"{movie_id}.apple.sdr.mkv"
+    info = await apple_trailers.download(offer, stage_main, stage_sdr)
+    if not info:
+        stage_main.unlink(missing_ok=True)
+        stage_sdr.unlink(missing_ok=True)
+        return False
+    os.replace(stage_main, trailer_file(movie_id))
+    if stage_sdr.exists():
+        os.replace(stage_sdr, sdr_file(movie_id))
+    else:
+        sdr_file(movie_id).unlink(missing_ok=True)  # an old HDR title's leftover
+    probe = await _probe(trailer_file(movie_id))
+    if probe and not _audio_ok(probe):
+        await _to_ac3(movie_id)
+    _none_file(movie_id).unlink(missing_ok=True)
+    _source_file(movie_id).write_text(json.dumps({
+        "version": trailer_version(movie_id), **info, "official": True, "pinned": False,
+    }))
+    asyncio.create_task(measure_bars(movie_id, force=True))
+    return True
+
+
+async def upgrade_to_apple(movie_id: int, tmdb_id: int | None) -> str:
+    """Replace a movie's current trailer with Apple's, if Apple has one.
+    Returns "apple" (upgraded), "already", or "none" (kept what it had)."""
+    src = trailer_source(movie_id) or {}
+    if src.get("source") == "apple" and is_cached(movie_id):
+        return "already"
+    lock = _locks.setdefault(movie_id, asyncio.Lock())
+    async with lock, _download_sem:
+        return "apple" if await _fetch_apple(movie_id, tmdb_id) else "none"
 
 
 async def _fetch(movie_id: int, offer: dict, require_bar: bool,

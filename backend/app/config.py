@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     # ladder falls to 1440p, then 1080p. VP9 (not AV1) so the Roku Ultra decodes
     # it; cached as MKV. Lower this if storage/bandwidth is a concern.
     trailer_max_height: int = 2160
+    # Apple TV is the first trailer source (the distributor's own cut: real
+    # theatrical trailers, 7–25 Mbps, 5.1/Atmos, HDR when offered); YouTube is
+    # the fallback. Region picks Apple's storefront (two-letter country code)
+    # and locale its language — trailers and availability differ by country.
+    apple_trailers: bool = True
+    trailer_region: str = "us"
+    trailer_locale: str = "en-US"
 
     # Wired renderer (the theater PC). MAC enables POST /api/renderer/wake —
     # the phone wakes the sleeping renderer before "Play on <renderer>".
