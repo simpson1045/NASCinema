@@ -3,11 +3,46 @@
 *Last updated: 2026-09-25. This is the truthful state of the project for the next
 session. The vision and full plan live in [README.md](README.md) and
 [ROADMAP.md](ROADMAP.md) — **read those first**; this file is just "where we
-actually are and what's next." Current version: **v0.5.9+25 published (in-app updater); ELKO on 0.5.5+, Roku channel 0.1.7.*
+actually are and what's next." Current version: **v0.6.0+26 (Apple trailers + HDR) — see Latest; ELKO on 0.5.5+, Roku channel 0.1.7.*
 
 ---
 
-## Latest (2026-09-25, night) — flag button (0.5.9+25), library rescan on hold
+## Latest (2026-09-25, late night) — Apple TV trailers + HDR (0.6.0, Roku 0.1.8)
+
+- **Apple TV is the first trailer source** (`backend/app/apple_trailers.py`):
+  TMDB → Wikidata P9586 → tv.apple.com uts catalog → HLS master → ffmpeg copy.
+  Main `<id>.mkv` = HDR10/HDR10+ when offered (else best SDR), `<id>.sdr.mkv`
+  = SDR copy for HDR titles. `GET /api/movies/{id}/trailer` serves SDR by
+  default, `?variant=hdr` the master. Settings: `trailer_region`,
+  `trailer_locale`, `apple_trailers`. Order in ensure_trailer: pin → Apple →
+  YouTube → backdrop. Source JSON: `GET /api/movies/{id}/trailer/source`.
+- **Library upgrade job** `POST /api/trailers/apple-upgrade?replace_pins=true`
+  started ~04:15 UTC Sept 26 (poll GET). Downloads beside current trailer,
+  swaps only on success; clears a pin only when Apple replaced it (list in
+  the GET response `unpinned`). Runs inside the backend process — a restart
+  kills it; re-POST resumes (skips "already").
+- **Pins before the upgrade** (restore by PATCH trailer_youtube if wanted):
+  56 BHC3 BhfZMtv9XuE · 97 Grown Ups 1m-NrYetgOU · 100 Chamber oQtgBqXMgv0 ·
+  106 Sorcerer's q4ist4jH6uU · 108 Home Alone 2 k0kJieJ1k6k · 148 European
+  Vacation A3OzNWTU2h4 · 155 Pulp Fiction s7kH1WYp_j8 · 184 Star Wars
+  vZ734NWnAHA · 186 AotC gYbW1F_c9eM · 187 RotS 5UnjrG_N8hU · 185 TPM
+  J3kyYFHdRsM · 191 T2 CRRlbK5w8AE · 1 Empire e0QkbuRaEDc · 206 Land Before
+  Time 4BInhb4GkG8 · 221 Patriot OpKR4qTOVgI · 223 El Dorado JcOfJwN0bdY (no
+  Apple — stays) · 224 Running Man b6rbNlkWscI · 228 School of Rock
+  KdzWQT0wLCY · 229 Terminator nGrW-OR2uDk.
+- **HDR trailers (clients):** Settings → Display → "HDR trailers" Auto/Always/
+  Never (default Auto, per device; `hdr_prefs.dart`). Windows Auto = registry
+  `MonitorDataStore\*\HDREnabled` (ELKO: 1 on DON + GSM entries). HDR →
+  Big Picture fullscreen trailer plays via native mpv (`buildPlayerView`);
+  hero stays SDR. Roku 0.1.8 auto-detects via GetDisplayProperties and adds
+  `&variant=hdr` (hero too). Roku zip in ~/Downloads/NASCinema-roku.zip.
+- **NAS was memory-starved** (30/32 GB, no swap; Sonarr 90% CPU, remuxworker)
+  → a backend restart took ~3 min (import of FastAPI crawled). Not a code bug.
+- **docs/SPEC-track-manager.md** (from the chat Claude) now in the repo —
+  queued after Apple trailers + Big Picture.
+- Next: Big Picture search (Y → on-screen keyboard), then Track Manager.
+
+## Earlier (2026-09-25, night) — flag button (0.5.9+25), library rescan on hold
 
 - **Flag button:** View (controller) / F8 anywhere → `POST /api/flags` with
   top screen, movie, trailer/movie + position, app version, context,
