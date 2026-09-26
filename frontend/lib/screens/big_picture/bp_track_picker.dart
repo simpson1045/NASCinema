@@ -8,6 +8,7 @@ import '../../models/movie_file.dart';
 import '../../services/flag_service.dart';
 import '../../services/gamepad/pad_dispatch.dart';
 import '../../theme/app_theme.dart';
+import 'bp_hero.dart' show bpLogo;
 
 /// What Play will use: a version (file) and its audio/subtitle tracks, as mpv
 /// ids. [audio] null = the file's default; [subtitle] null = automatic (mpv's
@@ -47,16 +48,29 @@ class TrackPick {
             return ts.any((t) => t.id == n) ? n : null;
           }
 
+          final sub = keep(j['subtitle'], f.subtitleTracks, allowOff: true);
           return TrackPick(
             fileId: f.id,
             audio: keep(j['audio'], f.audioTracks),
-            subtitle: keep(j['subtitle'], f.subtitleTracks, allowOff: true),
+            // "Automatic" only exists when the file has a forced/default
+            // track; otherwise nothing would show, so say Off.
+            subtitle: sub ?? (autoSubtitle(f) == null ? 0 : null),
           );
         }
       }
     } catch (_) {}
-    return TrackPick(fileId: files.first.id, audio: defaultAudio(files.first));
+    return TrackPick(
+        fileId: files.first.id,
+        audio: defaultAudio(files.first),
+        subtitle: autoSubtitle(files.first) == null ? 0 : null);
   }
+
+  /// The subtitle mpv shows on its own (no --sid): a forced track (foreign-
+  /// language scenes), else one the file flags default. Null = none, so
+  /// "Automatic" would just mean Off.
+  static MediaTrack? autoSubtitle(MovieFile f) =>
+      f.subtitleTracks.where((t) => t.forced).firstOrNull ??
+      f.subtitleTracks.where((t) => t.isDefault).firstOrNull;
 
   Future<void> save(int movieId) async {
     try {
@@ -110,9 +124,13 @@ class BpTrackPicker extends StatefulWidget {
     required this.files,
     required this.initial,
     required this.baseUrl,
+    this.logo,
+    this.logoSubtitle,
   });
 
   final String title;
+  final String? logo; // clearlogo shown instead of the title text
+  final String? logoSubtitle;
   final List<MovieFile> files;
   final TrackPick initial;
   final String baseUrl;
@@ -169,9 +187,13 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
                         t.language == null)),
         ];
       default:
+        final auto = TrackPick.autoSubtitle(_file);
         return [
-          const _Item(null, 'Automatic',
-              desc: "The file's own choice (usually forced subtitles only)"),
+          if (auto != null)
+            _Item(null, 'Automatic',
+                desc: auto.forced
+                    ? 'Shows "${auto.title}" for foreign-language scenes'
+                    : 'Shows "${auto.title}" (the file\'s default)'),
           const _Item(0, 'Off'),
           for (final t in _file.subtitleTracks)
             _Item(t.id, t.title,
@@ -226,10 +248,13 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
           _pick = TrackPick(
               fileId: f.id,
               audio: TrackPick.defaultAudio(f, preferLang: lang),
-              subtitle: _pick.subtitle == 0 ? 0 : null);
+              subtitle: _pick.subtitle == 0 || TrackPick.autoSubtitle(f) == null
+                  ? 0
+                  : null);
           final ai = _items(1).indexWhere((it) => it.value == _pick.audio);
           _cursor[1] = ai < 0 ? 0 : ai;
-          _cursor[2] = _pick.subtitle == 0 ? 1 : 0;
+          final si = _items(2).indexWhere((it) => it.value == _pick.subtitle);
+          _cursor[2] = si < 0 ? 0 : si;
         }
         _col = 1;
       } else if (_col == 1) {
@@ -299,12 +324,8 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(widget.title,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 46,
-                            fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
+                    SizedBox(width: 560, height: 130, child: _header()),
+                    const SizedBox(height: 14),
                     Text(_pickSummary(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -344,6 +365,20 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
   }
 
   String _pickSummary() => _pick.summary(widget.files);
+
+  Widget _header() {
+    final text = Align(
+      alignment: Alignment.bottomLeft,
+      child: Text(widget.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+              color: Colors.white, fontSize: 46, fontWeight: FontWeight.w800)),
+    );
+    final logo = widget.logo;
+    if (logo == null || logo.isEmpty) return text;
+    return bpLogo(logo, widget.logoSubtitle, text, subtitleSize: 30);
+  }
 
   Widget _column(int col, String heading) {
     final items = _items(col);

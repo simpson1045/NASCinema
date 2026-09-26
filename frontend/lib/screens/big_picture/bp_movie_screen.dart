@@ -152,6 +152,8 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
           files: _files,
           initial: pick,
           baseUrl: widget.baseUrl,
+          logo: _logo,
+          logoSubtitle: _logoSub,
         ),
       ),
     );

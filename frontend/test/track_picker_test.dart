@@ -57,7 +57,9 @@ void main() {
     await key(LogicalKeyboardKey.arrowDown); // the mono mix
     expect(find.text('LOSSLESS'), findsWidgets);
     await key(LogicalKeyboardKey.enter); // -> subtitles column
-    await key(LogicalKeyboardKey.arrowDown); // "Off"
+    // No forced/default subtitle in this file, so there's no "Automatic" —
+    // the cursor already sits on "Off".
+    expect(find.text('Automatic'), findsNothing);
     await key(LogicalKeyboardKey.enter); // choose + close
     await tester.pumpAndSettle();
 

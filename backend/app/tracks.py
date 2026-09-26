@@ -105,16 +105,42 @@ def quality_label(mf: MediaFile) -> str:
     return " · ".join(parts) or "Version"
 
 
+# Names that say nothing on their own ("|ORIGINAL|", "Surround 7.1") — shown
+# with the language/codec after them instead of alone.
+_GENERIC = re.compile(
+    r"^(original|main|default|english|eng|audio|track\s*\d*|full|"
+    r"(surround|stereo|mono|dolby|dts)(\s*[\d.]+)?)$",
+    re.IGNORECASE,
+)
+
+
+def clean_title(raw: str | None) -> str:
+    """Tidy a track name from the file: strip stray |, [], quotes and
+    underscores ("|ORIGINAL|" -> "Original", "SDH_full" -> "SDH (full)").
+    Real names pass through ("1.0 DTS-HD-MA (1977 35mm mono mix)")."""
+    t = (raw or "").strip().strip("|[]{}\"' ").replace("_", " ")
+    t = re.sub(r"\s+", " ", t).strip()
+    m = re.match(r"^(SDH|CC|HI)\s+(.+)$", t, flags=re.IGNORECASE)
+    if m:
+        t = f"{m.group(1).upper()} ({m.group(2)})"
+    if t and (t.isupper() or t.islower()) and len(t) <= 16 and " " not in t:
+        t = t.capitalize()  # "ORIGINAL"/"full" -> "Original"/"Full"
+    return t
+
+
 def track_rows(mf: MediaFile) -> dict:
     """{"audio": [...], "subtitles": [...]} in file order, each with mpv's
     1-based per-type id, a display title, a description and flags."""
     audio, subs = [], []
     for st in sorted(mf.streams, key=lambda s: s.index):
-        title = (st.title or "").strip()
+        title = clean_title(st.title)
         if st.kind == "audio":
             codec = _audio_codec(st)
             desc = " · ".join(p for p in (lang_name(st.language), codec,
                                           _channels(st)) if p)
+            if title and _GENERIC.match(title):
+                # "Original · English DTS-HD MA 5.1" — the name alone says nothing.
+                title, desc = f"{title} · {desc.replace(' · ', ' ')}", ""
             audio.append({
                 "id": len(audio) + 1,
                 "title": title or desc,
