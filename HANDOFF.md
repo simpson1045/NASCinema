@@ -23,6 +23,11 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   reads: Matt saves NAS creds on ELKO for \\192.168.0.248\Totally Legal Movies
   (his password), then set NASCINEMA_NATIVE_PATH_MAP=/movies=\\192.168.0.248\Totally Legal Movies
   in .env and deploy.
+- **b41** (published): uosc progress=never (was an always-on line — embedded
+  mpv is never "fullscreen"), volume=none, ▲/▼ = flash-timeline + a compact
+  legend pinned above the timeline (previewed with ffmpeg's libass). The uosc
+  change was also hand-applied to ELKO's mpv-config (backup
+  uosc.conf.bak-20260926-2252) before b41.
 - Still open: ~39 GB test copies in /mnt/scratch/nascinema-strip-test (delete on
   Matt's word).
 
