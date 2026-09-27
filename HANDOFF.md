@@ -7,7 +7,34 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-26, ~23:00 UTC) — Batch 3: Track Manager Phase A (LIVE, app 0.9.0)
+## Latest (2026-09-27 ~00:10 UTC) — Track Manager Phase B LIVE
+
+**Done:**
+- Reprobed the other Claude's 97 stripped files (29 are NASCinema movies; the
+  rest are Animaniacs): library plan went 70.1 GB → **5.0 GB** (57 files;
+  Lost World 3.0 GB, Braveheart 1.8 GB, the rest subtitle crumbs).
+- Fixed a latent reprobe bug (scanner.apply_probe clears+flushes old track
+  rows first — (file, index) unique constraint).
+- Phase B: app/strip.py + strip_cmd.py + strip_worker.py, strip_jobs
+  (migration 0015), API (/strip, /jobs, cancel/undo, /confirm). Worker =
+  its own container `nascinema-strip` (only rw mount of the movies), stages on
+  /mnt/scratch/nascinema-strip, waits while load > 8, heartbeat
+  data/strip_worker.json, deletions logged to data/strip_deletions.log.
+- Tests: 18 unit (backend/tests), 20/20 end-to-end (tests/integration_strip.py
+  in a throwaway container), real Kill Bill 19.4 GB copy: 3.6 min, 31 → 2 subs
+  (English PGS kept), audio + 19 chapters kept, original byte-identical.
+- NAS: compose + deploy.sh installed from the repo (backups *.bak-20260926-1704-
+  pre-strip); SSD movies folder /mnt/scratch/movies mounted as /movies-ssd
+  (ro backend, rw worker; MEDIA_DIRS=/movies:/movies-ssd).
+- App: Big Picture Jobs tab etc.; release **v0.9.0-b37** (first build-only
+  release).
+
+**Left for Matt:** /mnt/scratch/nascinema-strip-test holds ~39 GB of my test
+copies (Kill Bill ×2 + synthetic) — delete on his word. Nothing has been
+stripped in the library; he starts strips from the app.
+**Lesson:** ADMS run_command caps at 300 s — run anything longer detached.
+
+## Earlier (2026-09-26, ~23:00 UTC) — Batch 3: Track Manager Phase A (LIVE, app 0.9.0)
 
 **Deployed:** backend 782bcc0 (22:11 UTC; migration 0014 ran; live plan =
 79 / 70.1 GB / 15 protected), app **0.9.0** released via Actions (first run on
