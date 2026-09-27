@@ -27,7 +27,8 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   pre-strip); SSD movies folder /mnt/scratch/movies mounted as /movies-ssd
   (ro backend, rw worker; MEDIA_DIRS=/movies:/movies-ssd).
 - App: Big Picture Jobs tab etc.; release **v0.9.0-b37** (first build-only
-  release).
+  release) — built green on Actions (tag check passed) and PUBLISHED; the
+  server advertises 0.9.0 build 37.
 
 **Left for Matt:** /mnt/scratch/nascinema-strip-test holds ~39 GB of my test
 copies (Kill Bill ×2 + synthetic) — delete on his word. Nothing has been
