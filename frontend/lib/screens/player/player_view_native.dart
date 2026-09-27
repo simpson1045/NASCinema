@@ -89,7 +89,20 @@ Widget buildPlayerView(String url, bool isHls) =>
 MpvController? _mpv;
 
 Widget _mpvBuild(String url) =>
-    _MpvEmbedView(media: _directMedia ?? url, startAt: _startAt);
+    _MpvEmbedView(media: _playableDirect() ?? url, startAt: _startAt);
+
+/// The direct NAS path only if this PC can actually open it (the share is
+/// reachable and logged in); otherwise stream the URL. A path mpv can't load
+/// used to leave a dead player screen.
+String? _playableDirect() {
+  final p = _directMedia;
+  if (p == null) return null;
+  try {
+    if (File(p).existsSync()) return p;
+  } catch (_) {}
+  _diag('direct path not reachable, streaming instead: $p');
+  return null;
+}
 
 /// The embedded video area: creates a native child window over exactly this
 /// widget's rect, launches mpv into it (`--wid`), and keeps the child glued
@@ -299,8 +312,9 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
           alignment: Alignment.center,
           child: _failed
               ? const Text(
-                  'Renderer failed to start — see nascinema_player.log',
-                  style: TextStyle(color: NasColors.muted, fontSize: 14),
+                  "Couldn't start the player.\nPress B to go back.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: NasColors.text, fontSize: 28, height: 1.4),
                 )
               : null,
         ),
@@ -573,7 +587,12 @@ bool _menuHint = false;
 ///   navigate it instead.
 bool playerPad(PadButton b) {
   final c = _mpv;
-  if (!_useMpv || c == null) return false;
+  if (!_useMpv || c == null || !c.running) {
+    // No live player (it failed to start or exited): a stale "menu open" must
+    // never swallow B — the player screen backs out.
+    _menuHint = false;
+    return false;
+  }
   if (c.menuOpen || _menuHint) {
     const keys = {
       PadButton.up: 'UP', PadButton.down: 'DOWN',

@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     # Whose content ratings to show (two-letter country: us → PG-13/R, gb →
     # 12A/15, de → FSK …).
     rating_region: str = "us"
+    # Native (Windows) renderers read direct-play files straight off the NAS
+    # share instead of the HTTP stream. The backend sees them at container
+    # paths, so map prefixes to the share, ';'-separated, e.g.
+    #   /movies=\\192.168.0.248\Totally Legal Movies
+    # Blank = never send a path (clients stream). The app checks the path is
+    # reachable before using it, and streams if not.
+    native_path_map: str = ""
     # Track Manager strip worker: SSD staging dir (write the stripped copy
     # here, verify, then move it onto the HDD pool — reading and writing the
     # same HDD pool at once thrashes it), and the 1-minute load average above

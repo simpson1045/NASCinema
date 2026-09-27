@@ -264,9 +264,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (_) {}
   }
 
-  /// Controller → the native player (and its on-video menus). Unhandled
-  /// presses (B with no menu open) fall through to the default: back out.
-  bool _onPad(PadButton b) => _nativeVideo && playerPad(b);
+  /// Controller → the native player (and its on-video menus). B the player
+  /// doesn't use (no menu open, or no live player at all) backs out — handled
+  /// here, not by the focus fallback: the native video window can hold focus,
+  /// which left B dead on a failed start (2026-09-27).
+  bool _onPad(PadButton b) {
+    if (_nativeVideo && playerPad(b)) return true;
+    if (b == PadButton.b) {
+      Navigator.of(context).maybePop();
+      return true;
+    }
+    return false;
+  }
 
   /// Persist the local playback position + active subtitle for resume. Skips
   /// the very start/end so we don't clobber a good resume point with 0.

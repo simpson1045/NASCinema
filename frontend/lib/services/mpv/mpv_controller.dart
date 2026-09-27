@@ -374,7 +374,15 @@ class MpvController {
   /// The button legend, drawn by mpv just above the timeline — the only way
   /// to put anything over the native video. Buttons are the Kenney Xbox
   /// prompt font (bundled in mpv-config/fonts, CC0) tinted Xbox colors; a few
-  /// seconds, then it fades.
+  /// seconds, then it's removed.
+  ///
+  /// Drawn with `osd-overlay` (ASS events as data), not `show-text`: that one
+  /// needs `${osd-ass-cc/0}` property expansion, which this mpv (0.41) no
+  /// longer does for IPC array commands — the legend came out as a wall of
+  /// raw ASS code over the movie (2026-09-27).
+  static const _hintsOverlayId = 7;
+  Timer? _hintsTimer;
+
   void showHints({bool versions = false}) {
     String glyph(int codepoint, int rgb) {
       // ASS colours are &HBBGGRR&.
@@ -396,12 +404,16 @@ class MpvController {
       '${glyph(0xE014, light)}Menu', // Menu (Start)
       '${glyph(0xE00E, 0xE0413A)}Back', // B (red)
     ];
+    // res_y 720 = the OSD's usual scale, so the \fs sizes above match.
     _ipc?.command([
-      'show-text',
-      '\${osd-ass-cc/0}{\\an2}{\\bord2}{\\3c&H270E0A&}'
-          '${items.join('      ')}\\N\\N\\N\\N',
-      4500,
+      'osd-overlay', _hintsOverlayId, 'ass-events',
+      '{\\an2}{\\bord2}{\\3c&H270E0A&}${items.join('      ')}\\N\\N\\N\\N',
+      0, 720,
     ]);
+    _hintsTimer?.cancel();
+    _hintsTimer = Timer(const Duration(milliseconds: 4500), () {
+      if (!_disposed) _ipc?.command(['osd-overlay', _hintsOverlayId, 'none', '']);
+    });
   }
 
   /// Swap to another file in the running player (another version of the
@@ -496,6 +508,7 @@ class MpvController {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _hintsTimer?.cancel();
     if (_live == this) _live = null;
     try {
       await _ipc?.quit();

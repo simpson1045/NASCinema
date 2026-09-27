@@ -18,6 +18,7 @@ import '../hero_trailer.dart';
 import '../player/player_view.dart';
 import '../player_screen.dart';
 import 'bp_hero.dart' show bpLogo, bpLogoOver, bpMetaRow;
+import 'bp_read_more.dart';
 import 'bp_track_picker.dart';
 import '../../widgets/pad_hints.dart';
 
@@ -38,7 +39,7 @@ class BpMovieScreen extends StatefulWidget {
   State<BpMovieScreen> createState() => _BpMovieScreenState();
 }
 
-enum _Row { buttons, series, more, cast, extras }
+enum _Row { overview, buttons, series, more, cast, extras }
 
 class _BpMovieScreenState extends State<BpMovieScreen> {
   late final ApiService _api = ApiService(widget.baseUrl);
@@ -122,6 +123,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
 
   /// The rows ↓/↑ step through, in order — only the ones that have content.
   List<_Row> get _rows => [
+        if ((_m.overview ?? '').isNotEmpty) _Row.overview, // ▲ from the buttons
         _Row.buttons,
         if (_hasSeries) _Row.series,
         if (_more.isNotEmpty) _Row.more,
@@ -132,9 +134,10 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   /// What the bottom band shows: the row you're on, or (on the buttons) the
   /// first one below them.
   _Row? get _bandRow {
-    if (_row != _Row.buttons) return _row;
+    if (_row != _Row.buttons && _row != _Row.overview) return _row;
     final rows = _rows;
-    return rows.length > 1 ? rows[1] : null;
+    final i = rows.indexOf(_Row.buttons);
+    return i + 1 < rows.length ? rows[i + 1] : null;
   }
 
   void _move(int dx, int dy) {
@@ -146,6 +149,8 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
         return;
       }
       switch (_row) {
+        case _Row.overview:
+          break;
         case _Row.buttons:
           _button = (_button + dx).clamp(0, _buttonCount - 1);
         case _Row.series:
@@ -160,7 +165,20 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     });
   }
 
+  void _readMore() => showBpReadMore(context,
+      title: _m.title,
+      subtitle: [
+        if (_m.year != null) '${_m.year}',
+        if (_m.runtimeLabel != null) _m.runtimeLabel!,
+        ..._m.genres.take(3),
+      ].join('  ·  '),
+      text: _m.overview ?? '');
+
   void _activate() {
+    if (_row == _Row.overview) {
+      _readMore();
+      return;
+    }
     if (_row == _Row.series && _hasSeries) {
       final m = _series!.movies[_seriesIdx];
       if (m.id != _m.id) {
@@ -353,16 +371,24 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
               ],
               if (overview.isNotEmpty) ...[
                 const SizedBox(height: 26),
-                SizedBox(
+                // ▲ from the buttons highlights it; A opens the whole text.
+                bpOverviewFocus(
                   width: 900,
-                  child: Text(
-                    overview,
-                    // 3 lines (like the home hero): the column then always
-                    // ends above the More in / More like this / Cast band.
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Color(0xFFDDE2F5), fontSize: 28, height: 1.35),
+                  focused: _row == _Row.overview,
+                  child: GestureDetector(
+                    onTap: _readMore,
+                    child: SizedBox(
+                      width: 900,
+                      child: Text(
+                        overview,
+                        // 3 lines (like the home hero): the column then always
+                        // ends above the More in / More like this / Cast band.
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Color(0xFFDDE2F5), fontSize: 28, height: 1.35),
+                      ),
+                    ),
                   ),
                 ),
               ],

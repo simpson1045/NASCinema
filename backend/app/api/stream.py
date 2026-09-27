@@ -13,6 +13,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..db import get_session
 from ..metadata import get_movie_logo
 from ..models import MediaFile, Movie
@@ -22,11 +23,19 @@ from ..streaming import cached_ranges, ensure_segment, get_or_start, log_access
 
 def _client_path(path: str | None) -> str | None:
     """A path the native renderer can open itself — a Windows network (UNC)
-    or drive path — else None, so it streams the URL instead. On the NAS the
-    backend sees files as /movies/... inside its container; handing that to
-    ELKO made mpv fail to load every movie (2026-09-27)."""
-    if path and (re.match(r"^(\\\\|//)[^\\/]+[\\/]", path) or re.match(r"^[A-Za-z]:[\\/]", path)):
+    or drive path, as is or via settings.native_path_map — else None, so it
+    streams the URL. On the NAS the backend sees files as /movies/... inside
+    its container; handing that to ELKO made mpv fail to load every movie
+    (2026-09-27)."""
+    if not path:
+        return None
+    if re.match(r"^(\\\\|//)[^\\/]+[\\/]", path) or re.match(r"^[A-Za-z]:[\\/]", path):
         return path
+    for rule in get_settings().native_path_map.split(";"):
+        prefix, sep, target = rule.partition("=")
+        prefix, target = prefix.strip().rstrip("/"), target.strip().rstrip("\\")
+        if sep and prefix and target and path.startswith(prefix + "/"):
+            return target + path[len(prefix):].replace("/", "\\")
     return None
 
 

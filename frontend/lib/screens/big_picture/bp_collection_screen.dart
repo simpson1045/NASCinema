@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/pad_hints.dart';
 import 'bp_hero.dart' show bpLogoOver;
 import 'bp_movie_screen.dart';
+import 'bp_read_more.dart';
 
 /// A franchise page (Star Wars, Harry Potter …): its backdrop, logo centred
 /// over "8 movies · 2001–2011", the overview, and the movies in release
@@ -36,6 +37,7 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
   late Franchise _f = widget.franchise;
   int _item = 0;
   bool _loading = true;
+  bool _onOverview = false; // ▲ from the posters: the description is focused
 
   static const _gap = 30.0;
   // Small franchises (2–5 movies) get bigger posters so the page doesn't look
@@ -84,17 +86,36 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
     if (mounted) _focus.requestFocus();
   }
 
+  bool get _hasOverview => (_f.overview ?? '').isNotEmpty;
+
+  void _readMore() => showBpReadMore(context,
+      title: _f.name,
+      subtitle: [
+        '${_f.count} movies',
+        if (_f.years != null) _f.years!,
+      ].join('  ·  '),
+      text: _f.overview ?? '');
+
   bool _onPad(PadButton b) {
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return false;
     final n = _f.movies.length;
     switch (b) {
       case PadButton.b:
         Navigator.of(context).maybePop();
+      case PadButton.up:
+        if (_hasOverview && !_onOverview) setState(() => _onOverview = true);
+      case PadButton.down:
+        if (_onOverview) setState(() => _onOverview = false);
       case PadButton.left:
-        if (_item > 0) setState(() => _item--);
+        if (!_onOverview && _item > 0) setState(() => _item--);
       case PadButton.right:
-        if (_item < n - 1) setState(() => _item++);
+        if (!_onOverview && _item < n - 1) setState(() => _item++);
       case PadButton.a:
-        if (n > 0) _open(_f.movies[_item]);
+        if (_onOverview) {
+          _readMore();
+        } else if (n > 0) {
+          _open(_f.movies[_item]);
+        }
       default:
         break;
     }
@@ -106,6 +127,8 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
     final b = {
       LogicalKeyboardKey.arrowLeft: PadButton.left,
       LogicalKeyboardKey.arrowRight: PadButton.right,
+      LogicalKeyboardKey.arrowUp: PadButton.up,
+      LogicalKeyboardKey.arrowDown: PadButton.down,
       LogicalKeyboardKey.enter: PadButton.a,
       LogicalKeyboardKey.escape: PadButton.b,
       LogicalKeyboardKey.backspace: PadButton.b,
@@ -192,13 +215,20 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
               ),
               if ((_f.overview ?? '').isNotEmpty) ...[
                 const SizedBox(height: 26),
-                SizedBox(
+                bpOverviewFocus(
+                  width: 1000,
+                  focused: _onOverview,
+                  child: GestureDetector(
+                    onTap: _readMore,
+                    child: SizedBox(
                   width: 1000,
                   child: Text(_f.overview!,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           color: Color(0xFFDDE2F5), fontSize: 28, height: 1.35)),
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -214,14 +244,21 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
                   child: CircularProgressIndicator(color: NasColors.amber))
               : _rail(),
         ),
-        const Positioned(
+        Positioned(
           left: 90,
           bottom: 40,
-          child: PadHints([
-            (PadGlyph.dpadHorizontal, 'Browse'),
-            (PadGlyph.a, 'Open'),
-            (PadGlyph.b, 'Back'),
-          ], size: 30, fontSize: 20),
+          child: PadHints(_onOverview
+              ? const [
+                  (PadGlyph.a, 'Read more'),
+                  (PadGlyph.dpadDown, 'Movies'),
+                  (PadGlyph.b, 'Back'),
+                ]
+              : [
+                  (PadGlyph.dpadHorizontal, 'Browse'),
+                  (PadGlyph.a, 'Open'),
+                  if (_hasOverview) (PadGlyph.dpadUp, 'Description'),
+                  (PadGlyph.b, 'Back'),
+                ], size: 30, fontSize: 20),
         ),
       ],
     );
@@ -269,7 +306,7 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
   }
 
   Widget _poster(Movie m, int i) {
-    final focused = i == _item;
+    final focused = !_onOverview && i == _item;
     final url = m.posterUrl(size: 'w500');
     return GestureDetector(
       onTap: () {
