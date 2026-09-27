@@ -413,7 +413,8 @@ class MpvController {
       1280, 720,
     ]);
     _hintsTimer?.cancel();
-    _hintsTimer = Timer(const Duration(milliseconds: 4500), () {
+    // Gone together with uosc's timeline flash (flash_duration=3000).
+    _hintsTimer = Timer(const Duration(milliseconds: 3000), () {
       if (!_disposed) _ipc?.command(['osd-overlay', _hintsOverlayId, 'none', '']);
     });
   }
