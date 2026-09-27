@@ -21,7 +21,10 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   franchise tile also made the hero swap trailers at that moment.
 - Fix a3f4499 → **v0.9.0-b38**: _pushPage + BpHero.pauseForPage (video out of
   the tree → frame → stop player → hold poll) / resumeAfterPage; franchise
-  tiles don't swap the hero. Needs Matt to confirm on ELKO.
+  tiles don't swap the hero. **Confirmed by Matt on ELKO — no crash.**
+- **v0.9.0-b39** (published): movie-page overview 3 lines (audio line no longer
+  hits the More-in band); franchise page overview 3 lines, rail at 500, small
+  franchises (<=5) 250x375 posters, titles clear the hints.
 - Tool for next time: scratchpad pdbsym.py (MSF/DBI reader) maps an RVA to a
   function without LLVM.
 
