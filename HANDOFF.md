@@ -7,7 +7,26 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-27 ~05:00 UTC) — franchise-page crash on ELKO: diagnosed, fix in b38
+## Latest (2026-09-27 ~06:30 UTC) — movie night fixes (b40 published)
+
+- **Movies wouldn't play on ELKO** since the backend moved to the NAS: the play
+  decision handed native clients the container path (/movies/...), mpv
+  "Errors when loading file", dead error screen. f75e4c4 (deployed): only
+  Windows-openable paths are sent; otherwise ELKO streams /api/stream/{id}/direct.
+- **b40** (published): button legend via osd-overlay (mpv 0.41 stopped
+  expanding ${osd-ass-cc/0} for IPC array show-text → raw ASS wall); failed
+  player start: B always backs out + plain message; Read more (▲ to the
+  description, A opens bp_read_more panel) on movie + franchise pages; app
+  uses a direct NAS path only if File.exists, else streams.
+- **Pushed, NOT deployed** (Matt was streaming through the backend): 11cd779
+  backend settings.native_path_map (blank = stream). To restore direct SMB
+  reads: Matt saves NAS creds on ELKO for \\192.168.0.248\Totally Legal Movies
+  (his password), then set NASCINEMA_NATIVE_PATH_MAP=/movies=\\192.168.0.248\Totally Legal Movies
+  in .env and deploy.
+- Still open: ~39 GB test copies in /mnt/scratch/nascinema-strip-test (delete on
+  Matt's word).
+
+## Earlier (2026-09-27 ~05:00 UTC) — franchise-page crash on ELKO: diagnosed, fix in b38
 
 - Every Big Picture franchise page crashed the Windows app (freeze, then close).
   ELKO event log: nascinema.exe 0.9.0.37, flutter_windows.dll, c0000005 at
