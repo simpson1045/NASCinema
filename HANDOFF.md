@@ -28,6 +28,15 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   legend pinned above the timeline (previewed with ffmpeg's libass). The uosc
   change was also hand-applied to ELKO's mpv-config (backup
   uosc.conf.bak-20260926-2252) before b41.
+- **b42** (published): Start over (round replay button after Resume when
+  there's a resume point; startAt 0), Resume shows progress as a strip on the
+  button, replay/My List hints replace the audio line (fixed height); legend
+  fades with uosc's timeline (flash_duration 3000, also hand-set on ELKO).
+- **Open bug:** the in-app updater can't replace files because the old app
+  doesn't exit (it kept its mpv alive; robocopy ERROR 32 on
+  bonsoir_windows_plugin.dll). Workaround used: stop nascinema/mpv on ELKO,
+  robocopy %TEMP%\nascinema-update-extracted -> C:\NASCinema\renderer, Matt starts
+  the app. Fix: make the update exit kill mpv + really exit.
 - Still open: ~39 GB test copies in /mnt/scratch/nascinema-strip-test (delete on
   Matt's word).
 
