@@ -306,6 +306,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setStartPosition(widget.startAt ?? _resumePosition);
         _resumeApplied = true; // handled at launch; don't re-seek from _poll
       }
+      // "Start over": never seek to the saved resume point.
+      if ((widget.startAt ?? -1) == 0) _resumeApplied = true;
       setState(() {
         _mode = p.mode;
         _reason = p.reason;

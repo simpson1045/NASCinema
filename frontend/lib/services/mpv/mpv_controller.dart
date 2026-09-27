@@ -406,16 +406,29 @@ class MpvController {
     ];
     // 1280x720 canvas: one compact line pinned just above uosc's timeline
     // (not over its controls row). Previewed with libass before shipping.
-    _ipc?.command([
-      'osd-overlay', _hintsOverlayId, 'ass-events',
-      '{\\an2\\pos(640,672)\\bord1.5\\3c&H270E0A&\\shad0}'
-          '${items.join('\\h\\h\\h\\h\\h')}',
-      1280, 720,
-    ]);
+    final line = '{\\an2\\pos(640,672)\\bord1.5\\3c&H270E0A&\\shad0}'
+        '${items.join('\\h\\h\\h\\h\\h')}';
+    void draw(int alpha) => _ipc?.command([
+          'osd-overlay', _hintsOverlayId, 'ass-events',
+          '{\\alpha&H${alpha.toRadixString(16).padLeft(2, '0')}&}$line',
+          1280, 720,
+        ]);
+    draw(0);
+    // Up as long as uosc's timeline flash (flash_duration=3000), then fade out
+    // with it: an overlay can't animate itself, so step its transparency.
     _hintsTimer?.cancel();
-    // Gone together with uosc's timeline flash (flash_duration=3000).
+    var step = 0;
     _hintsTimer = Timer(const Duration(milliseconds: 3000), () {
-      if (!_disposed) _ipc?.command(['osd-overlay', _hintsOverlayId, 'none', '']);
+      _hintsTimer = Timer.periodic(const Duration(milliseconds: 60), (t) {
+        if (_disposed) return t.cancel();
+        step++;
+        if (step >= 5) {
+          t.cancel();
+          _ipc?.command(['osd-overlay', _hintsOverlayId, 'none', '']);
+        } else {
+          draw(step * 0x33); // 20% … 80% transparent
+        }
+      });
     });
   }
 

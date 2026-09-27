@@ -116,8 +116,17 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     }
   }
 
-  // Buttons: Play/Resume, Trailer, Versions & Audio, My List.
-  static const _buttonCount = 4;
+  // Buttons: Play/Resume, (Start over, when there's a resume point), Trailer,
+  // Versions & Audio, My List — by name, since Start over comes and goes.
+  List<String> get _buttons =>
+      ['play', if (_resume) 'restart', 'trailer', 'tracks', 'list'];
+  int get _buttonCount => _buttons.length;
+  String get _buttonId => _buttons[_button.clamp(0, _buttons.length - 1)];
+  bool _on(String id) => _row == _Row.buttons && _buttonId == id;
+  void _focusButton(String id) => setState(() {
+        _row = _Row.buttons;
+        _button = _buttons.indexOf(id);
+      });
 
   bool get _hasSeries => (_series?.movies.length ?? 0) > 1;
 
@@ -191,11 +200,13 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     } else if (_row == _Row.extras && _extras.isNotEmpty) {
       final e = _extras[_extra];
       _open(PlayerScreen(fileId: e.id, baseUrl: widget.baseUrl, title: e.title));
-    } else if (_button == 0) {
+    } else if (_buttonId == 'play') {
       _play();
-    } else if (_button == 2) {
+    } else if (_buttonId == 'restart') {
+      _play(fromStart: true);
+    } else if (_buttonId == 'tracks') {
       _openPicker();
-    } else if (_button == 3) {
+    } else if (_buttonId == 'list') {
       _toggleList();
     } else {
       _open(_BpTrailerScreen(
@@ -206,7 +217,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     }
   }
 
-  void _play() {
+  void _play({bool fromStart = false}) {
     if (_files.isEmpty) return; // still loading
     final pick = _pick ?? TrackPick(fileId: _files.first.id);
     unawaited(pick.save(_m.id));
@@ -214,6 +225,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       fileId: pick.fileId,
       baseUrl: widget.baseUrl,
       title: _m.title,
+      startAt: fromStart ? 0 : null,
       audioTrack: pick.audio,
       subtitleTrack: pick.subtitle,
       versions: _files,
@@ -398,26 +410,33 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                   icon: Icons.play_arrow_rounded,
                   label: _resume ? 'Resume' : 'Play',
                   primary: true,
-                  focused: _row == _Row.buttons && _button == 0,
+                  focused: _on('play'),
                   busy: !_loaded,
+                  progress: _resume ? _m.progress : null,
                   onTap: () {
-                    setState(() {
-                      _row = _Row.buttons;
-                      _button = 0;
-                    });
+                    _focusButton('play');
                     _play();
                   },
                 ),
+                if (_resume) ...[
+                  const SizedBox(width: 24),
+                  _BpButton(
+                    icon: Icons.replay_rounded,
+                    label: '',
+                    focused: _on('restart'),
+                    onTap: () {
+                      _focusButton('restart');
+                      _play(fromStart: true);
+                    },
+                  ),
+                ],
                 const SizedBox(width: 24),
                 _BpButton(
                   icon: Icons.movie_outlined,
                   label: 'Trailer',
-                  focused: _row == _Row.buttons && _button == 1,
+                  focused: _on('trailer'),
                   onTap: () {
-                    setState(() {
-                      _row = _Row.buttons;
-                      _button = 1;
-                    });
+                    _focusButton('trailer');
                     _activate();
                   },
                 ),
@@ -425,12 +444,9 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                 _BpButton(
                   icon: Icons.tune_rounded,
                   label: _files.length > 1 ? 'Versions & Audio' : 'Audio & Subtitles',
-                  focused: _row == _Row.buttons && _button == 2,
+                  focused: _on('tracks'),
                   onTap: () {
-                    setState(() {
-                      _row = _Row.buttons;
-                      _button = 2;
-                    });
+                    _focusButton('tracks');
                     _activate();
                   },
                 ),
@@ -438,54 +454,39 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                 _BpButton(
                   icon: _inList ? Icons.check_rounded : Icons.add_rounded,
                   label: '',
-                  focused: _row == _Row.buttons && _button == 3,
+                  focused: _on('list'),
                   onTap: () {
-                    setState(() {
-                      _row = _Row.buttons;
-                      _button = 3;
-                    });
+                    _focusButton('list');
                     _activate();
                   },
                 ),
               ]),
-              if (_row == _Row.buttons && _button == 3) ...[
-                const SizedBox(height: 10),
-                Text(_inList ? 'On My List — A to remove' : 'Add to My List',
-                    style: const TextStyle(
-                        color: NasColors.amber,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700)),
-              ],
-              if (_pick != null) ...[
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: 1000,
-                  child: Text(
-                    _pick!.summary(_files),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: NasColors.muted,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-              if (_resume) ...[
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: 420,
-                  height: 6,
-                  child: ColoredBox(
-                    color: Colors.white24,
-                    child: FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: _m.progress!,
-                      child: const ColoredBox(color: NasColors.amber),
-                    ),
-                  ),
-                ),
-              ],
+              // One line under the buttons: what ⟲ / + do while they're
+              // highlighted, else what Play will use. Same height either way,
+              // so the column never grows into the band below.
+              const SizedBox(height: 18),
+              SizedBox(
+                width: 1000,
+                height: 34,
+                child: _on('restart') || _on('list')
+                    ? Text(
+                        _on('restart')
+                            ? 'Start over from the beginning'
+                            : (_inList ? 'On My List · A to remove' : 'Add to My List'),
+                        style: const TextStyle(
+                            color: NasColors.amber,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700))
+                    : Text(
+                        _pick?.summary(_files) ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: NasColors.muted,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w600),
+                      ),
+              ),
             ],
           ),
         ),
@@ -744,6 +745,7 @@ class _BpButton extends StatelessWidget {
     required this.onTap,
     this.primary = false,
     this.busy = false,
+    this.progress,
   });
 
   final IconData icon;
@@ -751,6 +753,8 @@ class _BpButton extends StatelessWidget {
   final bool focused;
   final bool primary;
   final bool busy;
+  // Resume point, 0..1: a thin strip along the button's bottom edge.
+  final double? progress;
   final VoidCallback onTap;
 
   @override
@@ -767,6 +771,10 @@ class _BpButton extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.symmetric(
               horizontal: label.isEmpty ? 22 : 40, vertical: 20),
+          clipBehavior: Clip.antiAlias,
+          foregroundDecoration: progress == null
+              ? null
+              : _ProgressStrip(progress!.clamp(0.0, 1.0), primary ? NasColors.bg : NasColors.amber),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(10),
@@ -790,6 +798,35 @@ class _BpButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// The resume strip drawn over the bottom of the Resume button.
+class _ProgressStrip extends Decoration {
+  const _ProgressStrip(this.value, this.color);
+
+  final double value;
+  final Color color;
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _ProgressStripPainter(this);
+}
+
+class _ProgressStripPainter extends BoxPainter {
+  _ProgressStripPainter(this.d);
+
+  final _ProgressStrip d;
+
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration cfg) {
+    final size = cfg.size;
+    if (size == null) return;
+    const h = 6.0;
+    final track = Rect.fromLTWH(offset.dx, offset.dy + size.height - h, size.width, h);
+    canvas.drawRect(track, Paint()..color = d.color.withValues(alpha: 0.25));
+    canvas.drawRect(
+        Rect.fromLTWH(track.left, track.top, size.width * d.value, h),
+        Paint()..color = d.color);
   }
 }
 
