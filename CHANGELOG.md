@@ -7,7 +7,7 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 - **Fixed:** opening a franchise page crashed the app on Windows (the home trailer's video was being torn down while the page opened). Pages now open only after the trailer has stepped aside.
 - **Tidier pages:** on a movie page the audio/subtitle line no longer runs into the "More in…" row; franchise pages have bigger posters for small franchises and titles clear the button hints.
 - **Read more:** on a movie or franchise page, press **▲** from the buttons (or posters) to highlight the description, then **A** to read all of it.
-- **Fixed:** the in-movie button legend showed raw code instead of Xbox buttons.
+- **Cleaner movie screen:** the button legend is a tidy line of Xbox buttons just above the timeline, **▲/▼** shows only the timeline and legend, the volume slider is gone (your receiver has volume), and there's no progress line hanging around during the movie.
 - **Fixed:** if the player can't start, **B** now gets you out (it used to leave you stuck on a black screen).
 - **Fixed:** movies wouldn't play on the PC renderer since the server moved to the NAS — they stream again.
 - **Franchise logos:** the Franchises row now shows each franchise's real logo (borrowed from its movies — TMDB doesn't publish franchise logos).
