@@ -176,8 +176,11 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   void _syncHero() {
     final hero = _heroKey.currentState;
     if (hero == null) return;
-    if (_zone == _Zone.hero || _rails.isEmpty || _rails[_rail].isFranchises) {
-      hero.follow(null); // franchise tiles keep the featured rotation
+    if (_zone == _Zone.hero || _rails.isEmpty) {
+      hero.follow(null);
+    } else if (_rails[_rail].isFranchises) {
+      // Franchise tiles leave the hero as it is: no trailer swap right as a
+      // franchise page opens (see BpHero.pauseForPage).
     } else {
       hero.follow(_rails[_rail].movies[_itemOf(_rail)]);
     }
@@ -297,8 +300,21 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
 
   // Pushed pages aren't big picture screens yet: Esc/Backspace pops them so the
   // keyboard (and soon the controller) can always get back.
+  /// Every page opened from home goes through here: the hero's trailer video
+  /// leaves the screen and stops BEFORE the page transition starts, and comes
+  /// back when the page closes.
+  Future<void> _pushPage(Route<void> route) async {
+    final hero = _heroKey.currentState;
+    await hero?.pauseForPage();
+    if (!mounted) return;
+    await Navigator.of(context).push(route);
+    if (!mounted) return;
+    hero?.resumeAfterPage();
+    _focus.requestFocus();
+  }
+
   Future<void> _push(Widget page) async {
-    await Navigator.of(context).push(MaterialPageRoute(
+    await _pushPage(MaterialPageRoute(
       builder: (ctx) => CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -309,29 +325,25 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
         child: Focus(autofocus: true, child: page),
       ),
     ));
-    if (mounted) _focus.requestFocus();
   }
 
   // The big picture movie page handles its own keys/controller and focus.
   Future<void> _openMovie(Movie m) async {
-    await Navigator.of(context).push(MaterialPageRoute(
+    await _pushPage(MaterialPageRoute(
       builder: (_) => BpMovieScreen(movie: m, baseUrl: widget.baseUrl),
     ));
-    if (mounted) _focus.requestFocus();
   }
 
   Future<void> _openFranchise(Franchise f) async {
-    await Navigator.of(context).push(MaterialPageRoute(
+    await _pushPage(MaterialPageRoute(
       builder: (_) => BpCollectionScreen(baseUrl: widget.baseUrl, franchise: f),
     ));
-    if (mounted) _focus.requestFocus();
   }
 
   Future<void> _openSearch() async {
-    await Navigator.of(context).push(MaterialPageRoute(
+    await _pushPage(MaterialPageRoute(
       builder: (_) => BpSearchScreen(baseUrl: widget.baseUrl),
     ));
-    if (mounted) _focus.requestFocus();
   }
 
   Future<void> _openMenu() async {
@@ -343,6 +355,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     if (!mounted) return;
     switch (choice) {
       case 'exit':
+        await _heroKey.currentState?.pauseForPage();
         await setFullscreen(false);
         if (!mounted) return;
         await Navigator.of(context).pushReplacement(MaterialPageRoute(

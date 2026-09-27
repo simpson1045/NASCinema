@@ -46,6 +46,7 @@ class BpHeroState extends State<BpHero> {
   bool _faderOpaque = false; // black cover for advance/mode transitions
   bool _fading = false;
   bool _suspended = false; // a route covers big picture — no video underneath
+  bool _hold = false; // home opened a page (pauseForPage) — the poll stays out
   late bool _full = widget.fullscreen; // applied under the fader
 
   Timer? _dwell; // fallback advance / idle trailer cap
@@ -128,7 +129,7 @@ class BpHeroState extends State<BpHero> {
     super.initState();
     _items = [...widget.featured]..shuffle(Random());
     _routePoll = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
+      if (!mounted || _hold) return;
       final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
       if (isCurrent == _suspended) {
         _suspended = !isCurrent;
@@ -197,6 +198,31 @@ class BpHeroState extends State<BpHero> {
       // Idle: a 25s cap from playback start; fullscreen lets it play out.
       _dwell = Timer(const Duration(seconds: 25), () => advance(1));
     }
+  }
+
+  /// Home is about to open a page over big picture. Take the trailer's video
+  /// texture out of the tree FIRST — no frame may draw a texture that's being
+  /// torn down (opening a franchise page mid-trailer-swap crashed the Windows
+  /// engine in Skia's GrDirectContext::flush, 2026-09-26) — then stop the
+  /// player, and hold until [resumeAfterPage].
+  Future<void> pauseForPage() async {
+    _hold = true;
+    _suspended = true;
+    _dwell?.cancel();
+    _trailerDelay?.cancel();
+    _followDebounce?.cancel();
+    if (mounted && _trailerShown) setState(() => _trailerShown = false);
+    await WidgetsBinding.instance.endOfFrame;
+    await _trailer.stop();
+  }
+
+  /// The page home opened is closed: back to the backdrop, trailer after the
+  /// usual beat.
+  void resumeAfterPage() {
+    if (!mounted) return;
+    _hold = false;
+    _suspended = false;
+    _showItem();
   }
 
   void _stopTrailer() {
