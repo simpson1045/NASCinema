@@ -8,6 +8,8 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'mpv/mpv_controller.dart';
+
 /// Info about an available update.
 class UpdateInfo {
   UpdateInfo({
@@ -218,14 +220,20 @@ set /a _waited=0
 :wait_for_exit
 tasklist /FI "IMAGENAME eq $exeName" 2>nul | find /I "$exeName" >nul
 if errorlevel 1 goto exit_done
-if !_waited! GEQ 30 goto exit_timeout
+if !_waited! GEQ 15 goto exit_timeout
 timeout /t 1 /nobreak >nul
 set /a _waited+=1
 goto wait_for_exit
 :exit_timeout
-echo WARN: $exeName still running after 30s, attempting copy anyway >> "$logPath"
+REM The old app didn't exit (2026-09-27: it hung holding its mpv, every file
+REM stayed locked and the copy failed). Force it — and any mpv NASCinema
+REM launched (matched by its IPC pipe name, so other mpv use is untouched).
+echo WARN: $exeName still running after 15s, force-closing it >> "$logPath"
+taskkill /F /IM "$exeName" >> "$logPath" 2>&1
+timeout /t 2 /nobreak >nul
 :exit_done
 echo Exit-wait done after !_waited!s >> "$logPath"
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'mpv.exe' -and \$_.CommandLine -like '*nascinema-mpv*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }" >> "$logPath" 2>&1
 
 echo Copying new files from "$extractDir" to "$installDir" ...
 echo robocopy starting >> "$logPath"
@@ -269,6 +277,13 @@ del "$batPath"
       ['/c', 'start', 'NASCinema Update', 'cmd', '/c', batPath],
       mode: ProcessStartMode.detached,
     );
+    // Get out of the way for real: stop the video player first (a live mpv
+    // kept this process from exiting and locked every file the update needed
+    // — 2026-09-27), then terminate hard — exit() can hang in plugin teardown.
+    MpvController.killSync();
+    try {
+      Process.killPid(pid, ProcessSignal.sigkill);
+    } catch (_) {}
     exit(0);
   }
 }
