@@ -387,10 +387,10 @@ class MpvController {
     String glyph(int codepoint, int rgb) {
       // ASS colours are &HBBGGRR&.
       final bgr = ((rgb & 0xFF) << 16) | (rgb & 0xFF00) | ((rgb >> 16) & 0xFF);
-      return '{\\fnKenney Input Xbox Series}{\\fs34}'
+      return '{\\fnKenney Input Xbox Series}{\\fs26}'
           '{\\1c&H${bgr.toRadixString(16).padLeft(6, '0')}&}'
           '${String.fromCharCode(codepoint)}'
-          '{\\fnSegoe UI Semibold}{\\fs22}{\\1c&HFFF1EE&} ';
+          '{\\fnSegoe UI Semibold}{\\fs18}{\\1c&HFFF1EE&}\\h';
     }
 
     const light = 0xEEF1FF;
@@ -404,11 +404,13 @@ class MpvController {
       '${glyph(0xE014, light)}Menu', // Menu (Start)
       '${glyph(0xE00E, 0xE0413A)}Back', // B (red)
     ];
-    // res_y 720 = the OSD's usual scale, so the \fs sizes above match.
+    // 1280x720 canvas: one compact line pinned just above uosc's timeline
+    // (not over its controls row). Previewed with libass before shipping.
     _ipc?.command([
       'osd-overlay', _hintsOverlayId, 'ass-events',
-      '{\\an2}{\\bord2}{\\3c&H270E0A&}${items.join('      ')}\\N\\N\\N\\N',
-      0, 720,
+      '{\\an2\\pos(640,672)\\bord1.5\\3c&H270E0A&\\shad0}'
+          '${items.join('\\h\\h\\h\\h\\h')}',
+      1280, 720,
     ]);
     _hintsTimer?.cancel();
     _hintsTimer = Timer(const Duration(milliseconds: 4500), () {

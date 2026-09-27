@@ -627,7 +627,9 @@ bool playerPad(PadButton b) {
       _versionsHandler!();
     case PadButton.up:
     case PadButton.down:
-      c.uosc('flash-ui');
+      // Just the timeline + the button legend — uosc's full UI (top bar,
+      // mouse buttons, volume) is clutter on a controller.
+      c.uosc('flash-timeline');
       c.showHints(versions: _versionsHandler != null);
     case PadButton.x:
       _menuHint = true;
