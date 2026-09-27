@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import mimetypes
+import re
 import time
 from pathlib import Path
 
@@ -18,6 +19,16 @@ from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
 from ..playback import decide
 from ..streaming import cached_ranges, ensure_segment, get_or_start, log_access
+
+def _client_path(path: str | None) -> str | None:
+    """A path the native renderer can open itself — a Windows network (UNC)
+    or drive path — else None, so it streams the URL instead. On the NAS the
+    backend sees files as /movies/... inside its container; handing that to
+    ELKO made mpv fail to load every movie (2026-09-27)."""
+    if path and (re.match(r"^(\\\\|//)[^\\/]+[\\/]", path) or re.match(r"^[A-Za-z]:[\\/]", path)):
+        return path
+    return None
+
 
 router = APIRouter(prefix="/api", tags=["playback"])
 
@@ -91,7 +102,7 @@ async def play_decision(
         # Native direct-play clients read the source file themselves (the
         # wired renderer plays straight off the NAS — no backend HTTP hop).
         # Browser/remote clients get no path; they stream the URL above.
-        "path": mf.path if (client == "native" and d["mode"] == "direct") else None,
+        "path": _client_path(mf.path) if (client == "native" and d["mode"] == "direct") else None,
         "backdrop": backdrop,
         "logo": logo,
         "resume_position": resume_position,
