@@ -37,9 +37,12 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
   int _item = 0;
   bool _loading = true;
 
-  // Sized so a two-line title under the (1.08×) focused poster clears the
-  // button hints at the bottom.
-  static const _posterW = 220.0, _posterH = 330.0, _gap = 30.0;
+  static const _gap = 30.0;
+  // Small franchises (2–5 movies) get bigger posters so the page doesn't look
+  // empty; bigger ones fit more across. Either way a two-line title under the
+  // (1.08×) focused poster clears the button hints at the bottom.
+  double get _posterW => _f.movies.length <= 5 ? 250.0 : 220.0;
+  double get _posterH => _posterW * 1.5;
 
   @override
   void initState() {
@@ -192,7 +195,7 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
                 SizedBox(
                   width: 1000,
                   child: Text(_f.overview!,
-                      maxLines: 4,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           color: Color(0xFFDDE2F5), fontSize: 28, height: 1.35)),
@@ -204,8 +207,8 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
         Positioned(
           left: 0,
           right: 0,
-          top: 540,
-          height: 430,
+          top: 500,
+          height: 490,
           child: _loading && _f.movies.isEmpty
               ? const Center(
                   child: CircularProgressIndicator(color: NasColors.amber))

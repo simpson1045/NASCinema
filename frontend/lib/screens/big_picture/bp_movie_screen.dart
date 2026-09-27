@@ -357,7 +357,9 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                   width: 900,
                   child: Text(
                     overview,
-                    maxLines: 5,
+                    // 3 lines (like the home hero): the column then always
+                    // ends above the More in / More like this / Cast band.
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         color: Color(0xFFDDE2F5), fontSize: 28, height: 1.35),

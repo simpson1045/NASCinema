@@ -6,6 +6,7 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 - **Track Manager:** press **Back** on the Big Picture home and choose **Track Manager** to clean foreign dubs and subtitles out of your movies — biggest space savings first, with a warning on movies that start in the wrong language. Open a movie to see every track marked Keep or Drop (and why); **X** strips it, **Y** protects it so it's never touched. On the list, **Y** strips all the worthwhile ones. The **Jobs** tab shows progress; every original is kept until you choose **Confirm & free space** (Y), and **X** undoes a strip until then.
 - **Fixed:** opening a franchise page crashed the app on Windows (the home trailer's video was being torn down while the page opened). Pages now open only after the trailer has stepped aside.
 - **Franchise pages:** movie titles no longer run into the button hints at the bottom.
+- **Tidier pages:** on a movie page the audio/subtitle line no longer runs into the "More in…" row; franchise pages have bigger posters for small franchises and titles clear the button hints.
 - **Franchise logos:** the Franchises row now shows each franchise's real logo (borrowed from its movies — TMDB doesn't publish franchise logos).
 
 ## 0.8.0 - 2026-09-26
