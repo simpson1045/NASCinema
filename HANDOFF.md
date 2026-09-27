@@ -32,11 +32,12 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   there's a resume point; startAt 0), Resume shows progress as a strip on the
   button, replay/My List hints replace the audio line (fixed height); legend
   fades with uosc's timeline (flash_duration 3000, also hand-set on ELKO).
-- **Open bug:** the in-app updater can't replace files because the old app
-  doesn't exit (it kept its mpv alive; robocopy ERROR 32 on
-  bonsoir_windows_plugin.dll). Workaround used: stop nascinema/mpv on ELKO,
-  robocopy %TEMP%\nascinema-update-extracted -> C:\NASCinema\renderer, Matt starts
-  the app. Fix: make the update exit kill mpv + really exit.
+- **Updater fixed in b44** (installed on ELKO by hand, verified 0.9.0+44):
+  the app self-terminates (Process.killPid) after launching the script; mpv
+  dies with it (kill-on-close leash); the script force-closes the app after
+  15 s and stops any mpv whose command line has nascinema-mpv. b43 failed
+  (web build: update_service imported mpv_controller, i.e. dart:ffi); no release.
+- Backend 5b3a6fb deployed (native_path_map, blank = stream).
 - Still open: ~39 GB test copies in /mnt/scratch/nascinema-strip-test (delete on
   Matt's word).
 
