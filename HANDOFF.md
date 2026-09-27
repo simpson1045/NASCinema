@@ -7,7 +7,25 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-27 ~00:10 UTC) — Track Manager Phase B LIVE
+## Latest (2026-09-27 ~05:00 UTC) — franchise-page crash on ELKO: diagnosed, fix in b38
+
+- Every Big Picture franchise page crashed the Windows app (freeze, then close).
+  ELKO event log: nascinema.exe 0.9.0.37, flutter_windows.dll, c0000005 at
+  +0x2c4527 — same offset twice (Land Before Time, National Treasure).
+- Symbolized with the engine's own PDB (Flutter 3.47.1, engine 5d531788, GCS
+  windows-x64-release/windows-x64-flutter.zip; DLL timestamp matched): Skia
+  **GrDirectContext::flush**. Ruled out: data, images (all decode), Dart layout
+  (real page renders in a test), GPU resets (none).
+- Cause (best fit): home pushed pages while the hero trailer's media_kit video
+  texture was live and stopped it up to 1 s later (route poll); a focused
+  franchise tile also made the hero swap trailers at that moment.
+- Fix a3f4499 → **v0.9.0-b38**: _pushPage + BpHero.pauseForPage (video out of
+  the tree → frame → stop player → hold poll) / resumeAfterPage; franchise
+  tiles don't swap the hero. Needs Matt to confirm on ELKO.
+- Tool for next time: scratchpad pdbsym.py (MSF/DBI reader) maps an RVA to a
+  function without LLVM.
+
+## Earlier (2026-09-27 ~00:10 UTC) — Track Manager Phase B LIVE
 
 **Done:**
 - Reprobed the other Claude's 97 stripped files (29 are NASCinema movies; the
