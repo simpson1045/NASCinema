@@ -8,8 +8,6 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'mpv/mpv_controller.dart';
-
 /// Info about an available update.
 class UpdateInfo {
   UpdateInfo({
@@ -277,10 +275,12 @@ del "$batPath"
       ['/c', 'start', 'NASCinema Update', 'cmd', '/c', batPath],
       mode: ProcessStartMode.detached,
     );
-    // Get out of the way for real: stop the video player first (a live mpv
-    // kept this process from exiting and locked every file the update needed
-    // — 2026-09-27), then terminate hard — exit() can hang in plugin teardown.
-    MpvController.killSync();
+    // Get out of the way for real: a live mpv kept this process from exiting
+    // and locked every file the update needed (2026-09-27). Terminate hard —
+    // exit() can hang in plugin teardown — and mpv goes with us: it's leashed
+    // to this process (kill-on-close job), and the script stops strays too.
+    // (No MpvController import here: it uses dart:ffi, which breaks the web
+    // build this file is also part of.)
     try {
       Process.killPid(pid, ProcessSignal.sigkill);
     } catch (_) {}
