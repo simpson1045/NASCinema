@@ -37,7 +37,9 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
   int _item = 0;
   bool _loading = true;
 
-  static const _posterW = 240.0, _posterH = 360.0, _gap = 30.0;
+  // Sized so a two-line title under the (1.08×) focused poster clears the
+  // button hints at the bottom.
+  static const _posterW = 220.0, _posterH = 330.0, _gap = 30.0;
 
   @override
   void initState() {
@@ -202,8 +204,8 @@ class _BpCollectionScreenState extends State<BpCollectionScreen> {
         Positioned(
           left: 0,
           right: 0,
-          top: 560,
-          height: 440,
+          top: 540,
+          height: 430,
           child: _loading && _f.movies.isEmpty
               ? const Center(
                   child: CircularProgressIndicator(color: NasColors.amber))
