@@ -11,6 +11,7 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 - **Cleaner movie screen:** the button legend is a tidy line of Xbox buttons just above the timeline that fades out with it after 3 seconds, **▲/▼** shows only the timeline and legend, the volume slider is gone (your receiver has volume), and there's no progress line hanging around during the movie.
 - **Fixed:** if the player can't start, **B** now gets you out (it used to leave you stuck on a black screen).
 - **Fixed:** movies wouldn't play on the PC renderer since the server moved to the NAS — they stream again.
+- **Fixed:** updating could fail with the old app stuck open (and a movie still playing in the background). The updater now closes the old app and its player before installing.
 - **Franchise logos:** the Franchises row now shows each franchise's real logo (borrowed from its movies — TMDB doesn't publish franchise logos).
 
 ## 0.8.0 - 2026-09-26
