@@ -7,7 +7,35 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-27 ~06:30 UTC) — movie night fixes (b40 published)
+## Latest (2026-09-28 ~07:00 UTC) — National Treasure night 2: subtitle drift, stream pool bug
+
+- **Stream DB-pool bug (fixed, deployed 63cb60c):** /api/stream/{id}/direct held its
+  Depends() session for the whole StreamingResponse; each seek added a long-lived
+  stream → QueuePool (5+10) exhausted → 500s → mpv "Seek failed / Corrupt file" →
+  frozen after a rewind. Now a short-lived SessionLocal lookup. Tested with 25
+  concurrent streams: DB requests + a seek still instant.
+- **Subtitle drift was the FILE, not the player.** The remux's SRT tracks ("full",
+  "SDH (full)") drift in sections vs the dialogue (center-channel cross-correlation,
+  /tmp/driftmap.py + fine.py in the nascinema container): ok 0-25 min, +2.0-2.5 s
+  late 26-41, ok 41-74, ~0.6 early 75-97, +3.5-4.3 late 1:41-1:42, ~0.6 early after.
+  mpv verified: sub-delay 0, shows each cue within 0.05 s of the file, A/V in sync.
+- **Fix used tonight:** re-timed Matt's own track section by section →
+  data/subs/1075/en-fixed.vtt (1457 cues), loaded live via mpv IPC (sub-add /
+  sub-reload on the app's pipe — IPC accepts extra clients). Matt: "close enough".
+- **TODO next (Matt: "sooner rather than later"):**
+  1. Subtitle timing adjuster in the Windows player's Y menu (Earlier/Later 0.1 s,
+     Reset), saved per file (PUT /api/subtitles/{id}/offset exists), applied at mpv
+     launch (--sub-delay; _loadSubs applies it before mpv exists today).
+  2. App must remember an external/server subtitle as the default for a movie
+     (resume currently falls back to the embedded track; the app saves subtitle
+     null on exit).
+  3. Track Manager "Check subtitle timing": run the drift map per movie, flag
+     drifting tracks, offer the automatic re-time (keep noisy action/music windows
+     at original timing; fine 10 s-step pass at jumps).
+  4. Other Claude's place_ssd.py saturates the HDD pool while streaming — pause it
+     during playback (or throttle).
+
+## Earlier (2026-09-27 ~06:30 UTC) — movie night fixes (b40 published)
 
 - **Movies wouldn't play on ELKO** since the backend moved to the NAS: the play
   decision handed native clients the container path (/movies/...), mpv
