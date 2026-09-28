@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..db import get_session
+from ..db import SessionLocal, get_session
 from ..metadata import get_movie_logo
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
@@ -139,16 +139,18 @@ _STREAM_CHUNK = 4 * 1024 * 1024
 
 
 @router.get("/stream/{file_id}/direct")
-async def stream_direct(
-    file_id: int,
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-):
-    mf = await session.scalar(select(MediaFile).where(MediaFile.id == file_id))
-    if not mf or not Path(mf.path).exists():
+async def stream_direct(file_id: int, request: Request):
+    # Look the path up in a short-lived session and give the connection back
+    # BEFORE streaming. As a Depends() session it stayed checked out for the
+    # whole response — a whole movie — so every seek held another connection
+    # until the pool (5 + 10) ran dry and everything 500'd (2026-09-28: a
+    # rewind froze the movie).
+    async with SessionLocal() as session:
+        mf = await session.scalar(select(MediaFile).where(MediaFile.id == file_id))
+        path = mf.path if mf else None
+    if not path or not Path(path).exists():
         raise HTTPException(status_code=404, detail="File not found")
 
-    path = mf.path
     size = await asyncio.to_thread(lambda: Path(path).stat().st_size)
     ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
 
