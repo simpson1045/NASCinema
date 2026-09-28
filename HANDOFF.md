@@ -7,7 +7,29 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-28 ~07:00 UTC) — National Treasure night 2: subtitle drift, stream pool bug
+## Latest (2026-09-28 ~09:45 UTC) — trailer-end crash fixed (b45), TruMotion, 24p stutter
+
+- **Crash after the movie (fixed in code, b45 = e219aef):** Matt played Land Before
+  Time's trailer on its movie page; the app died the moment it ended. Same fault as
+  the franchise crash (flutter_windows +0x2c4527, Skia GrDirectContext::flush): the
+  trailer page made a TrailerPlayer per trailer and disposed it while the pop
+  animation still drew its texture. Now: one static shared TrailerPlayer for all
+  movie-page trailers (never disposed; callbacks rebindable), every exit through
+  `_close` (texture out → endOfFrame → stop → Navigator.pop), PopScope(canPop:false)
+  funnels other backs into it. media_kit already runs keep-open=yes, so EOF itself
+  doesn't free the texture. **Verify on ELKO:** play a trailer to its end ×3 and B
+  out mid-trailer ×3 before calling it fixed.
+  - Side effect: Mac `dart format` reformatted all of bp_movie_screen.dart (~890
+    lines, style only) in that commit.
+- **C2 TruMotion greyed out on the movie path:** the fix is the webOS popup on
+  HDMI_2 ("Denon AVR", bluray.png, Matt presses OK) — documented in the expanded
+  memory file since 09-23; re-run whenever TruMotion greys out.
+- **24p stutter still open:** ~1 dropped frame / 1.5 s in the embedded (--wid) mpv.
+  `d3d11-flip=no` made the player flash on resume → reverted (mpv.conf back to
+  mpv.conf.bak-20260928-0138). Next, when Matt isn't watching: mpv own fullscreen
+  window, video-sync=display-resample, vo/gpu-api variants.
+
+## Earlier (2026-09-28 ~07:00 UTC) — National Treasure night 2: subtitle drift, stream pool bug
 
 - **Stream DB-pool bug (fixed, deployed 63cb60c):** /api/stream/{id}/direct held its
   Depends() session for the whole StreamingResponse; each seek added a long-lived
