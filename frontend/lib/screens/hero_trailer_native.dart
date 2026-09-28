@@ -26,9 +26,11 @@ class TrailerPlayer {
     required this.onError,
   });
 
-  final VoidCallback onFirstFrame;
-  final VoidCallback onFinished;
-  final VoidCallback onError;
+  // Settable so a long-lived player (the movie page's shared trailer player)
+  // can be handed from one screen to the next.
+  VoidCallback onFirstFrame;
+  VoidCallback onFinished;
+  VoidCallback onError;
 
   Player? _player;
   VideoController? _controller;
@@ -55,14 +57,15 @@ class TrailerPlayer {
 
   /// Relative seek, clamped to the trailer.
   Future<void> seekBy(double seconds) => _run(() async {
-        final p = _player;
-        if (p == null) return;
-        final d = p.state.duration;
-        var to = p.state.position + Duration(milliseconds: (seconds * 1000).round());
-        if (to < Duration.zero) to = Duration.zero;
-        if (d > Duration.zero && to > d) to = d;
-        await p.seek(to);
-      });
+    final p = _player;
+    if (p == null) return;
+    final d = p.state.duration;
+    var to =
+        p.state.position + Duration(milliseconds: (seconds * 1000).round());
+    if (to < Duration.zero) to = Duration.zero;
+    if (d > Duration.zero && to > d) to = d;
+    await p.seek(to);
+  });
 
   /// Serialize every player operation — no two ever overlap.
   Future<void> _run(Future<void> Function() op) =>
@@ -84,25 +87,31 @@ class TrailerPlayer {
       player,
       configuration: const VideoControllerConfiguration(hwdec: 'no'),
     );
-    _subs.add(player.stream.completed.listen((done) {
-      if (done && _active) {
-        _active = false;
-        onFinished();
-      }
-    }));
-    _subs.add(player.stream.error.listen((_) {
-      if (_active) {
-        _active = false;
-        onError();
-      }
-    }));
+    _subs.add(
+      player.stream.completed.listen((done) {
+        if (done && _active) {
+          _active = false;
+          onFinished();
+        }
+      }),
+    );
+    _subs.add(
+      player.stream.error.listen((_) {
+        if (_active) {
+          _active = false;
+          onError();
+        }
+      }),
+    );
     // Real frames are flowing once the position moves past zero.
-    _subs.add(player.stream.position.listen((pos) {
-      if (_active && _shownFor != _generation && pos > Duration.zero) {
-        _shownFor = _generation;
-        onFirstFrame();
-      }
-    }));
+    _subs.add(
+      player.stream.position.listen((pos) {
+        if (_active && _shownFor != _generation && pos > Duration.zero) {
+          _shownFor = _generation;
+          onFirstFrame();
+        }
+      }),
+    );
     return player;
   }
 
@@ -146,13 +155,15 @@ class TrailerPlayer {
     _generation++;
     _active = false;
     final player = _player;
-    _queue = _queue.then((_) async {
-      for (final s in _subs) {
-        await s.cancel();
-      }
-      _subs.clear();
-      await player?.dispose();
-    }).catchError((_) {});
+    _queue = _queue
+        .then((_) async {
+          for (final s in _subs) {
+            await s.cancel();
+          }
+          _subs.clear();
+          await player?.dispose();
+        })
+        .catchError((_) {});
     _disposed = true;
     _player = null;
     _controller = null;

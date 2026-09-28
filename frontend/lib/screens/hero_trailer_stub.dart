@@ -10,9 +10,9 @@ class TrailerPlayer {
     required this.onError,
   });
 
-  final VoidCallback onFirstFrame;
-  final VoidCallback onFinished;
-  final VoidCallback onError;
+  VoidCallback onFirstFrame;
+  VoidCallback onFinished;
+  VoidCallback onError;
 
   bool get supported => false;
 

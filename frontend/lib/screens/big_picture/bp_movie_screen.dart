@@ -72,8 +72,12 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     _logo = _m.logo;
     _logoSub = _m.logoSubtitle;
     PadDispatch.add(_onPad);
-    FlagService.register(this, 'bp-movie', widget.baseUrl,
-        () => {'movie_id': _m.id, 'movie_title': _m.title});
+    FlagService.register(
+      this,
+      'bp-movie',
+      widget.baseUrl,
+      () => {'movie_id': _m.id, 'movie_title': _m.title},
+    );
     _load();
   }
 
@@ -118,27 +122,32 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
 
   // Buttons: Play/Resume, (Start over, when there's a resume point), Trailer,
   // Versions & Audio, My List — by name, since Start over comes and goes.
-  List<String> get _buttons =>
-      ['play', if (_resume) 'restart', 'trailer', 'tracks', 'list'];
+  List<String> get _buttons => [
+    'play',
+    if (_resume) 'restart',
+    'trailer',
+    'tracks',
+    'list',
+  ];
   int get _buttonCount => _buttons.length;
   String get _buttonId => _buttons[_button.clamp(0, _buttons.length - 1)];
   bool _on(String id) => _row == _Row.buttons && _buttonId == id;
   void _focusButton(String id) => setState(() {
-        _row = _Row.buttons;
-        _button = _buttons.indexOf(id);
-      });
+    _row = _Row.buttons;
+    _button = _buttons.indexOf(id);
+  });
 
   bool get _hasSeries => (_series?.movies.length ?? 0) > 1;
 
   /// The rows ↓/↑ step through, in order — only the ones that have content.
   List<_Row> get _rows => [
-        if ((_m.overview ?? '').isNotEmpty) _Row.overview, // ▲ from the buttons
-        _Row.buttons,
-        if (_hasSeries) _Row.series,
-        if (_more.isNotEmpty) _Row.more,
-        if (_cast.isNotEmpty) _Row.cast,
-        if (_extras.isNotEmpty) _Row.extras,
-      ];
+    if ((_m.overview ?? '').isNotEmpty) _Row.overview, // ▲ from the buttons
+    _Row.buttons,
+    if (_hasSeries) _Row.series,
+    if (_more.isNotEmpty) _Row.more,
+    if (_cast.isNotEmpty) _Row.cast,
+    if (_extras.isNotEmpty) _Row.extras,
+  ];
 
   /// What the bottom band shows: the row you're on, or (on the buttons) the
   /// first one below them.
@@ -174,14 +183,16 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     });
   }
 
-  void _readMore() => showBpReadMore(context,
-      title: _m.title,
-      subtitle: [
-        if (_m.year != null) '${_m.year}',
-        if (_m.runtimeLabel != null) _m.runtimeLabel!,
-        ..._m.genres.take(3),
-      ].join('  ·  '),
-      text: _m.overview ?? '');
+  void _readMore() => showBpReadMore(
+    context,
+    title: _m.title,
+    subtitle: [
+      if (_m.year != null) '${_m.year}',
+      if (_m.runtimeLabel != null) _m.runtimeLabel!,
+      ..._m.genres.take(3),
+    ].join('  ·  '),
+    text: _m.overview ?? '',
+  );
 
   void _activate() {
     if (_row == _Row.overview) {
@@ -199,7 +210,9 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       // Browsing only (an actor page is a later idea).
     } else if (_row == _Row.extras && _extras.isNotEmpty) {
       final e = _extras[_extra];
-      _open(PlayerScreen(fileId: e.id, baseUrl: widget.baseUrl, title: e.title));
+      _open(
+        PlayerScreen(fileId: e.id, baseUrl: widget.baseUrl, title: e.title),
+      );
     } else if (_buttonId == 'play') {
       _play();
     } else if (_buttonId == 'restart') {
@@ -209,11 +222,13 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     } else if (_buttonId == 'list') {
       _toggleList();
     } else {
-      _open(_BpTrailerScreen(
-        url: '${widget.baseUrl}/api/movies/${_m.id}/trailer',
-        baseUrl: widget.baseUrl,
-        movie: _m,
-      ));
+      _open(
+        _BpTrailerScreen(
+          url: '${widget.baseUrl}/api/movies/${_m.id}/trailer',
+          baseUrl: widget.baseUrl,
+          movie: _m,
+        ),
+      );
     }
   }
 
@@ -221,16 +236,18 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     if (_files.isEmpty) return; // still loading
     final pick = _pick ?? TrackPick(fileId: _files.first.id);
     unawaited(pick.save(_m.id));
-    _open(PlayerScreen(
-      fileId: pick.fileId,
-      baseUrl: widget.baseUrl,
-      title: _m.title,
-      startAt: fromStart ? 0 : null,
-      audioTrack: pick.audio,
-      subtitleTrack: pick.subtitle,
-      versions: _files,
-      externalSubtitle: pick.external,
-    ));
+    _open(
+      PlayerScreen(
+        fileId: pick.fileId,
+        baseUrl: widget.baseUrl,
+        title: _m.title,
+        startAt: fromStart ? 0 : null,
+        audioTrack: pick.audio,
+        subtitleTrack: pick.subtitle,
+        versions: _files,
+        externalSubtitle: pick.external,
+      ),
+    );
   }
 
   Future<void> _toggleList() async {
@@ -352,14 +369,17 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       children: [
         const ColoredBox(color: NasColors.bg),
         if (backdrop != null)
-          Image.network(backdrop,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const SizedBox.shrink()),
+          Image.network(
+            backdrop,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
         const _PageScrim(),
         Positioned(
           left: 90,
           top: 120,
-          width: 1200, // 4 buttons (Play · Trailer · Versions & Audio · My List)
+          width:
+              1200, // 4 buttons (Play · Trailer · Versions & Audio · My List)
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -398,69 +418,76 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: Color(0xFFDDE2F5), fontSize: 28, height: 1.35),
+                          color: Color(0xFFDDE2F5),
+                          fontSize: 28,
+                          height: 1.35,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ],
               const SizedBox(height: 40),
-              Row(children: [
-                _BpButton(
-                  icon: Icons.play_arrow_rounded,
-                  label: _resume ? 'Resume' : 'Play',
-                  primary: true,
-                  focused: _on('play'),
-                  busy: !_loaded,
-                  progress: _resume ? _m.progress : null,
-                  onTap: () {
-                    _focusButton('play');
-                    _play();
-                  },
-                ),
-                if (_resume) ...[
+              Row(
+                children: [
+                  _BpButton(
+                    icon: Icons.play_arrow_rounded,
+                    label: _resume ? 'Resume' : 'Play',
+                    primary: true,
+                    focused: _on('play'),
+                    busy: !_loaded,
+                    progress: _resume ? _m.progress : null,
+                    onTap: () {
+                      _focusButton('play');
+                      _play();
+                    },
+                  ),
+                  if (_resume) ...[
+                    const SizedBox(width: 24),
+                    _BpButton(
+                      icon: Icons.replay_rounded,
+                      label: '',
+                      focused: _on('restart'),
+                      onTap: () {
+                        _focusButton('restart');
+                        _play(fromStart: true);
+                      },
+                    ),
+                  ],
                   const SizedBox(width: 24),
                   _BpButton(
-                    icon: Icons.replay_rounded,
-                    label: '',
-                    focused: _on('restart'),
+                    icon: Icons.movie_outlined,
+                    label: 'Trailer',
+                    focused: _on('trailer'),
                     onTap: () {
-                      _focusButton('restart');
-                      _play(fromStart: true);
+                      _focusButton('trailer');
+                      _activate();
+                    },
+                  ),
+                  const SizedBox(width: 24),
+                  _BpButton(
+                    icon: Icons.tune_rounded,
+                    label: _files.length > 1
+                        ? 'Versions & Audio'
+                        : 'Audio & Subtitles',
+                    focused: _on('tracks'),
+                    onTap: () {
+                      _focusButton('tracks');
+                      _activate();
+                    },
+                  ),
+                  const SizedBox(width: 24),
+                  _BpButton(
+                    icon: _inList ? Icons.check_rounded : Icons.add_rounded,
+                    label: '',
+                    focused: _on('list'),
+                    onTap: () {
+                      _focusButton('list');
+                      _activate();
                     },
                   ),
                 ],
-                const SizedBox(width: 24),
-                _BpButton(
-                  icon: Icons.movie_outlined,
-                  label: 'Trailer',
-                  focused: _on('trailer'),
-                  onTap: () {
-                    _focusButton('trailer');
-                    _activate();
-                  },
-                ),
-                const SizedBox(width: 24),
-                _BpButton(
-                  icon: Icons.tune_rounded,
-                  label: _files.length > 1 ? 'Versions & Audio' : 'Audio & Subtitles',
-                  focused: _on('tracks'),
-                  onTap: () {
-                    _focusButton('tracks');
-                    _activate();
-                  },
-                ),
-                const SizedBox(width: 24),
-                _BpButton(
-                  icon: _inList ? Icons.check_rounded : Icons.add_rounded,
-                  label: '',
-                  focused: _on('list'),
-                  onTap: () {
-                    _focusButton('list');
-                    _activate();
-                  },
-                ),
-              ]),
+              ),
               // One line under the buttons: what ⟲ / + do while they're
               // highlighted, else what Play will use. Same height either way,
               // so the column never grows into the band below.
@@ -472,19 +499,24 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                     ? Text(
                         _on('restart')
                             ? 'Start over from the beginning'
-                            : (_inList ? 'On My List · A to remove' : 'Add to My List'),
+                            : (_inList
+                                  ? 'On My List · A to remove'
+                                  : 'Add to My List'),
                         style: const TextStyle(
-                            color: NasColors.amber,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700))
+                          color: NasColors.amber,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
                     : Text(
                         _pick?.summary(_files) ?? '',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: NasColors.muted,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w600),
+                          color: NasColors.muted,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
               ),
             ],
@@ -513,10 +545,11 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.center,
         style: const TextStyle(
-            color: Colors.white,
-            fontSize: 72,
-            fontWeight: FontWeight.w800,
-            height: 1.05),
+          color: Colors.white,
+          fontSize: 72,
+          fontWeight: FontWeight.w800,
+          height: 1.05,
+        ),
       ),
     );
     final logo = _logo;
@@ -541,36 +574,41 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
           Positioned(
             left: 90,
             top: 0,
-            child: Text('More in ${_series!.name}  ·  ${ms.length}',
-                style: const TextStyle(
-                    color: NasColors.text,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w600)),
+            child: Text(
+              'More in ${_series!.name}  ·  ${ms.length}',
+              style: const TextStyle(
+                color: NasColors.text,
+                fontSize: 32,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           AnimatedPositioned(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             left: 90 - (focused ? _seriesIdx : 0) * (cardW + gap),
             top: 56,
-            child: Row(children: [
-              for (int i = 0; i < ms.length; i++) ...[
-                if (i > 0) const SizedBox(width: gap),
-                _SeriesCard(
-                  movie: ms[i],
-                  width: cardW,
-                  height: cardH,
-                  current: ms[i].id == _m.id,
-                  focused: focused && i == _seriesIdx,
-                  onTap: () {
-                    setState(() {
-                      _row = _Row.series;
-                      _seriesIdx = i;
-                    });
-                    _activate();
-                  },
-                ),
+            child: Row(
+              children: [
+                for (int i = 0; i < ms.length; i++) ...[
+                  if (i > 0) const SizedBox(width: gap),
+                  _SeriesCard(
+                    movie: ms[i],
+                    width: cardW,
+                    height: cardH,
+                    current: ms[i].id == _m.id,
+                    focused: focused && i == _seriesIdx,
+                    onTap: () {
+                      setState(() {
+                        _row = _Row.series;
+                        _seriesIdx = i;
+                      });
+                      _activate();
+                    },
+                  ),
+                ],
               ],
-            ]),
+            ),
           ),
         ],
       ),
@@ -614,7 +652,11 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       children: [
         for (int i = 0; i < _cast.length; i++) ...[
           if (i > 0) const SizedBox(width: gap),
-          _CastCard(member: _cast[i], width: cardW, focused: focused && i == _castIdx),
+          _CastCard(
+            member: _cast[i],
+            width: cardW,
+            focused: focused && i == _castIdx,
+          ),
         ],
       ],
     );
@@ -626,36 +668,39 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     required String title,
     required double offset,
     required List<Widget> children,
-  }) =>
-      Positioned(
-        left: 0,
-        right: 0,
-        top: 800,
-        height: 260,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              left: 90,
-              top: 0,
-              child: Text(title,
-                  style: const TextStyle(
-                      color: NasColors.text,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w600)),
+  }) => Positioned(
+    left: 0,
+    right: 0,
+    top: 800,
+    height: 260,
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 90,
+          top: 0,
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: NasColors.text,
+              fontSize: 32,
+              fontWeight: FontWeight.w600,
             ),
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              left: 90 - offset,
-              top: 56,
-              child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: children),
-            ),
-          ],
+          ),
         ),
-      );
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          left: 90 - offset,
+          top: 56,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _extrasRail() {
     const cardW = 420.0, gap = 24.0;
@@ -671,34 +716,39 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
           Positioned(
             left: 90,
             top: 0,
-            child: Text('Extras  ·  ${_extras.length}',
-                style: const TextStyle(
-                    color: NasColors.text,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w600)),
+            child: Text(
+              'Extras  ·  ${_extras.length}',
+              style: const TextStyle(
+                color: NasColors.text,
+                fontSize: 32,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           AnimatedPositioned(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             left: 90 - _extra * (cardW + gap),
             top: 56,
-            child: Row(children: [
-              for (int i = 0; i < _extras.length; i++) ...[
-                if (i > 0) const SizedBox(width: gap),
-                _ExtraCard(
-                  extra: _extras[i],
-                  width: cardW,
-                  focused: focused && i == _extra,
-                  onTap: () {
-                    setState(() {
-                      _row = _Row.extras;
-                      _extra = i;
-                    });
-                    _activate();
-                  },
-                ),
+            child: Row(
+              children: [
+                for (int i = 0; i < _extras.length; i++) ...[
+                  if (i > 0) const SizedBox(width: gap),
+                  _ExtraCard(
+                    extra: _extras[i],
+                    width: cardW,
+                    focused: focused && i == _extra,
+                    onTap: () {
+                      setState(() {
+                        _row = _Row.extras;
+                        _extra = i;
+                      });
+                      _activate();
+                    },
+                  ),
+                ],
               ],
-            ]),
+            ),
           ),
         ],
       ),
@@ -713,26 +763,32 @@ class _PageScrim extends StatelessWidget {
   Widget build(BuildContext context) {
     const navy = NasColors.bg;
     return IgnorePointer(
-      child: Stack(fit: StackFit.expand, children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [navy.withValues(alpha: 0.95), navy.withValues(alpha: 0)],
-              stops: const [0.0, 0.7],
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  navy.withValues(alpha: 0.95),
+                  navy.withValues(alpha: 0),
+                ],
+                stops: const [0.0, 0.7],
+              ),
             ),
           ),
-        ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [navy.withValues(alpha: 0), navy],
-              stops: const [0.55, 1.0],
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [navy.withValues(alpha: 0), navy],
+                stops: const [0.55, 1.0],
+              ),
             ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -770,31 +826,50 @@ class _BpButton extends StatelessWidget {
         scale: focused ? 1.08 : 1.0,
         child: Container(
           padding: EdgeInsets.symmetric(
-              horizontal: label.isEmpty ? 22 : 40, vertical: 20),
+            horizontal: label.isEmpty ? 22 : 40,
+            vertical: 20,
+          ),
           clipBehavior: Clip.antiAlias,
           foregroundDecoration: progress == null
               ? null
-              : _ProgressStrip(progress!.clamp(0.0, 1.0), primary ? NasColors.bg : NasColors.amber),
+              : _ProgressStrip(
+                  progress!.clamp(0.0, 1.0),
+                  primary ? NasColors.bg : NasColors.amber,
+                ),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-                color: focused ? Colors.white : Colors.transparent, width: 4),
+              color: focused ? Colors.white : Colors.transparent,
+              width: 4,
+            ),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            busy
-                ? SizedBox(
-                    width: 34,
-                    height: 34,
-                    child: CircularProgressIndicator(strokeWidth: 3, color: fg))
-                : Icon(icon, color: fg, size: 40),
-            if (label.isNotEmpty) ...[
-              const SizedBox(width: 14),
-              Text(label,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              busy
+                  ? SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: fg,
+                      ),
+                    )
+                  : Icon(icon, color: fg, size: 40),
+              if (label.isNotEmpty) ...[
+                const SizedBox(width: 14),
+                Text(
+                  label,
                   style: TextStyle(
-                      color: fg, fontSize: 30, fontWeight: FontWeight.w700)),
+                    color: fg,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ],
-          ]),
+          ),
         ),
       ),
     );
@@ -809,7 +884,8 @@ class _ProgressStrip extends Decoration {
   final Color color;
 
   @override
-  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _ProgressStripPainter(this);
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) =>
+      _ProgressStripPainter(this);
 }
 
 class _ProgressStripPainter extends BoxPainter {
@@ -822,11 +898,17 @@ class _ProgressStripPainter extends BoxPainter {
     final size = cfg.size;
     if (size == null) return;
     const h = 6.0;
-    final track = Rect.fromLTWH(offset.dx, offset.dy + size.height - h, size.width, h);
+    final track = Rect.fromLTWH(
+      offset.dx,
+      offset.dy + size.height - h,
+      size.width,
+      h,
+    );
     canvas.drawRect(track, Paint()..color = d.color.withValues(alpha: 0.25));
     canvas.drawRect(
-        Rect.fromLTWH(track.left, track.top, size.width * d.value, h),
-        Paint()..color = d.color);
+      Rect.fromLTWH(track.left, track.top, size.width * d.value, h),
+      Paint()..color = d.color,
+    );
   }
 }
 
@@ -863,16 +945,20 @@ class _SeriesCard extends StatelessWidget {
             color: NasColors.surface,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-                color: focused ? Colors.white : Colors.transparent, width: 4),
+              color: focused ? Colors.white : Colors.transparent,
+              width: 4,
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
             fit: StackFit.expand,
             children: [
               if (url != null)
-                Image.network(url,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink()),
+                Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -891,23 +977,33 @@ class _SeriesCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (current)
-                      const Text('NOW VIEWING',
-                          style: TextStyle(
-                              color: NasColors.amber,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5)),
-                    Text(movie.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700)),
+                      const Text(
+                        'NOW VIEWING',
+                        style: TextStyle(
+                          color: NasColors.amber,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    Text(
+                      movie.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     if (movie.year != null)
-                      Text('${movie.year}',
-                          style: const TextStyle(
-                              color: NasColors.muted, fontSize: 18)),
+                      Text(
+                        '${movie.year}',
+                        style: const TextStyle(
+                          color: NasColors.muted,
+                          fontSize: 18,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -921,8 +1017,11 @@ class _SeriesCard extends StatelessWidget {
 
 /// A Cast card: round headshot, name, character.
 class _CastCard extends StatelessWidget {
-  const _CastCard(
-      {required this.member, required this.width, required this.focused});
+  const _CastCard({
+    required this.member,
+    required this.width,
+    required this.focused,
+  });
 
   final CastMember member;
   final double width;
@@ -945,32 +1044,44 @@ class _CastCard extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: NasColors.surface,
                 border: Border.all(
-                    color: focused ? Colors.white : Colors.transparent, width: 4),
+                  color: focused ? Colors.white : Colors.transparent,
+                  width: 4,
+                ),
               ),
               clipBehavior: Clip.antiAlias,
               child: photo == null
                   ? const Icon(Icons.person, color: NasColors.muted, size: 64)
-                  : Image.network(photo,
+                  : Image.network(
+                      photo,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const Icon(Icons.person,
-                          color: NasColors.muted, size: 64)),
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.person,
+                        color: NasColors.muted,
+                        size: 64,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 10),
-          Text(member.name,
+          Text(
+            member.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: focused ? Colors.white : NasColors.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (member.character != null)
+            Text(
+              member.character!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: focused ? Colors.white : NasColors.text,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700)),
-          if (member.character != null)
-            Text(member.character!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: NasColors.muted, fontSize: 17)),
+              style: const TextStyle(color: NasColors.muted, fontSize: 17),
+            ),
         ],
       ),
     );
@@ -1012,31 +1123,40 @@ class _ExtraCard extends StatelessWidget {
             color: NasColors.surface.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-                color: focused ? Colors.white : Colors.transparent, width: 4),
+              color: focused ? Colors.white : Colors.transparent,
+              width: 4,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(extra.type.toUpperCase(),
-                  style: const TextStyle(
-                      color: NasColors.amber,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2)),
+              Text(
+                extra.type.toUpperCase(),
+                style: const TextStyle(
+                  color: NasColors.amber,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text(extra.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: NasColors.text,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2)),
+              Text(
+                extra.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: NasColors.text,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                  height: 1.2,
+                ),
+              ),
               const Spacer(),
               if (_length != null)
-                Text(_length!,
-                    style:
-                        const TextStyle(color: NasColors.muted, fontSize: 20)),
+                Text(
+                  _length!,
+                  style: const TextStyle(color: NasColors.muted, fontSize: 20),
+                ),
             ],
           ),
         ),
@@ -1048,8 +1168,11 @@ class _ExtraCard extends StatelessWidget {
 /// A movie's trailer, fullscreen with sound, never cropped. B/Esc closes it;
 /// it closes itself when the trailer ends or can't be played.
 class _BpTrailerScreen extends StatefulWidget {
-  const _BpTrailerScreen(
-      {required this.url, required this.baseUrl, required this.movie});
+  const _BpTrailerScreen({
+    required this.url,
+    required this.baseUrl,
+    required this.movie,
+  });
 
   final String url;
   final String baseUrl;
@@ -1071,6 +1194,15 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   Timer? _tick;
   bool _playing = false;
   bool _controls = true;
+  bool _closing = false;
+
+  /// ONE texture player for every movie page's trailer, for the app's life —
+  /// never disposed. A player per trailer, disposed as its page popped, tore
+  /// the texture down while the pop animation was still drawing it: Skia
+  /// crashed in GrDirectContext::flush when a trailer ended (2026-09-28), the
+  /// same fault as the hero's franchise-page crash. See [_close] for the
+  /// order that keeps a texture off screen before its player changes.
+  static TrailerPlayer? _shared;
 
   bool get _hdr => _native != null;
 
@@ -1078,20 +1210,27 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   void initState() {
     super.initState();
     PadDispatch.add(_onPad);
-    FlagService.register(this, 'bp-trailer', widget.baseUrl, () => {
-          'kind': 'trailer',
-          'movie_id': widget.movie.id,
-          'movie_title': widget.movie.title,
-          'position_seconds':
-              _hdr ? playerCurrentTime() : _player?.positionSeconds,
-          'trailer_url': widget.url,
-          'hdr': _hdr,
-        });
+    FlagService.register(
+      this,
+      'bp-trailer',
+      widget.baseUrl,
+      () => {
+        'kind': 'trailer',
+        'movie_id': widget.movie.id,
+        'movie_title': widget.movie.title,
+        'position_seconds': _hdr
+            ? playerCurrentTime()
+            : _player?.positionSeconds,
+        'trailer_url': widget.url,
+        'hdr': _hdr,
+      },
+    );
     _start();
   }
 
   Future<void> _start() async {
-    final wantHdr = !kIsWeb &&
+    final wantHdr =
+        !kIsWeb &&
         defaultTargetPlatform == TargetPlatform.windows &&
         await HdrPrefs.wantHdr();
     // Only an actually-HDR trailer goes to native mpv — spinning it up (and
@@ -1099,8 +1238,8 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
     var hdr = false;
     if (wantHdr) {
       try {
-        final src =
-            await ApiService(widget.baseUrl).getTrailerSource(widget.movie.id);
+        final src = await ApiService(widget.baseUrl)
+            .getTrailerSource(widget.movie.id);
         hdr = src['hdr'] == true;
       } catch (_) {}
     }
@@ -1122,16 +1261,21 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
         if (d > 0 && playerCurrentTime() >= d - 0.5) _close();
       });
     } else {
-      _player = TrailerPlayer(
-        onFirstFrame: () {
-          if (!mounted) return;
+      final p = _shared ??= TrailerPlayer(
+        onFirstFrame: () {},
+        onFinished: () {},
+        onError: () {},
+      );
+      p
+        ..onFirstFrame = () {
+          if (!mounted || _closing) return;
           setState(() => _playing = true);
           _poke(); // controls up for a moment as it starts
-        },
-        onFinished: _close,
-        onError: _close,
-      );
-      unawaited(_player!.open(widget.url, muted: false));
+        }
+        ..onFinished = _close
+        ..onError = _close;
+      _player = p;
+      unawaited(p.open(widget.url, muted: false));
       // Progress bar + time refresh while the controls are showing.
       _tick = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (mounted && _controls) setState(() {});
@@ -1160,14 +1304,39 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
     _endPoll?.cancel();
     _hide?.cancel();
     _tick?.cancel();
-    _player?.dispose();
+    final p = _player;
+    if (p != null) {
+      // Shared player: unhook this screen and make sure it's stopped (the
+      // route is gone, so nothing draws its texture any more).
+      p
+        ..onFirstFrame = () {}
+        ..onFinished = () {}
+        ..onError = () {};
+      if (!_closing) unawaited(p.stop());
+    }
     _focus.dispose();
     super.dispose();
   }
 
-  void _close() {
+  /// Every way out comes through here (B, Esc, trailer end, error, system
+  /// back via PopScope). Order matters: take the video texture out of the
+  /// tree, let a frame render without it, stop the player, THEN pop — no
+  /// frame (including the pop animation's) may draw a texture being changed.
+  Future<void> _close() async {
+    if (_closing) return;
+    _closing = true;
     _endPoll?.cancel();
-    if (mounted) Navigator.of(context).maybePop();
+    _tick?.cancel();
+    _hide?.cancel();
+    final p = _player;
+    if (p != null) {
+      if (mounted) {
+        setState(() => _playing = false);
+        await WidgetsBinding.instance.endOfFrame;
+      }
+      await p.stop();
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   /// Every button is claimed here — nothing may fall through to the movie
@@ -1216,8 +1385,12 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
           children: [
             if (paused)
               const Center(
-                child: Icon(Icons.pause_circle_filled,
-                    size: 140, color: Color(0xCCFFFFFF), shadows: shadow),
+                child: Icon(
+                  Icons.pause_circle_filled,
+                  size: 140,
+                  color: Color(0xCCFFFFFF),
+                  shadows: shadow,
+                ),
               ),
             Positioned(
               left: 0,
@@ -1236,20 +1409,26 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('${widget.movie.title} — Trailer',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 34,
-                            fontWeight: FontWeight.w800,
-                            shadows: shadow)),
+                    Text(
+                      '${widget.movie.title} — Trailer',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w800,
+                        shadows: shadow,
+                      ),
+                    ),
                     const SizedBox(height: 18),
                     Row(
                       children: [
-                        Text(_fmt(pos),
-                            style: const TextStyle(
-                                color: NasColors.text,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700)),
+                        Text(
+                          _fmt(pos),
+                          style: const TextStyle(
+                            color: NasColors.text,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         const SizedBox(width: 20),
                         Expanded(
                           child: ClipRRect(
@@ -1263,19 +1442,26 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
                           ),
                         ),
                         const SizedBox(width: 20),
-                        Text('-${_fmt(dur - pos)}',
-                            style: const TextStyle(
-                                color: NasColors.text,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700)),
+                        Text(
+                          '-${_fmt(dur - pos)}',
+                          style: const TextStyle(
+                            color: NasColors.text,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 14),
-                    const PadHints([
-                      (PadGlyph.a, 'Pause'),
-                      (PadGlyph.dpadHorizontal, 'Skip 10s'),
-                      (PadGlyph.b, 'Back'),
-                    ], size: 30, fontSize: 20),
+                    const PadHints(
+                      [
+                        (PadGlyph.a, 'Pause'),
+                        (PadGlyph.dpadHorizontal, 'Skip 10s'),
+                        (PadGlyph.b, 'Back'),
+                      ],
+                      size: 30,
+                      fontSize: 20,
+                    ),
                   ],
                 ),
               ),
@@ -1290,39 +1476,52 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
   Widget build(BuildContext context) {
     final view =
         _native ?? (_playing ? _player?.view(fit: BoxFit.contain) : null);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): _close,
-          const SingleActivator(LogicalKeyboardKey.backspace): _close,
-          const SingleActivator(LogicalKeyboardKey.space): () {
-            _player?.togglePause();
-            _poke();
+    // canPop false: a system back (or anything else calling maybePop) goes
+    // through _close's safe order; _close itself uses Navigator.pop, which
+    // PopScope doesn't block.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _close();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.escape): _close,
+            const SingleActivator(LogicalKeyboardKey.backspace): _close,
+            const SingleActivator(LogicalKeyboardKey.space): () {
+              _player?.togglePause();
+              _poke();
+            },
+            const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
+              _player?.seekBy(-10);
+              _poke();
+            },
+            const SingleActivator(LogicalKeyboardKey.arrowRight): () {
+              _player?.seekBy(10);
+              _poke();
+            },
           },
-          const SingleActivator(LogicalKeyboardKey.arrowLeft): () {
-            _player?.seekBy(-10);
-            _poke();
-          },
-          const SingleActivator(LogicalKeyboardKey.arrowRight): () {
-            _player?.seekBy(10);
-            _poke();
-          },
-        },
-        child: Focus(
-          focusNode: _focus,
-          autofocus: true,
-          child: MouseRegion(
-            onHover: (_) => _poke(),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                view ??
-                    const Center(
-                        child: CircularProgressIndicator(
-                            color: NasColors.amber)),
-                if (!_hdr && _playing) _overlay(),
-              ],
+          child: Focus(
+            focusNode: _focus,
+            autofocus: true,
+            child: MouseRegion(
+              onHover: (_) => _poke(),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  view ??
+                      (_closing
+                          ? const SizedBox.shrink()
+                          : const Center(
+                              child: CircularProgressIndicator(
+                                color: NasColors.amber,
+                              ),
+                            )),
+                  if (!_hdr && _playing) _overlay(),
+                ],
+              ),
             ),
           ),
         ),
