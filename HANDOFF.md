@@ -7,7 +7,35 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-28 ~09:45 UTC) — trailer-end crash fixed (b45), TruMotion, 24p stutter
+## Latest (2026-09-29 ~04:30 UTC) — 24p stutter ROOT CAUSE found; b46 installed, b47 building
+
+- **Measured on ELKO (movie mode, 23.976 Hz via Denon), dropped frames / 30 s:**
+  app's embedded player ~20 · mpv fullscreen alone 0 · mpv fullscreen +
+  display-resample 0 · **mpv --wid'ed into a blank window that never repaints 0**.
+  So embedding is fine; Flutter frames are the problem — every Flutter frame
+  makes DWM re-compose our window with mpv's child, and at 24p it slips.
+- **b46 (installed on ELKO):** player_screen's 250 ms poll + 2 s cache refresh
+  no longer setState on the native leg (nothing they drive is visible; stats
+  panel excepted). Movie-page trailers on Windows go to native mpv (SDR too).
+  **Not yet measured in the real app** — next: read frame-drop-count over the
+  app's IPC pipe during a movie; expect ~0.
+- **b47 (building):** fullscreen hero reel → `HeroReel` (hero_reel_native.dart):
+  embedded full-window mpv reused via loadfile, hidden until frames flow;
+  scrim + logo + ratings rendered from a RepaintBoundary once per trailer →
+  premultiplied BGRA file → mpv `overlay-add` (id 3, alternating 2 files since
+  mpv maps them). Home hero (rails over it) keeps the texture player. Verify:
+  logo overlay lines up, advance/Left/Right, B out of fullscreen, open a movie
+  from the reel, and drops ≈0.
+- **Latent PWON trap:** TheaterControl.onPlayStarted → DenonControl.powerAndSelect
+  with `power: prefs[kDenonPowerPref] ?? true` — if the Denon option is ever
+  enabled in Settings it defaults to powering the Denon ON (Matt: never PWON).
+  Currently disabled on ELKO (no denon/tv prefs set). Default should be false.
+- `house_elko` (ADMS) = movie/game switch; call in-process on NAS if the tool
+  isn't in the session. After movie mode, the TruMotion popup is needed
+  (one-liner in Claude memory c2-trumotion-popup-fix). A first movie-mode
+  switch gave no picture; game → movie re-handshake fixed it.
+
+## Earlier (2026-09-28 ~09:45 UTC) — trailer-end crash fixed (b45), TruMotion, 24p stutter
 
 - **Crash after the movie (fixed in code, b45 = e219aef):** Matt played Land Before
   Time's trailer on its movie page; the app died the moment it ended. Same fault as
