@@ -8,7 +8,10 @@ class HeroReel {
   bool get showing => false;
   double get positionSeconds => 0;
 
-  Future<bool> play(String url, {double start = 0}) async => false;
+  Future<bool> play(String url,
+          {double start = 0, Future<void> Function()? beforeShow}) async =>
+      false;
+  Future<void> fadeOut() async {}
   Future<void> setOverlay(ByteData rgba, int w, int h) async {}
   Future<void> hide() async {}
   Future<void> dispose() async {}

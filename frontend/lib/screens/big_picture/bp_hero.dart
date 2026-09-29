@@ -198,9 +198,20 @@ class BpHeroState extends State<BpHero> {
     if (_follow != null && _follow!.id != m.id) return;
     final url = '${widget.baseUrl}${m.trailerUrl}';
     if (_reelMode) {
-      _reel.play(url, start: start).then((ok) {
-        if (ok && mounted) _onReelFrames(m.id);
-      });
+      _reel
+          .play(url, start: start, beforeShow: () async {
+            // Backdrop → black under the app's fader; mpv then fades in.
+            if (!mounted) return;
+            setState(() => _faderOpaque = true);
+            await Future<void>.delayed(const Duration(milliseconds: 320));
+          })
+          .then((ok) {
+            // The fader is under the video now; clear it for when it hides.
+            if (mounted && _faderOpaque && !_fading) {
+              setState(() => _faderOpaque = false);
+            }
+            if (ok && mounted) _onReelFrames(m.id);
+          });
       return;
     }
     _trailer.open(url, muted: !_full, start: start);
@@ -288,6 +299,7 @@ class BpHeroState extends State<BpHero> {
   void advance(int dir) {
     if (_follow != null) return; // browsing the rails: no rotation
     if (_items.length < 2 || _fading) return;
+    unawaited(_reel.fadeOut()); // mpv fades with the app's fader beneath it
     _fadeThrough(() {
       _i = (_i + dir + _items.length) % _items.length;
       _showItem();
@@ -300,6 +312,7 @@ class BpHeroState extends State<BpHero> {
         ? _reel.positionSeconds
         : (_trailerShown ? _trailer.positionSeconds : 0.0);
     final swapPlayers = _reel.supported && (_reel.showing || _trailerShown);
+    unawaited(_reel.fadeOut());
     if (!swapPlayers) _trailer.setMuted(!full); // unmute instantly (Roku parity)
     _fadeThrough(() {
       _full = full;

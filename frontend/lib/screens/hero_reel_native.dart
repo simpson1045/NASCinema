@@ -50,8 +50,25 @@ class HeroReel {
     return Rect.fromLTWH(0, 0, v.physicalSize.width, v.physicalSize.height);
   }
 
+  static const _quiet =
+      'buffering_indicator,idle_indicator,pause_indicator,timeline,controls,top_bar,volume';
+
+  /// Step the black cover in or out over ~300 ms.
+  static Future<void> _fade(MpvController c, {required bool toBlack}) async {
+    const steps = 6;
+    for (var i = 1; i <= steps; i++) {
+      final t = i / steps;
+      c.cover(((toBlack ? 1 - t : t) * 255).round());
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
   /// Play [url] from [start]; resolves true once frames are on screen.
-  Future<bool> play(String url, {double start = 0}) {
+  /// [beforeShow] runs once frames are flowing, before the video appears
+  /// (the hero fades its backdrop to black there); the video then fades in
+  /// from black.
+  Future<bool> play(String url,
+      {double start = 0, Future<void> Function()? beforeShow}) {
     final gen = ++_gen;
     return _run(() async {
       if (gen != _gen) return false;
@@ -74,6 +91,8 @@ class HeroReel {
         c.overlayRemove(_overlayId);
         c.loadFile(url, start: start);
       }
+      c.uoscDisable(_quiet); // no spinner/timeline in the reel
+      c.cover(0); // black until the fade-in
       c.setMute(false);
       c.setPaused(false);
       // Frames are flowing once the position moves past the start and the
@@ -85,9 +104,13 @@ class HeroReel {
         if (!c.eofReached && c.position > start + 0.05) break;
       }
       if (gen != _gen || c.position <= start + 0.05) return false;
+      await beforeShow?.call();
+      if (gen != _gen || !c.running) return false;
       win.fitInner();
       win.setVisible(true);
       _showing = true;
+      await _fade(c, toBlack: false);
+      if (gen != _gen) return false;
       var fired = false;
       _watch = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (gen != _gen || fired) return;
@@ -114,9 +137,20 @@ class HeroReel {
       _overlaySlot ^= 1;
       final path =
           '${Directory.systemTemp.path}${Platform.pathSeparator}nascinema_reel_$_overlaySlot.bgra';
-      final bytes = rgba.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes);
-      await Isolate.run(() {
-        final out = Uint8List.fromList(bytes);
+      await _writeBgra(
+          rgba.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes), path);
+      if (gen != _gen || !c.running) return;
+      c.overlayImage(_overlayId, path, w, h);
+    });
+  }
+
+  /// RGBA → BGRA file, off the UI isolate. Static on purpose: a closure made
+  /// inside an instance method drags `this` (mpv's Process/pipe) into the
+  /// isolate message and Isolate.run throws — the first build's overlay
+  /// silently never appeared.
+  static Future<void> _writeBgra(Uint8List rgba, String path) =>
+      Isolate.run(() {
+        final out = Uint8List.fromList(rgba);
         for (var i = 0; i < out.length; i += 4) {
           final r = out[i];
           out[i] = out[i + 2];
@@ -124,9 +158,13 @@ class HeroReel {
         }
         File(path).writeAsBytesSync(out, flush: true);
       });
-      if (gen != _gen || !c.running) return;
-      c.overlayImage(_overlayId, path, w, h);
-    });
+
+  /// Fade the showing video to black (the caller hides it after).
+  Future<void> fadeOut() async {
+    final c = _mpv;
+    if (!_showing || c == null || !c.running) return;
+    c.overlayRemove(_overlayId);
+    await _fade(c, toBlack: true);
   }
 
   /// Take the video off screen (Flutter's backdrop shows again) and pause.

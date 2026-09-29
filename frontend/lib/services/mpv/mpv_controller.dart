@@ -467,6 +467,29 @@ class MpvController {
 
   void overlayRemove(int id) => _ipc?.command(['overlay-remove', id]);
 
+  static const _coverOverlayId = 5;
+
+  /// Full-window black layer above everything mpv draws, [alpha] 0 = opaque
+  /// … 255 = gone. Stepped by the caller to fade (overlays can't animate).
+  void cover(int alpha) {
+    if (alpha >= 255) {
+      _ipc?.command(['osd-overlay', _coverOverlayId, 'none', '']);
+      return;
+    }
+    final a = alpha.clamp(0, 254).toRadixString(16).padLeft(2, '0');
+    _ipc?.command([
+      'osd-overlay', _coverOverlayId, 'ass-events',
+      '{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H000000&\\alpha&H$a&\\p1}'
+          'm 0 0 l 1280 0 1280 720 0 720{\\p0}',
+      1280, 720, 10, // z above the reel's logo overlay
+    ]);
+  }
+
+  /// Hide uosc elements (comma list) for this player — the hero reel wants
+  /// no spinner/timeline/controls. uosc's own `disable-elements` message.
+  void uoscDisable(String elements) => _ipc?.command(
+      ['script-message-to', 'uosc', 'disable-elements', 'nascinema-reel', elements]);
+
   /// Load a sidecar subtitle (backend WebVTT URL) and select it.
   void setSubtitleUri(String url) =>
       _ipc?.command(['sub-add', url, 'select']);
