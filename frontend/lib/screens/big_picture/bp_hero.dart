@@ -51,6 +51,9 @@ class BpHeroState extends State<BpHero> {
   final _overlayKey = GlobalKey(); // scrim + info → bitmap for mpv's overlay
   bool get _reelMode => _full && _reel.supported;
   int _reelReq = 0; // bumps on every reel play/stop; stale results ignored
+  static const _slide = Duration(milliseconds: 450); // home ↔ fullscreen
+  DateTime _layoutSettled = DateTime.now(); // when that slide finishes
+  bool _exitPending = false; // leaving fullscreen: waiting on the texture
   bool _trailerShown = false; // first frame rendered → dissolve to video
   bool _faderOpaque = false; // black cover for advance/mode transitions
   bool _fading = false;
@@ -178,9 +181,9 @@ class BpHeroState extends State<BpHero> {
     _dwell?.cancel();
     final m = current;
     if (m != null) _precacheLogo(m);
-    // Fullscreen reel: the screen is already black (the fader held it), so
-    // start the next trailer right away instead of the backdrop "beat".
-    final beat = _reelMode ? 150 : 1400;
+    // The backdrop + logo sit for a beat while the trailer loads; the reel
+    // gets a longer one (it then dips to black into native video).
+    final beat = _reelMode ? 2000 : 1400;
     if (_follow != null) {
       // Browsing the rails: the followed movie stays; only its trailer resumes.
       _trailerDelay?.cancel();
@@ -230,19 +233,22 @@ class BpHeroState extends State<BpHero> {
     if (_reelMode) {
       final req = ++_reelReq;
       _reel
-          .play(url, start: start, beforeShow: () async {
-            // Coming from the backdrop: fade it to black first; mpv then
-            // fades in from black. (A held-black transition skips this.)
-            if (!mounted || _faderOpaque) return;
-            setState(() => _faderOpaque = true);
-            await Future<void>.delayed(const Duration(milliseconds: 320));
-          })
+          .play(url,
+              start: start,
+              overlay: () => _captureOverlay(m.id),
+              beforeShow: () async {
+                // Backdrop → black; mpv then fades in from black with the
+                // logo already on. (Already black: skip.)
+                if (!mounted || _faderOpaque) return;
+                setState(() => _faderOpaque = true);
+                await Future<void>.delayed(const Duration(milliseconds: 320));
+              })
           .then((ok) {
             if (req != _reelReq || !mounted) return; // superseded
             // The fader is under the video now (or the play failed) — lift it.
             _releaseBlack();
             if (ok) {
-              _onReelFrames(m.id);
+              _dwell?.cancel(); // fullscreen: the trailer plays out
             } else if (_full && current?.id == m.id) {
               // mpv couldn't play it: the texture player, never a dead screen.
               _trailer.open(url, muted: false, start: start);
@@ -253,11 +259,11 @@ class BpHeroState extends State<BpHero> {
     _trailer.open(url, muted: !_full, start: start);
   }
 
-  /// The reel's video is on screen: hand mpv the scrim + logo + ratings
-  /// (Flutter's own copy is underneath the native window now), and let the
-  /// trailer play out like the texture path does in fullscreen.
-  Future<void> _onReelFrames(int movieId) async {
-    _dwell?.cancel();
+  /// The fullscreen scrim + logo + ratings as a window-sized bitmap for mpv
+  /// (nothing Flutter draws can sit above native video). Waits for the logo
+  /// to load and the home ↔ fullscreen slide to finish, so it matches what
+  /// Flutter shows exactly.
+  Future<ReelOverlay?> _captureOverlay(int movieId) async {
     final m = current;
     final l = m == null ? null : _logoFor(m);
     if (l != null && l.isNotEmpty) {
@@ -266,21 +272,20 @@ class BpHeroState extends State<BpHero> {
             .timeout(const Duration(seconds: 4));
       } catch (_) {}
     }
-    if (!mounted) return;
+    final wait = _layoutSettled.difference(DateTime.now());
+    if (wait > Duration.zero) await Future<void>.delayed(wait);
+    if (!mounted) return null;
     await WidgetsBinding.instance.endOfFrame;
     await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
+    if (!mounted || current?.id != movieId) return null;
     final box =
         _overlayKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (box == null || !box.hasSize) return;
-    if (current?.id != movieId || !_reel.showing) return;
+    if (box == null || !box.hasSize) return null;
     final physical = View.of(context).physicalSize;
-    final ratio = physical.width / box.size.width;
-    final img = await box.toImage(pixelRatio: ratio);
+    final img = await box.toImage(pixelRatio: physical.width / box.size.width);
     try {
       final data = await img.toByteData(); // rawRgba = premultiplied
-      if (data == null || current?.id != movieId || !_reel.showing) return;
-      await _reel.setOverlay(data, img.width, img.height);
+      return data == null ? null : ReelOverlay(data, img.width, img.height);
     } finally {
       img.dispose();
     }
@@ -290,6 +295,13 @@ class BpHeroState extends State<BpHero> {
     if (!mounted) return;
     setState(() => _trailerShown = true);
     _dwell?.cancel();
+    // Leaving fullscreen: "first frame" fires as the seek lands, a beat
+    // before the picture is drawn — give it that beat before mpv steps aside.
+    if (_exitPending) {
+      Timer(const Duration(milliseconds: 250), () {
+        if (_exitPending) _finishExit();
+      });
+    }
     if (!_full) {
       // Idle: a 25s cap from playback start; fullscreen lets it play out.
       _dwell = Timer(const Duration(seconds: 25), () => advance(1));
@@ -312,6 +324,7 @@ class BpHeroState extends State<BpHero> {
   Future<void> pauseForPage() async {
     _hold = true;
     _suspended = true;
+    _exitPending = false;
     _dwell?.cancel();
     _trailerDelay?.cancel();
     _followDebounce?.cancel();
@@ -332,7 +345,7 @@ class BpHeroState extends State<BpHero> {
     if (!mounted) return;
     _hold = false;
     _suspended = false;
-    if (!(_reelMode && _hasTrailer(current))) _releaseBlack();
+    _releaseBlack(); // back to the backdrop; the trailer follows the beat
     _showItem();
   }
 
@@ -363,14 +376,13 @@ class BpHeroState extends State<BpHero> {
   void advance(int dir) {
     if (_follow != null) return; // browsing the rails: no rotation
     if (_items.length < 2 || _fading) return;
-    final next = _items[(_i + dir + _items.length) % _items.length];
-    // mpv fades to black with the app's fader beneath it; in the reel the
-    // screen then stays black straight into the next trailer.
+    // mpv fades to black with the app's fader beneath it; then the next
+    // movie's backdrop + logo sit while its trailer loads.
     unawaited(_reel.fadeOut());
     _fadeThrough(() {
       _i = (_i + dir + _items.length) % _items.length;
       _showItem();
-    }, holdBlack: _reelMode && _hasTrailer(next));
+    });
   }
 
   void _setFullscreen(bool full) {
@@ -387,29 +399,70 @@ class BpHeroState extends State<BpHero> {
       });
       return;
     }
-    // Windows: home = texture, fullscreen = native reel. Swap players under
-    // the fader, carrying the position; entering holds black straight into
-    // the reel (no backdrop flash between the two).
-    final at = _reel.showing
-        ? _reel.positionSeconds
-        : (_trailerShown ? _trailer.positionSeconds : 0.0);
-    final playing = _reel.showing || _trailerShown;
+    // Windows: home = texture, fullscreen = native reel. No black either
+    // way: the layout slides (rails out, logo cluster down, picture to
+    // centre) while the texture keeps playing, and mpv takes over on the
+    // exact frame with the logo already on it. Leaving is the reverse.
+    _layoutSettled = DateTime.now().add(_slide);
     final m = current;
-    unawaited(_reel.fadeOut());
-    _fadeThrough(() {
-      _full = full;
+    if (full) {
+      _exitPending = false;
+      setState(() => _full = true);
       _dwell?.cancel();
-      if (playing || (full && _hasTrailer(m))) {
-        _stopTrailer();
-        _playTrailer(start: playing ? at : 0);
-      }
-      if (_full) {
-        // Fallback advance if the trailer never shows (reel frames cancel it).
+      // Fallback advance only while nothing plays (a trailer plays out).
+      if (!_trailerShown) {
         _dwell = Timer(const Duration(seconds: 15), () => advance(1));
-      } else if (!playing) {
-        _dwell = Timer(const Duration(seconds: 25), () => advance(1));
       }
-    }, holdBlack: full && _hasTrailer(m));
+      if (_trailerShown && _hasTrailer(m)) {
+        _trailer.setMuted(false); // sound now; mpv takes it over
+        final req = ++_reelReq;
+        _reel
+            .handoff('${widget.baseUrl}${m!.trailerUrl}',
+                sourcePos: () => _trailer.positionSeconds,
+                overlay: () => _captureOverlay(m.id))
+            .then((ok) {
+          if (req != _reelReq || !mounted) return;
+          if (ok) {
+            _dwell?.cancel(); // the trailer plays out
+            _trailer.stop();
+            setState(() => _trailerShown = false);
+          }
+          // Not ok: the texture just keeps playing fullscreen.
+        });
+      }
+      return;
+    }
+    // Leaving: get the texture running under mpv at mpv's position, then
+    // step mpv aside and slide back (see [_finishExit]).
+    if (_reel.showing && _hasTrailer(m)) {
+      _exitPending = true;
+      _trailer.open('${widget.baseUrl}${m!.trailerUrl}',
+          muted: true, start: _reel.positionSeconds + 0.3);
+      // Never hang on it: if the texture doesn't start, leave anyway.
+      Timer(const Duration(seconds: 3), () {
+        if (_exitPending) _finishExit();
+      });
+      return;
+    }
+    _trailer.setMuted(true);
+    _reelReq++;
+    _reel.hide();
+    setState(() => _full = false);
+    _dwell?.cancel();
+    _dwell = Timer(const Duration(seconds: 25), () => advance(1));
+  }
+
+  /// Second half of leaving fullscreen: the texture is showing under the
+  /// native video — hide mpv (same picture underneath) and slide home.
+  void _finishExit() {
+    if (!mounted) return;
+    _exitPending = false;
+    _layoutSettled = DateTime.now().add(_slide);
+    _reelReq++;
+    _reel.hide();
+    setState(() => _full = false);
+    _dwell?.cancel();
+    _dwell = Timer(const Duration(seconds: 25), () => advance(1));
   }
 
   @override
@@ -418,6 +471,7 @@ class BpHeroState extends State<BpHero> {
     if (m == null) return const ColoredBox(color: NasColors.bg);
     final video = _trailerShown ? _trailer.view(fit: BoxFit.contain) : null;
     final shift = _full ? 0.0 : (m.trailerBars?.top ?? 0) * 1080;
+    const curve = Curves.easeInOutCubic;
 
     return Stack(
       fit: StackFit.expand,
@@ -432,36 +486,76 @@ class BpHeroState extends State<BpHero> {
         // letterboxed picture; the backdrop is hidden underneath it.
         if (video != null) ...[
           const ColoredBox(color: Colors.black),
-          Transform.translate(offset: Offset(0, -shift), child: video),
+          // Home lifts a letterboxed picture to the top edge; fullscreen
+          // centres it — slide between the two.
+          TweenAnimationBuilder<double>(
+            tween: Tween(end: shift),
+            duration: _slide,
+            curve: curve,
+            builder: (_, dy, child) =>
+                Transform.translate(offset: Offset(0, -dy), child: child),
+            child: video,
+          ),
         ],
+        // Scrim + info: both layouts always built, cross-sliding on the
+        // home ↔ fullscreen switch (home drifts down and out, the compact
+        // fullscreen cluster settles down into place). This boundary is
+        // also what the native reel gets as its overlay bitmap.
         RepaintBoundary(
           key: _overlayKey,
           child: Stack(fit: StackFit.expand, children: [
-        _full ? const _FullscreenScrim() : const _HomeScrim(),
-        if (_full)
-          Positioned(
-            left: 90,
-            bottom: 70,
-            child: _Info(
-                movie: m,
-                logo: _logoFor(m),
-                logoSubtitle: _logoSubFor(m),
-                compact: true),
-          )
-        else
-          Positioned(
-            left: 90,
-            top: 110,
-            child: _Info(
-              movie: m,
-              logo: _logoFor(m),
-              logoSubtitle: _logoSubFor(m),
-              compact: false,
-              dots: _follow == null && _items.length > 1
-                  ? _Dots(count: _items.length, index: _i)
-                  : null,
+            AnimatedOpacity(
+                duration: _slide,
+                curve: curve,
+                opacity: _full ? 0 : 1,
+                child: const _HomeScrim()),
+            AnimatedOpacity(
+                duration: _slide,
+                curve: curve,
+                opacity: _full ? 1 : 0,
+                child: const _FullscreenScrim()),
+            Positioned(
+              left: 90,
+              top: 110,
+              child: AnimatedSlide(
+                duration: _slide,
+                curve: curve,
+                offset: _full ? const Offset(0, 0.35) : Offset.zero,
+                child: AnimatedOpacity(
+                  duration: _slide,
+                  curve: curve,
+                  opacity: _full ? 0 : 1,
+                  child: _Info(
+                    movie: m,
+                    logo: _logoFor(m),
+                    logoSubtitle: _logoSubFor(m),
+                    compact: false,
+                    dots: _follow == null && _items.length > 1
+                        ? _Dots(count: _items.length, index: _i)
+                        : null,
+                  ),
+                ),
+              ),
             ),
-          ),
+            Positioned(
+              left: 90,
+              bottom: 70,
+              child: AnimatedSlide(
+                duration: _slide,
+                curve: curve,
+                offset: _full ? Offset.zero : const Offset(0, -0.6),
+                child: AnimatedOpacity(
+                  duration: _slide,
+                  curve: curve,
+                  opacity: _full ? 1 : 0,
+                  child: _Info(
+                      movie: m,
+                      logo: _logoFor(m),
+                      logoSubtitle: _logoSubFor(m),
+                      compact: true),
+                ),
+              ),
+            ),
           ]),
         ),
         IgnorePointer(

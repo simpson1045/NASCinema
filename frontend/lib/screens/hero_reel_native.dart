@@ -14,12 +14,20 @@ import '../services/mpv/mpv_controller.dart';
 ///
 /// Nothing Flutter draws may sit above native video, so the hero's scrim +
 /// logo + rating row are rendered to a bitmap once per trailer and shown by
-/// mpv itself ([setOverlay], `overlay-add`). While a trailer plays, Flutter
+/// mpv itself (`overlay-add`, see [ReelOverlay]). While a trailer plays, Flutter
 /// draws nothing new.
 ///
 /// ONE mpv for the reel's life, reused with loadfile; every operation runs in
 /// order. The window stays hidden until frames are actually flowing, so a
 /// slow start shows the Flutter backdrop, never a black box.
+/// The hero's scrim + logo + ratings as premultiplied RGBA, window-sized.
+class ReelOverlay {
+  ReelOverlay(this.rgba, this.width, this.height);
+  final ByteData rgba;
+  final int width;
+  final int height;
+}
+
 class HeroReel {
   HeroReel({required this.onFinished});
 
@@ -68,7 +76,9 @@ class HeroReel {
   /// (the hero fades its backdrop to black there); the video then fades in
   /// from black.
   Future<bool> play(String url,
-      {double start = 0, Future<void> Function()? beforeShow}) {
+      {double start = 0,
+      Future<void> Function()? beforeShow,
+      Future<ReelOverlay?> Function()? overlay}) {
     final gen = ++_gen;
     return _run(() async {
       if (gen != _gen) return false;
@@ -107,6 +117,10 @@ class HeroReel {
         if (!c.eofReached && c.position > start + 0.05) break;
       }
       if (gen != _gen || c.position <= start + 0.05) return false;
+      // Logo + ratings on before the video shows, so they arrive with it.
+      final ov = await overlay?.call();
+      if (gen != _gen || !c.running) return false;
+      if (ov != null) await _applyOverlay(c, ov);
       await beforeShow?.call();
       if (gen != _gen || !c.running) return false;
       win.fitInner();
@@ -114,37 +128,102 @@ class HeroReel {
       _showing = true;
       await _fade(c, toBlack: false);
       if (gen != _gen) return false;
-      var fired = false;
-      _watch = Timer.periodic(const Duration(milliseconds: 250), (_) {
-        if (gen != _gen || fired) return;
-        if (!c!.running) {
-          _watch?.cancel();
-          win.setVisible(false);
-          _showing = false;
-        } else if (c.eofReached) {
-          fired = true;
-          onFinished();
-        }
-      });
+      _startWatch(gen, c, win);
+      return true;
+    });
+  }
+
+  /// End-of-trailer + died-under-us watch for the showing video.
+  void _startWatch(int gen, MpvController c, EmbedWindow win) {
+    var fired = false;
+    _watch?.cancel();
+    _watch = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (gen != _gen || fired) return;
+      if (!c.running) {
+        _watch?.cancel();
+        win.setVisible(false);
+        _showing = false;
+      } else if (c.eofReached) {
+        fired = true;
+        onFinished();
+      }
+    });
+  }
+
+  /// Seamless takeover from another player showing the same trailer (the
+  /// hero's texture, already fullscreen): load [url] PAUSED a beat ahead of
+  /// [sourcePos], put the [overlay] on, then unpause + show the moment the
+  /// source reaches that frame — no black, no jump. Resolves true once mpv
+  /// is the one on screen (the caller stops the source then).
+  Future<bool> handoff(String url,
+      {required double Function() sourcePos,
+      required Future<ReelOverlay?> Function() overlay}) {
+    final gen = ++_gen;
+    return _run(() async {
+      if (gen != _gen) return false;
+      _watch?.cancel();
+      final rect = _screenRect();
+      final win = _win ??= EmbedWindow.create(rect);
+      if (win == null) return false;
+      win.setVisible(false);
+      win.setBounds(rect);
+      final target = sourcePos() + 1.5;
+      var c = _mpv;
+      if (c == null || !c.running) {
+        c = await MpvController.launch(
+            media: url,
+            hwnd: win.hwnd,
+            startSeconds: target,
+            extraArgs: const ['--pause', '--mute=yes']);
+        if (c == null) return false;
+        _mpv = c;
+        win.focusApp();
+      } else {
+        c.overlayRemove(_overlayId);
+        c.setPaused(true);
+        c.setMute(true);
+        c.position = -1;
+        c.loadFile(url, start: target);
+      }
+      c.uoscDisable(_quiet);
+      c.cover(255);
+      // Loaded and parked on the target frame?
+      var deadline = DateTime.now().add(const Duration(seconds: 8));
+      while (DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        if (gen != _gen || !c.running) return false;
+        if (c.position >= target - 0.5) break;
+      }
+      if (gen != _gen || c.position < target - 0.5) return false;
+      final ov = await overlay();
+      if (gen != _gen || !c.running) return false;
+      if (ov != null) await _applyOverlay(c, ov);
+      // Wait for the source to catch up to our frame (it keeps playing).
+      deadline = DateTime.now().add(const Duration(seconds: 6));
+      while (DateTime.now().isBefore(deadline) && sourcePos() < c.position - 0.03) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        if (gen != _gen) return false;
+      }
+      c.setMute(false);
+      c.setPaused(false);
+      win.fitInner();
+      win.setVisible(true);
+      _showing = true;
+      _startWatch(gen, c, win);
       return true;
     });
   }
 
   /// Show [rgba] (premultiplied RGBA, [w]x[h] physical pixels — the whole
   /// window) above the video. Converted to mpv's BGRA off the UI isolate.
-  Future<void> setOverlay(ByteData rgba, int w, int h) {
-    final gen = _gen;
-    return _run(() async {
-      final c = _mpv;
-      if (gen != _gen || c == null || !c.running) return;
-      _overlaySlot ^= 1;
-      final path =
-          '${Directory.systemTemp.path}${Platform.pathSeparator}nascinema_reel_$_overlaySlot.bgra';
-      await _writeBgra(
-          rgba.buffer.asUint8List(rgba.offsetInBytes, rgba.lengthInBytes), path);
-      if (gen != _gen || !c.running) return;
-      c.overlayImage(_overlayId, path, w, h);
-    });
+  Future<void> _applyOverlay(MpvController c, ReelOverlay ov) async {
+    _overlaySlot ^= 1;
+    final path =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}nascinema_reel_$_overlaySlot.bgra';
+    await _writeBgra(
+        ov.rgba.buffer.asUint8List(ov.rgba.offsetInBytes, ov.rgba.lengthInBytes),
+        path);
+    if (c.running) c.overlayImage(_overlayId, path, ov.width, ov.height);
   }
 
   /// RGBA → BGRA file, off the UI isolate. Static on purpose: a closure made
