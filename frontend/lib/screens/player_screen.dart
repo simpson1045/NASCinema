@@ -330,7 +330,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _poll = Timer.periodic(const Duration(milliseconds: 250), (_) {
         if (!mounted) return;
         final d = playerDuration();
-        setState(() {
+        void read() {
           _position = playerCurrentTime();
           if (d > 0) _duration = d;
           _paused = playerPaused();
@@ -340,7 +340,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _clientStats = playerStats();
           // Pausing (from anywhere — keyboard, remote) resurfaces the chrome.
           if (_paused && !_controlsVisible) _controlsVisible = true;
-        });
+        }
+
+        // Native leg: mpv draws the whole screen and none of these values
+        // are on it (stats panel aside), so read them WITHOUT a rebuild.
+        // Every Flutter frame makes DWM re-compose our window with mpv's —
+        // at 23.976 Hz that cost ~20 dropped frames per 30 s; mpv embedded
+        // in a window that never repaints dropped 0 (ELKO, 2026-09-28).
+        if (_nativeVideo && _player != null && !_statsVisible) {
+          read();
+        } else {
+          setState(read);
+        }
         // Resume once the player knows its duration (so the seek lands).
         if (!_resumeApplied && _resumePosition > 2 && _duration > 0) {
           _resumeApplied = true;
@@ -402,10 +413,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       final c = await ApiService(widget.baseUrl).getCached(_fileId);
       if (!mounted) return;
-      setState(() {
+      void apply() {
         _cached = c.ranges;
         if (_duration <= 0 && c.duration > 0) _duration = c.duration;
-      });
+      }
+
+      // No rebuild under native playback (see the poll timer for why).
+      if (_nativeVideo && _player != null) {
+        apply();
+      } else {
+        setState(apply);
+      }
     } catch (_) {
       // best-effort; the scrubber just won't show converted spans this tick
     }

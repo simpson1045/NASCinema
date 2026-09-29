@@ -1244,12 +1244,19 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
       } catch (_) {}
     }
     if (!mounted) return;
-    if (hdr) {
+    // Windows: every trailer goes to native mpv, SDR too. The texture player
+    // is Flutter compositing each video frame, and any Flutter frame over the
+    // embedded video makes DWM re-compose — 24p trailers stuttered visibly
+    // (ELKO, 2026-09-28). Native mpv in a still window drops nothing.
+    final native =
+        hdr || (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows);
+    if (native) {
       setDirectMedia(null); // the seam is shared with the movie player
       setStartPosition(0);
       setStartTracks(null, null);
       setState(() {
-        _native = buildPlayerView('${widget.url}?variant=hdr', false);
+        _native = buildPlayerView(
+            hdr ? '${widget.url}?variant=hdr' : widget.url, false);
         _playing = true;
       });
       // Show the title bar once it's up (the UI only appears on activity).

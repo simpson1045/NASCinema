@@ -4,6 +4,7 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.9.0 - 2026-09-26
 - **Track Manager:** press **Back** on the Big Picture home and choose **Track Manager** to clean foreign dubs and subtitles out of your movies — biggest space savings first, with a warning on movies that start in the wrong language. Open a movie to see every track marked Keep or Drop (and why); **X** strips it, **Y** protects it so it's never touched. On the list, **Y** strips all the worthwhile ones. The **Jobs** tab shows progress; every original is kept until you choose **Confirm & free space** (Y), and **X** undoes a strip until then.
+- **Smoother movies:** fixed the stutter at 24 fps — the app was quietly redrawing itself behind the movie several times a second, which made Windows drop frames. Movie-page trailers now play in the movie player too, so they're smooth as well.
 - **Fixed:** watching a trailer on a movie page could crash the app when the trailer ended (or when you backed out of it). Trailers now step aside before they close.
 - **Fixed:** opening a franchise page crashed the app on Windows (the home trailer's video was being torn down while the page opened). Pages now open only after the trailer has stepped aside.
 - **Tidier pages:** on a movie page the audio/subtitle line no longer runs into the "More in…" row; franchise pages have bigger posters for small franchises and titles clear the button hints.
