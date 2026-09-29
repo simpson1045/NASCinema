@@ -22,7 +22,7 @@ class TrailerPlayer {
   Future<void> togglePause() async {}
   Future<void> seekBy(double seconds) async {}
 
-  Future<void> open(String url, {required bool muted}) async {}
+  Future<void> open(String url, {required bool muted, double start = 0}) async {}
 
   Future<void> setMuted(bool muted) async {}
 

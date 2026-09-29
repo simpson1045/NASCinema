@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 
 import '../../models/movie.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../hero_reel.dart';
 import '../hero_trailer.dart';
 
 /// Big picture's featured hero — a port of the Roku FeaturedHero, laid out on
@@ -42,6 +44,12 @@ class BpHeroState extends State<BpHero> {
     onFinished: () => advance(1),
     onError: _stopTrailer,
   );
+  // Fullscreen on Windows: trailers play in native mpv instead (the texture
+  // path stutters at 24p — see HeroReel). Home stays on the texture player:
+  // the rails draw over it, and nothing can draw over native video.
+  late final HeroReel _reel = HeroReel(onFinished: () => advance(1));
+  final _overlayKey = GlobalKey(); // scrim + info → bitmap for mpv's overlay
+  bool get _reelMode => _full && _reel.supported;
   bool _trailerShown = false; // first frame rendered → dissolve to video
   bool _faderOpaque = false; // black cover for advance/mode transitions
   bool _fading = false;
@@ -158,6 +166,7 @@ class BpHeroState extends State<BpHero> {
       t?.cancel();
     }
     _trailer.dispose();
+    unawaited(_reel.dispose());
     super.dispose();
   }
 
@@ -181,13 +190,42 @@ class BpHeroState extends State<BpHero> {
     }
   }
 
-  void _playTrailer() {
+  void _playTrailer({double start = 0}) {
     final m = current;
     if (_suspended || !mounted || m == null) return;
     // Only trailers already cached server-side — never wait on a download.
     if (!m.trailerReady || m.trailerUrl == null) return;
     if (_follow != null && _follow!.id != m.id) return;
-    _trailer.open('${widget.baseUrl}${m.trailerUrl}', muted: !_full);
+    final url = '${widget.baseUrl}${m.trailerUrl}';
+    if (_reelMode) {
+      _reel.play(url, start: start).then((ok) {
+        if (ok && mounted) _onReelFrames(m.id);
+      });
+      return;
+    }
+    _trailer.open(url, muted: !_full, start: start);
+  }
+
+  /// The reel's video is on screen: hand mpv the scrim + logo + ratings
+  /// (Flutter's own copy is underneath the native window now), and let the
+  /// trailer play out like the texture path does in fullscreen.
+  Future<void> _onReelFrames(int movieId) async {
+    _dwell?.cancel();
+    await WidgetsBinding.instance.endOfFrame;
+    final box =
+        _overlayKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (box == null || !box.hasSize || !mounted) return;
+    if (current?.id != movieId || !_reel.showing) return;
+    final physical = View.of(context).physicalSize;
+    final ratio = physical.width / box.size.width;
+    final img = await box.toImage(pixelRatio: ratio);
+    try {
+      final data = await img.toByteData(); // rawRgba = premultiplied
+      if (data == null || current?.id != movieId || !_reel.showing) return;
+      await _reel.setOverlay(data, img.width, img.height);
+    } finally {
+      img.dispose();
+    }
   }
 
   void _onTrailerFrames() {
@@ -214,6 +252,7 @@ class BpHeroState extends State<BpHero> {
     if (mounted && _trailerShown) setState(() => _trailerShown = false);
     await WidgetsBinding.instance.endOfFrame;
     await _trailer.stop();
+    await _reel.hide();
   }
 
   /// The page home opened is closed: back to the backdrop, trailer after the
@@ -228,6 +267,7 @@ class BpHeroState extends State<BpHero> {
   void _stopTrailer() {
     _trailerDelay?.cancel();
     _trailer.stop();
+    _reel.hide();
     if (mounted && _trailerShown) setState(() => _trailerShown = false);
   }
 
@@ -255,9 +295,18 @@ class BpHeroState extends State<BpHero> {
   }
 
   void _setFullscreen(bool full) {
-    _trailer.setMuted(!full); // unmute instantly (Roku parity)
+    // Where the trailer is, so it carries across the texture ↔ native swap.
+    final at = _reel.showing
+        ? _reel.positionSeconds
+        : (_trailerShown ? _trailer.positionSeconds : 0.0);
+    final swapPlayers = _reel.supported && (_reel.showing || _trailerShown);
+    if (!swapPlayers) _trailer.setMuted(!full); // unmute instantly (Roku parity)
     _fadeThrough(() {
       _full = full;
+      if (swapPlayers) {
+        _stopTrailer();
+        _playTrailer(start: at);
+      }
       _dwell?.cancel();
       if (!(_full && _trailerShown)) {
         _dwell = Timer(Duration(seconds: _trailerShown || !_full ? 25 : 15),
@@ -288,6 +337,9 @@ class BpHeroState extends State<BpHero> {
           const ColoredBox(color: Colors.black),
           Transform.translate(offset: Offset(0, -shift), child: video),
         ],
+        RepaintBoundary(
+          key: _overlayKey,
+          child: Stack(fit: StackFit.expand, children: [
         _full ? const _FullscreenScrim() : const _HomeScrim(),
         if (_full)
           Positioned(
@@ -313,6 +365,8 @@ class BpHeroState extends State<BpHero> {
                   : null,
             ),
           ),
+          ]),
+        ),
         IgnorePointer(
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 300),

@@ -457,6 +457,16 @@ class MpvController {
 
   void toggleMute() => _ipc?.command(['cycle', 'mute']);
 
+  void setMute(bool m) => _ipc?.set('mute', m);
+
+  /// Show a raw premultiplied-BGRA bitmap file ([w]x[h], window pixels, drawn
+  /// 1:1 at the top-left) above the video as overlay [id] — how the hero reel
+  /// puts its logo + scrim over native video without any Flutter frames.
+  void overlayImage(int id, String path, int w, int h) =>
+      _ipc?.command(['overlay-add', id, 0, 0, path, 0, 'bgra', w, h, w * 4]);
+
+  void overlayRemove(int id) => _ipc?.command(['overlay-remove', id]);
+
   /// Load a sidecar subtitle (backend WebVTT URL) and select it.
   void setSubtitleUri(String url) =>
       _ipc?.command(['sub-add', url, 'select']);

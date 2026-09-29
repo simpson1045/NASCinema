@@ -115,7 +115,8 @@ class TrailerPlayer {
     return player;
   }
 
-  Future<void> open(String url, {required bool muted}) {
+  /// [start] seconds in (the hero's native ↔ texture hand-off keeps place).
+  Future<void> open(String url, {required bool muted, double start = 0}) {
     final gen = ++_generation;
     _active = false;
     return _run(() async {
@@ -124,7 +125,10 @@ class TrailerPlayer {
       await player.setVolume(muted ? 0 : 100);
       if (gen != _generation) return;
       _active = true;
-      await player.open(Media(url));
+      await player.open(Media(url,
+          start: start > 1
+              ? Duration(milliseconds: (start * 1000).round())
+              : null));
     });
   }
 
