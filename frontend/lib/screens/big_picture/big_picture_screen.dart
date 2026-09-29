@@ -131,10 +131,16 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   Future<void> _checkUpdate() async {
     final info = await UpdateService.checkForUpdate(widget.baseUrl);
     if (!mounted || info == null) return;
+    // The fullscreen reel's native video sits above every Flutter widget —
+    // step it aside or the dialog opens behind it.
+    final hero = _heroKey.currentState;
+    await hero?.pauseForPage();
+    if (!mounted) return;
     await showDialog(
       context: context,
       builder: (_) => UpdateDialog(baseUrl: widget.baseUrl, info: info),
     );
+    hero?.resumeAfterPage();
     _focus.requestFocus();
   }
 
@@ -347,12 +353,18 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   }
 
   Future<void> _openMenu() async {
+    // Native reel video would cover the menu — step it aside first.
+    final hero = _heroKey.currentState;
+    await hero?.pauseForPage();
+    if (!mounted) return;
     final choice = await showDialog<String>(
       context: context,
       barrierColor: Colors.black87,
       builder: (ctx) => const _BpMenu(),
     );
     if (!mounted) return;
+    // Pages the menu opens pause/resume the hero themselves ('exit' leaves
+    // for good); nothing chosen → bring the hero back (default below).
     switch (choice) {
       case 'exit':
         await _heroKey.currentState?.pauseForPage();
@@ -369,6 +381,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       case 'quit':
         await quitApp();
       default:
+        hero?.resumeAfterPage();
         _focus.requestFocus();
     }
   }

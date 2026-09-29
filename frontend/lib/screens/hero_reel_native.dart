@@ -89,6 +89,9 @@ class HeroReel {
         win.focusApp(); // mpv's window grabs focus as it spawns
       } else {
         c.overlayRemove(_overlayId);
+        // The mirrored position still holds the last file's value until the
+        // new one reports — reset it, or "frames flowing" fires on stale data.
+        c.position = -1;
         c.loadFile(url, start: start);
       }
       c.uoscDisable(_quiet); // no spinner/timeline in the reel
@@ -157,6 +160,25 @@ class HeroReel {
           out[i + 2] = r;
         }
         File(path).writeAsBytesSync(out, flush: true);
+      });
+
+  /// Start mpv early — paused, muted, hidden — so the first fullscreen
+  /// trailer never waits on a process launch. No-op if it's already up.
+  Future<void> warm(String url) => _run(() async {
+        if (_mpv?.running == true) return;
+        final rect = _screenRect();
+        final win = _win ??= EmbedWindow.create(rect);
+        if (win == null) return;
+        win.setVisible(false);
+        win.setBounds(rect);
+        final c = await MpvController.launch(
+            media: url,
+            hwnd: win.hwnd,
+            extraArgs: const ['--pause', '--mute=yes']);
+        if (c == null) return;
+        _mpv = c;
+        c.uoscDisable(_quiet);
+        win.focusApp();
       });
 
   /// Fade the showing video to black (the caller hides it after).

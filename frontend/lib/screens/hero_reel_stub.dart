@@ -12,6 +12,7 @@ class HeroReel {
           {double start = 0, Future<void> Function()? beforeShow}) async =>
       false;
   Future<void> fadeOut() async {}
+  Future<void> warm(String url) async {}
   Future<void> setOverlay(ByteData rgba, int w, int h) async {}
   Future<void> hide() async {}
   Future<void> dispose() async {}

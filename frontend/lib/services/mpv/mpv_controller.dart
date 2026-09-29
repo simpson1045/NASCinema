@@ -92,6 +92,7 @@ class MpvController {
     bool passthrough = false,
     int? audioId,
     int? subId,
+    List<String> extraArgs = const [],
     void Function(String line)? diag,
   }) {
     final next = (_launchChain ?? Future<MpvController?>.value(null))
@@ -103,6 +104,7 @@ class MpvController {
               passthrough: passthrough,
               audioId: audioId,
               subId: subId,
+              extraArgs: extraArgs,
               diag: diag,
             ));
     _launchChain = next;
@@ -116,6 +118,7 @@ class MpvController {
     bool passthrough = false,
     int? audioId,
     int? subId,
+    List<String> extraArgs = const [],
     void Function(String line)? diag,
   }) async {
     // One renderer at a time — tear down the previous instance (and its
@@ -133,6 +136,7 @@ class MpvController {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final args = <String>[
       '--input-ipc-server=\\\\.\\pipe\\$pipeName',
+      ...extraArgs,
       // No console output: Process.start pipes stdout/stderr, and an undrained
       // pipe BLOCKS mpv's core mid-startup (black frozen window — happened
       // live). Diagnostics go to a log file next to the exe instead.

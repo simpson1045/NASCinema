@@ -50,6 +50,7 @@ class BpHeroState extends State<BpHero> {
   late final HeroReel _reel = HeroReel(onFinished: () => advance(1));
   final _overlayKey = GlobalKey(); // scrim + info → bitmap for mpv's overlay
   bool get _reelMode => _full && _reel.supported;
+  int _reelReq = 0; // bumps on every reel play/stop; stale results ignored
   bool _trailerShown = false; // first frame rendered → dissolve to video
   bool _faderOpaque = false; // black cover for advance/mode transitions
   bool _fading = false;
@@ -175,18 +176,47 @@ class BpHeroState extends State<BpHero> {
     _stopTrailer();
     setState(() {});
     _dwell?.cancel();
+    final m = current;
+    if (m != null) _precacheLogo(m);
+    // Fullscreen reel: the screen is already black (the fader held it), so
+    // start the next trailer right away instead of the backdrop "beat".
+    final beat = _reelMode ? 150 : 1400;
     if (_follow != null) {
       // Browsing the rails: the followed movie stays; only its trailer resumes.
       _trailerDelay?.cancel();
       if (!_suspended && _trailer.supported) {
-        _trailerDelay = Timer(const Duration(milliseconds: 1400), _playTrailer);
+        _trailerDelay = Timer(Duration(milliseconds: beat), _playTrailer);
       }
       return;
     }
     _dwell = Timer(Duration(seconds: _full ? 15 : 25), () => advance(1));
     _trailerDelay?.cancel();
     if (!_suspended && _trailer.supported) {
-      _trailerDelay = Timer(const Duration(milliseconds: 1400), _playTrailer);
+      _trailerDelay = Timer(Duration(milliseconds: beat), _playTrailer);
+    }
+    // No trailer to play: never leave a held black screen up.
+    if (!_hasTrailer(m)) _releaseBlack();
+  }
+
+  bool _hasTrailer(Movie? m) =>
+      m != null && m.trailerReady && m.trailerUrl != null;
+
+  /// Lift the fader if a reel transition left it holding black.
+  void _releaseBlack() {
+    if (!mounted || !_faderOpaque) return;
+    if (_fading) {
+      // A fade is mid-flight — lifting now would fight it. Try again after.
+      Timer(const Duration(milliseconds: 350), _releaseBlack);
+      return;
+    }
+    setState(() => _faderOpaque = false);
+  }
+
+  /// Warm the logo so the reel's overlay capture never catches it unloaded.
+  void _precacheLogo(Movie m) {
+    final l = _logoFor(m);
+    if (l != null && l.isNotEmpty && mounted) {
+      precacheImage(NetworkImage(l), context).catchError((_) {});
     }
   }
 
@@ -194,23 +224,29 @@ class BpHeroState extends State<BpHero> {
     final m = current;
     if (_suspended || !mounted || m == null) return;
     // Only trailers already cached server-side — never wait on a download.
-    if (!m.trailerReady || m.trailerUrl == null) return;
+    if (!_hasTrailer(m)) return;
     if (_follow != null && _follow!.id != m.id) return;
     final url = '${widget.baseUrl}${m.trailerUrl}';
     if (_reelMode) {
+      final req = ++_reelReq;
       _reel
           .play(url, start: start, beforeShow: () async {
-            // Backdrop → black under the app's fader; mpv then fades in.
-            if (!mounted) return;
+            // Coming from the backdrop: fade it to black first; mpv then
+            // fades in from black. (A held-black transition skips this.)
+            if (!mounted || _faderOpaque) return;
             setState(() => _faderOpaque = true);
             await Future<void>.delayed(const Duration(milliseconds: 320));
           })
           .then((ok) {
-            // The fader is under the video now; clear it for when it hides.
-            if (mounted && _faderOpaque && !_fading) {
-              setState(() => _faderOpaque = false);
+            if (req != _reelReq || !mounted) return; // superseded
+            // The fader is under the video now (or the play failed) — lift it.
+            _releaseBlack();
+            if (ok) {
+              _onReelFrames(m.id);
+            } else if (_full && current?.id == m.id) {
+              // mpv couldn't play it: the texture player, never a dead screen.
+              _trailer.open(url, muted: false, start: start);
             }
-            if (ok && mounted) _onReelFrames(m.id);
           });
       return;
     }
@@ -222,10 +258,21 @@ class BpHeroState extends State<BpHero> {
   /// trailer play out like the texture path does in fullscreen.
   Future<void> _onReelFrames(int movieId) async {
     _dwell?.cancel();
+    final m = current;
+    final l = m == null ? null : _logoFor(m);
+    if (l != null && l.isNotEmpty) {
+      try {
+        await precacheImage(NetworkImage(l), context)
+            .timeout(const Duration(seconds: 4));
+      } catch (_) {}
+    }
+    if (!mounted) return;
     await WidgetsBinding.instance.endOfFrame;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
     final box =
         _overlayKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (box == null || !box.hasSize || !mounted) return;
+    if (box == null || !box.hasSize) return;
     if (current?.id != movieId || !_reel.showing) return;
     final physical = View.of(context).physicalSize;
     final ratio = physical.width / box.size.width;
@@ -246,51 +293,68 @@ class BpHeroState extends State<BpHero> {
     if (!_full) {
       // Idle: a 25s cap from playback start; fullscreen lets it play out.
       _dwell = Timer(const Duration(seconds: 25), () => advance(1));
+      // Get the reel's mpv up (paused, hidden) while home plays, so going
+      // fullscreen never waits on a process launch.
+      final m = current;
+      if (_reel.supported && m != null && m.trailerUrl != null) {
+        unawaited(_reel.warm('${widget.baseUrl}${m.trailerUrl}'));
+      }
     }
   }
 
-  /// Home is about to open a page over big picture. Take the trailer's video
-  /// texture out of the tree FIRST — no frame may draw a texture that's being
-  /// torn down (opening a franchise page mid-trailer-swap crashed the Windows
-  /// engine in Skia's GrDirectContext::flush, 2026-09-26) — then stop the
-  /// player, and hold until [resumeAfterPage].
+  /// Home is about to open a page (or a dialog) over big picture. The reel
+  /// fades to black first (native video sits above every Flutter widget, so
+  /// it must be gone before anything opens). Then take the trailer's video
+  /// texture out of the tree — no frame may draw a texture that's being torn
+  /// down (opening a franchise page mid-trailer-swap crashed the Windows
+  /// engine in Skia's GrDirectContext::flush, 2026-09-26) — stop the players,
+  /// and hold until [resumeAfterPage].
   Future<void> pauseForPage() async {
     _hold = true;
     _suspended = true;
     _dwell?.cancel();
     _trailerDelay?.cancel();
     _followDebounce?.cancel();
+    if (_reel.showing) {
+      if (mounted) setState(() => _faderOpaque = true);
+      await _reel.fadeOut();
+    }
+    _reelReq++;
+    await _reel.hide();
     if (mounted && _trailerShown) setState(() => _trailerShown = false);
     await WidgetsBinding.instance.endOfFrame;
     await _trailer.stop();
-    await _reel.hide();
   }
 
-  /// The page home opened is closed: back to the backdrop, trailer after the
-  /// usual beat.
+  /// The page home opened is closed: back to the item — straight into its
+  /// trailer in the fullscreen reel (still black), else backdrop + the beat.
   void resumeAfterPage() {
     if (!mounted) return;
     _hold = false;
     _suspended = false;
+    if (!(_reelMode && _hasTrailer(current))) _releaseBlack();
     _showItem();
   }
 
   void _stopTrailer() {
     _trailerDelay?.cancel();
     _trailer.stop();
+    _reelReq++;
     _reel.hide();
     if (mounted && _trailerShown) setState(() => _trailerShown = false);
   }
 
   /// Fade to black, run [swap] under the cover, fade back — the Roku fader.
-  void _fadeThrough(VoidCallback swap) {
+  /// [holdBlack]: stay black after the swap; the reel lifts it once its video
+  /// is up (or [_showItem] does, if there's no trailer after all).
+  void _fadeThrough(VoidCallback swap, {bool holdBlack = false}) {
     if (_fading || !mounted) return;
     _fading = true;
     setState(() => _faderOpaque = true);
     Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       swap();
-      setState(() => _faderOpaque = false);
+      if (!holdBlack) setState(() => _faderOpaque = false);
       Timer(const Duration(milliseconds: 300), () => _fading = false);
     });
   }
@@ -299,33 +363,53 @@ class BpHeroState extends State<BpHero> {
   void advance(int dir) {
     if (_follow != null) return; // browsing the rails: no rotation
     if (_items.length < 2 || _fading) return;
-    unawaited(_reel.fadeOut()); // mpv fades with the app's fader beneath it
+    final next = _items[(_i + dir + _items.length) % _items.length];
+    // mpv fades to black with the app's fader beneath it; in the reel the
+    // screen then stays black straight into the next trailer.
+    unawaited(_reel.fadeOut());
     _fadeThrough(() {
       _i = (_i + dir + _items.length) % _items.length;
       _showItem();
-    });
+    }, holdBlack: _reelMode && _hasTrailer(next));
   }
 
   void _setFullscreen(bool full) {
-    // Where the trailer is, so it carries across the texture ↔ native swap.
+    if (!_reel.supported) {
+      // Texture everywhere: one player, just unmute (Roku parity).
+      _trailer.setMuted(!full);
+      _fadeThrough(() {
+        _full = full;
+        _dwell?.cancel();
+        if (!(_full && _trailerShown)) {
+          _dwell = Timer(Duration(seconds: _trailerShown || !_full ? 25 : 15),
+              () => advance(1));
+        }
+      });
+      return;
+    }
+    // Windows: home = texture, fullscreen = native reel. Swap players under
+    // the fader, carrying the position; entering holds black straight into
+    // the reel (no backdrop flash between the two).
     final at = _reel.showing
         ? _reel.positionSeconds
         : (_trailerShown ? _trailer.positionSeconds : 0.0);
-    final swapPlayers = _reel.supported && (_reel.showing || _trailerShown);
+    final playing = _reel.showing || _trailerShown;
+    final m = current;
     unawaited(_reel.fadeOut());
-    if (!swapPlayers) _trailer.setMuted(!full); // unmute instantly (Roku parity)
     _fadeThrough(() {
       _full = full;
-      if (swapPlayers) {
-        _stopTrailer();
-        _playTrailer(start: at);
-      }
       _dwell?.cancel();
-      if (!(_full && _trailerShown)) {
-        _dwell = Timer(Duration(seconds: _trailerShown || !_full ? 25 : 15),
-            () => advance(1));
+      if (playing || (full && _hasTrailer(m))) {
+        _stopTrailer();
+        _playTrailer(start: playing ? at : 0);
       }
-    });
+      if (_full) {
+        // Fallback advance if the trailer never shows (reel frames cancel it).
+        _dwell = Timer(const Duration(seconds: 15), () => advance(1));
+      } else if (!playing) {
+        _dwell = Timer(const Duration(seconds: 25), () => advance(1));
+      }
+    }, holdBlack: full && _hasTrailer(m));
   }
 
   @override
