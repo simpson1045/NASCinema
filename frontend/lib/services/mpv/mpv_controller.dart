@@ -189,6 +189,11 @@ class MpvController {
         // included. (TrueHD was decoded to PCM Aug 23 – Oct 1 over a
         // "MAT-packer bug" that turned out to be one bad Rogue One rip.)
         '--audio-spdif=truehd,dts-hd,eac3,ac3',
+        // Anything that still decodes (FLAC/PCM/AAC/Opus tracks) goes out as
+        // real multichannel: mpv's default auto-safe picked STEREO from the
+        // Denon's 8-ch endpoint and downmixed every decoded TrueHD movie to
+        // 2.0 for weeks (Denon read "Stereo", 2026-10-01).
+        '--audio-channels=7.1,5.1,stereo',
         '--audio-exclusive=yes',
         '--wasapi-exclusive-buffer=100000',
         '--audio-buffer=1.0',
