@@ -4,6 +4,9 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.9.0 - 2026-09-26
 - **Track Manager:** press **Back** on the Big Picture home and choose **Track Manager** to clean foreign dubs and subtitles out of your movies — biggest space savings first, with a warning on movies that start in the wrong language. Open a movie to see every track marked Keep or Drop (and why); **X** strips it, **Y** protects it so it's never touched. On the list, **Y** strips all the worthwhile ones. The **Jobs** tab shows progress; every original is kept until you choose **Confirm & free space** (Y), and **X** undoes a strip until then.
+- **Real Atmos:** TrueHD soundtracks now go to your receiver untouched (Dolby Atmos - TrueHD), instead of being decoded — and rewinding or skipping in them no longer drops the sound. Anything that does get decoded now plays in full 7.1, never squashed to stereo.
+- **Controller fix:** the controller no longer stops responding after an overlay (like NVIDIA's Alt+Z) pops up.
+- **Subtitles remember:** turning subtitles on from the player's own menu sticks for that movie, and new movies follow what you usually do. The useless "Load" entry is gone from the subtitle/audio menus.
 - **Smooth trailer reel:** the fullscreen trailers on the home screen now play in the movie player too — no more stutter. Going fullscreen slides the logo and ratings down into place with no cut, each movie's backdrop shows for a couple of seconds before its trailer fades in, and the logo and ratings stay on top.
 - **Smoother movies:** fixed the stutter at 24 fps — the app was quietly redrawing itself behind the movie several times a second, which made Windows drop frames. Movie-page trailers now play in the movie player too, so they're smooth as well.
 - **Fixed:** watching a trailer on a movie page could crash the app when the trailer ended (or when you backed out of it). Trailers now step aside before they close.
