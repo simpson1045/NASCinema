@@ -45,6 +45,9 @@ class Movie(Base):
     # TMDB collection (series) — powers "grouped by franchise" rails.
     collection_id: Mapped[int | None] = mapped_column(Integer, index=True)
     collection_name: Mapped[str | None] = mapped_column(String(512))
+    # Curated tiles TMDB has no collection for — see metadata.universes().
+    release_date: Mapped[str | None] = mapped_column(String(10))  # YYYY-MM-DD
+    universes: Mapped[list | None] = mapped_column(JSON)  # ["mcu"], ["pixar"] …
 
     # A pinned Blu-ray.com release page (the exact pressing) — referenced when
     # naming bonus features.

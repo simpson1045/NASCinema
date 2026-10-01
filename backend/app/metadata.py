@@ -46,6 +46,39 @@ def _pick(results: list[dict], title: str, year: int | None) -> dict:
     return max(enumerate(results), key=score)[1]
 
 
+# Curated franchise tiles: id (negative, so it never clashes with a TMDB
+# collection id) -> (key, name, TMDB company whose logo the tile uses).
+CURATED = {
+    -1: ("mcu", "Marvel Cinematic Universe", 420),     # Marvel Studios
+    -2: ("disney-animation", "Disney Animation", 6125),  # Walt Disney Animation Studios
+    -3: ("pixar", "Pixar", 3),
+}
+_MCU_KEYWORD = 180547          # "marvel cinematic universe (mcu)" (Venom etc. lack it)
+_PIXAR = 3
+_DISNEY_ANIMATION = {6125, 2, 3166}  # WDAS; Walt Disney Pictures/Productions (the
+                                     # classics are filed under those on TMDB)
+_DISNEYTOON = 5391             # direct-to-video sequels — not the canon
+# Photoreal "live-action" remakes TMDB files under Animation: not the canon.
+_NOT_DISNEY_ANIMATION = {420818, 762509}  # The Lion King (2019), Mufasa (2024)
+
+
+def universes(detail: dict) -> list[str]:
+    """Which curated tiles a TMDB movie detail (with ?append_to_response=
+    keywords) belongs to."""
+    comps = {c.get("id") for c in detail.get("production_companies") or []}
+    kws = {k.get("id") for k in (detail.get("keywords") or {}).get("keywords", [])}
+    animated = any(g.get("id") == 16 for g in detail.get("genres") or [])
+    out = []
+    if _MCU_KEYWORD in kws:
+        out.append("mcu")
+    if _PIXAR in comps:
+        out.append("pixar")
+    elif (animated and comps & _DISNEY_ANIMATION and _DISNEYTOON not in comps
+          and detail.get("id") not in _NOT_DISNEY_ANIMATION):
+        out.append("disney-animation")
+    return out
+
+
 async def get_movie_metadata(title: str, year: int | None = None) -> dict | None:
     """Search TMDB for a movie, then fetch details for runtime + genres."""
     key = get_settings().tmdb_api_key
@@ -67,7 +100,7 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
 
             details = await client.get(
                 f"{TMDB_BASE}/movie/{best['id']}",
-                params={"api_key": key, "append_to_response": "release_dates"},
+                params={"api_key": key, "append_to_response": "release_dates,keywords"},
             )
             details.raise_for_status()
             detail = details.json()
@@ -95,6 +128,8 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
         "collection_id": collection.get("id"),
         "certification": _certification(detail),
         "collection_name": collection.get("name"),
+        "release_date": detail.get("release_date") or None,
+        "universes": universes(detail),
     }
 
 
@@ -111,7 +146,7 @@ async def get_movie_metadata_by_id(tmdb_id: int) -> dict | None:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(
                 f"{TMDB_BASE}/movie/{tmdb_id}",
-                params={"api_key": key, "append_to_response": "release_dates"},
+                params={"api_key": key, "append_to_response": "release_dates,keywords"},
             )
             r.raise_for_status()
             detail = r.json()
@@ -126,6 +161,8 @@ async def get_movie_metadata_by_id(tmdb_id: int) -> dict | None:
         "collection_id": collection.get("id"),
         "certification": _certification(detail),
         "collection_name": collection.get("name"),
+        "release_date": detail.get("release_date") or None,
+        "universes": universes(detail),
     }
 
 
@@ -387,6 +424,34 @@ async def get_collection_art(collection_id: int) -> dict | None:
     }
     _collection_art[collection_id] = art
     return art
+
+
+_company_logo: dict[int, str | None] = {}
+
+
+async def get_company_logo(company_id: int) -> str | None:
+    """A studio's logo (curated tiles use Marvel Studios / Disney Animation /
+    Pixar), cached for the process."""
+    if company_id in _company_logo:
+        return _company_logo[company_id]
+    key = get_settings().tmdb_api_key
+    if not key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{TMDB_BASE}/company/{company_id}/images",
+                                 params={"api_key": key})
+            r.raise_for_status()
+            logos = r.json().get("logos", [])
+    except (httpx.HTTPError, ValueError):
+        return None
+    # A PNG logo reads on the dark UI; prefer the best-voted one.
+    best = max(logos, key=lambda lg: (str(lg.get("file_path", "")).endswith(".png"),
+                                      lg.get("vote_average") or 0), default=None)
+    url = (f"https://image.tmdb.org/t/p/w500{best['file_path']}"
+           if best and best.get("file_path") else None)
+    _company_logo[company_id] = url
+    return url
 
 
 # collection id -> franchise logo URL (or None when nothing fits).

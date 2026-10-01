@@ -459,6 +459,9 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
             select(Movie).where(Movie.tmdb_id == meta["tmdb_id"])
         )
         if movie:
+            if movie.universes is None:  # tagged before universes existed
+                movie.universes = meta.get("universes") or []
+                movie.release_date = movie.release_date or meta.get("release_date")
             return movie
     else:
         # No TMDB match: reuse the unmatched movie with this title + year, so a
@@ -491,6 +494,8 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
         movie.collection_id = meta.get("collection_id")
         movie.collection_name = meta.get("collection_name")
         movie.certification = meta.get("certification")
+        movie.release_date = meta.get("release_date")
+        movie.universes = meta.get("universes") or []
         omdb = await get_omdb_ratings(meta.get("imdb_id") or "")
         if omdb:
             movie.imdb_rating = omdb.get("imdb_rating")
@@ -500,6 +505,29 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
     session.add(movie)
     await session.flush()
     return movie
+
+
+async def backfill_universes(limit: int | None = None) -> dict:
+    """Tag movies scanned before curated tiles existed (MCU / Disney Animation /
+    Pixar) + their full release date. Safe to re-run: only untagged movies."""
+    from .metadata import get_movie_metadata_by_id
+    stats = {"checked": 0, "tagged": 0, "failed": 0}
+    async with SessionLocal() as session:
+        movies = (await session.scalars(
+            select(Movie).where(Movie.universes.is_(None), Movie.tmdb_id.is_not(None))
+        )).all()
+        for m in movies[:limit] if limit else movies:
+            stats["checked"] += 1
+            meta = await get_movie_metadata_by_id(m.tmdb_id)
+            if not meta:
+                stats["failed"] += 1
+                continue
+            m.universes = meta.get("universes") or []
+            m.release_date = meta.get("release_date") or m.release_date
+            if m.universes:
+                stats["tagged"] += 1
+            await session.commit()
+    return stats
 
 
 async def backfill_certifications(limit: int | None = None) -> dict:

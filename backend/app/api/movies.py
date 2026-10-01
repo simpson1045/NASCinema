@@ -20,7 +20,9 @@ from sqlalchemy.orm import selectinload
 from .. import apple_trailers
 from ..db import SessionLocal, get_session
 from ..metadata import (
+    CURATED,
     franchise_name,
+    get_company_logo,
     get_collection_art,
     get_franchise_logo,
     get_movie_logo_info,
@@ -35,6 +37,7 @@ from ..models.watchlist import WatchlistItem
 from ..scanner import (
     backfill_certifications,
     backfill_ratings,
+    backfill_universes,
     reprobe,
     scan,
     scan_state,
@@ -257,7 +260,7 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
             )
 
     return {"featured": featured, "rails": rails,
-            "collections": await _collections(movies, summ)}
+            "collections": await _collections(movies, summ, curated=True)}
 
 
 @router.get("/movies/{movie_id}")
@@ -457,6 +460,13 @@ async def trigger_backfill_certifications(limit: int | None = None) -> dict:
     return await backfill_certifications(limit)
 
 
+@router.post("/backfill-universes")
+async def trigger_backfill_universes(limit: int | None = None) -> dict:
+    """Tag existing movies for the curated tiles (MCU / Disney Animation /
+    Pixar) + full release dates. Safe to re-run — only untagged movies."""
+    return await backfill_universes(limit)
+
+
 @router.post("/backfill-ratings")
 async def trigger_backfill(limit: int | None = None) -> dict:
     """Populate popularity / external ratings / collection on existing movies.
@@ -537,7 +547,47 @@ async def movie_trailer_source(movie_id: int) -> dict:
 _MIN_FRANCHISE = 2  # a "franchise" needs at least this many movies here
 
 
-async def _collections(movies: list[Movie], summ: dict[int, dict]) -> list[dict]:
+def _release_order(ms: list[Movie]) -> list[Movie]:
+    """True release order (full dates when known, else the year)."""
+    return sorted(ms, key=lambda m: (m.release_date or f"{m.year or 9999}-12-31", m.title))
+
+
+def _backdrop_url(m: Movie) -> str | None:
+    p = m.backdrop_path
+    if not p:
+        return None
+    return p if p.startswith("http") else f"https://image.tmdb.org/t/p/original{p}"
+
+
+async def _curated(movies: list[Movie], summ: dict[int, dict]) -> list[dict]:
+    """MCU / Disney Animation / Pixar — tiles TMDB has no collection for
+    (metadata.CURATED), in release order, ahead of the TMDB franchises."""
+    out = []
+    for cid, (key, name, company) in CURATED.items():
+        ms = _release_order([m for m in movies if key in (m.universes or [])])
+        if len(ms) < _MIN_FRANCHISE:
+            continue
+        years = [m.year for m in ms if m.year]
+        top = max(ms, key=lambda m: m.popularity or 0)
+        out.append({
+            "id": cid,
+            "name": name,
+            "count": len(ms),
+            "years": (f"{min(years)}–{max(years)}" if years and min(years) != max(years)
+                      else (str(years[0]) if years else None)),
+            "logo": await get_company_logo(company),
+            "backdrop": _backdrop_url(top),
+            "poster": None,
+            "overview": None,
+            "backdrops": [summ[m.id]["backdrop_path"] for m in ms
+                          if summ.get(m.id, {}).get("backdrop_path")][:10],
+            "popularity": sum(m.popularity or 0 for m in ms),
+        })
+    return out
+
+
+async def _collections(movies: list[Movie], summ: dict[int, dict],
+                       curated: bool = False) -> list[dict]:
     """Every franchise with 2+ movies in the library, biggest/most popular
     first, with its art: TMDB's franchise logo/backdrop plus each member's
     backdrop (the tile's slideshow)."""
@@ -579,7 +629,9 @@ async def _collections(movies: list[Movie], summ: dict[int, dict]) -> list[dict]
             "popularity": sum(m.popularity or 0 for m in ms),
         })
     out.sort(key=lambda c: (c["popularity"], c["count"]), reverse=True)
-    return out
+    # Curated tiles only on the row/list — the single-franchise page reuses
+    # this for ONE TMDB collection and must not get an "MCU" entry back.
+    return (await _curated(movies, summ) + out) if curated else out
 
 
 _logo_pending: set[int] = set()
@@ -600,7 +652,7 @@ async def _fill_franchise_logo(cid: int, name: str) -> None:
 @router.get("/collections")
 async def list_collections(session: AsyncSession = Depends(get_session)) -> list[dict]:
     movies = (await session.scalars(select(Movie).options(selectinload(Movie.files)))).all()
-    return await _collections(movies, {m.id: _summary(m) for m in movies})
+    return await _collections(movies, {m.id: _summary(m) for m in movies}, curated=True)
 
 
 @router.get("/collections/{collection_id}")
@@ -608,6 +660,28 @@ async def get_collection(
     collection_id: int, session: AsyncSession = Depends(get_session)
 ) -> dict:
     """A franchise page: its art + its movies in release order."""
+    if collection_id < 0:  # curated (MCU / Disney Animation / Pixar)
+        cur = CURATED.get(collection_id)
+        if not cur:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        key, name, company = cur
+        allm = (await session.scalars(select(Movie).options(selectinload(Movie.files)))).all()
+        ms = _release_order([m for m in allm if key in (m.universes or [])])
+        if not ms:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        summ = {m.id: _summary(m) for m in ms}
+        years = [m.year for m in ms if m.year]
+        return {
+            "id": collection_id,
+            "name": name,
+            "count": len(ms),
+            "years": (f"{min(years)}–{max(years)}" if years and min(years) != max(years)
+                      else (str(years[0]) if years else None)),
+            "logo": await get_company_logo(company),
+            "backdrop": _backdrop_url(max(ms, key=lambda m: m.popularity or 0)),
+            "overview": None,
+            "movies": [summ[m.id] for m in ms],
+        }
     ms = (await session.scalars(
         select(Movie).options(selectinload(Movie.files))
         .where(Movie.collection_id == collection_id)
