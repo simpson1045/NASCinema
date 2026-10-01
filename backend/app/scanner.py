@@ -322,6 +322,7 @@ async def _scan(limit: int | None = None) -> dict:
         return stats
     # Features added this run, per movie: (file id, duration, version label).
     added: dict[int, list[tuple[int, float | None, str | None]]] = {}
+    new_movies: dict[int, tuple] = {}  # → trailers fetched after the scan
 
     meta_cache: dict[tuple, dict | None] = {}
 
@@ -394,6 +395,9 @@ async def _scan(limit: int | None = None) -> dict:
                         if not is_extra:
                             added.setdefault(movie.id, []).append(
                                 (mf.id, mf.duration, mf.edition))
+                            new_movies[movie.id] = (movie.id, movie.tmdb_id,
+                                                    movie.trailer_youtube,
+                                                    movie.title, movie.year)
                     except Exception:
                         await session.rollback()
                         stats["errors"] += 1
@@ -438,6 +442,14 @@ async def _scan(limit: int | None = None) -> dict:
                     await session.delete(mv)
             await session.commit()
 
+    # New titles get their trailers now, in the background — not the first
+    # time someone opens one (the hero only rotates movies whose trailer is
+    # already cached, so a new title would otherwise never get one).
+    from .trailers import is_cached, start_fill
+    todo = [t for t in new_movies.values() if not is_cached(t[0])]
+    if todo:
+        stats["trailers_queued"] = len(todo)
+        start_fill(todo)
     return stats
 
 

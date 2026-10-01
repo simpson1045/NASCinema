@@ -171,6 +171,45 @@ def _probe_sync(path: Path) -> dict | None:
     }
 
 
+def _complete_sync(path: Path) -> bool:
+    """A finished download can still be broken: an HLS/DASH pull that died
+    partway gets muxed anyway, leaving full audio over a few seconds of video
+    (the Charlie Brown trailers: 1.8 s of picture, 30 s of sound) or a corrupt
+    stream (Beverly Hills Cop II: invalid NAL units, video gone at 1:06 of
+    2:34). Demand video that runs to the end and parses clean. Packet-level
+    only — no decode — so it's quick even on 4K."""
+    fp = ffprobe_path()
+    if not fp or not path.exists():
+        return False
+    try:
+        fmt = subprocess.run(
+            [fp, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=60, creationflags=_LOWPRI)
+        dur = float((fmt.stdout or "0").strip().split(",")[0] or 0)
+        pk = subprocess.run(
+            [fp, "-v", "error", "-select_streams", "v:0", "-show_entries",
+             "packet=pts_time", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=120, creationflags=_LOWPRI)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        return False
+    times = []
+    for line in pk.stdout.split():
+        v = line.strip(",").split(",")[0]
+        try:
+            times.append(float(v))
+        except ValueError:
+            pass
+    if dur <= 0 or not times:
+        return False
+    if "Invalid NAL" in pk.stderr or "missing picture" in pk.stderr:
+        return False
+    return max(times) >= dur * 0.9 or dur - max(times) <= 2.0
+
+
+async def _complete(path: Path) -> bool:
+    return await asyncio.to_thread(_complete_sync, path)
+
+
 # The quality bar. On a 77" OLED a 1-2 Mbps 1080p trailer is visible mush, so:
 # at least 1080 lines, and ~2.8 kbps per line for H.264 (1080p >= 3.0 Mbps,
 # 2160p >= 6.0). VP9 looks as good at ~70% of that bitrate, so it gets 0.7x.
@@ -533,7 +572,9 @@ async def _fetch_apple(movie_id: int, offer: dict | None) -> bool:
     d = trailers_dir()
     stage_main, stage_sdr = d / f"{movie_id}.apple.mkv", d / f"{movie_id}.apple.sdr.mkv"
     info = await apple_trailers.download(offer, stage_main, stage_sdr)
-    if not info:
+    if info and not (await _complete(stage_main)
+                     and (not stage_sdr.exists() or await _complete(stage_sdr))):
+        info = None  # partial/corrupt — never replace a good trailer with it
         stage_main.unlink(missing_ok=True)
         stage_sdr.unlink(missing_ok=True)
         return False
@@ -592,6 +633,9 @@ async def _fetch(movie_id: int, offer: dict, require_bar: bool,
     """Download one candidate; keep it if it passes (or the bar is waived)."""
     if not await _download(movie_id, offer["key"]):
         clear_trailer(movie_id)
+        return False
+    if not await _complete(trailer_file(movie_id)):
+        clear_trailer(movie_id)  # partial/corrupt download — try the next one
         return False
     info = await _probe(trailer_file(movie_id))
     if require_bar and not _good_quality(info):
@@ -710,3 +754,60 @@ async def measure_bars(movie_id: int, force: bool = False) -> None:
                 _bars_file(movie_id).write_text(json.dumps({"version": version, **bars}))
     finally:
         _bars_pending.discard(movie_id)
+
+
+# --- Background fetching: new titles after a scan, and a library fill/repair --
+
+_fill_state: dict = {"running": False, "total": 0, "done": 0, "fetched": 0,
+                     "repaired": 0, "none": 0, "current": None,
+                     "started_at": None, "finished_at": None}
+_fill_task: asyncio.Task | None = None
+
+
+def fill_state() -> dict:
+    return dict(_fill_state)
+
+
+async def _fill(movies: list[tuple[int, int | None, str | None, str, int | None]],
+                verify: bool) -> None:
+    """Make sure each movie has a complete trailer. [verify] also re-checks
+    cached ones and re-pulls any that are broken."""
+    from datetime import datetime, timezone
+    st = _fill_state
+    st.update(running=True, total=len(movies), done=0, fetched=0, repaired=0,
+              none=0, current=None, finished_at=None,
+              started_at=datetime.now(timezone.utc).isoformat())
+    try:
+        for movie_id, tmdb_id, pin, title, year in movies:
+            st["current"] = title
+            repaired = False
+            if is_cached(movie_id) and verify:
+                ok = await _complete(trailer_file(movie_id))
+                if ok and sdr_file(movie_id).exists():
+                    ok = await _complete(sdr_file(movie_id))
+                if not ok:
+                    clear_trailer(movie_id)
+                    sdr_file(movie_id).unlink(missing_ok=True)
+                    repaired = True
+            if not is_cached(movie_id):
+                got = await ensure_trailer(movie_id, tmdb_id, pin, title, year)
+                if got and repaired:
+                    st["repaired"] += 1
+                elif got:
+                    st["fetched"] += 1
+                else:
+                    st["none"] += 1
+            st["done"] += 1
+    finally:
+        st.update(running=False, current=None,
+                  finished_at=datetime.now(timezone.utc).isoformat())
+
+
+def start_fill(movies: list[tuple[int, int | None, str | None, str, int | None]],
+               verify: bool = False) -> dict:
+    """Run [_fill] in the background; one at a time."""
+    global _fill_task
+    if _fill_task is not None and not _fill_task.done():
+        return {"started": False, "already_running": True, **fill_state()}
+    _fill_task = asyncio.create_task(_fill(movies, verify))
+    return {"started": True, **fill_state()}

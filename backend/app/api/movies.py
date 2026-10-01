@@ -41,6 +41,8 @@ from ..scanner import (
     start_background_scan,
 )
 from ..trailers import (
+    fill_state,
+    start_fill,
     clear_trailer,
     ensure_trailer,
     is_cached,
@@ -431,6 +433,22 @@ async def trigger_scan(wait: bool = True) -> dict:
 @router.get("/scan/status")
 async def get_scan_status() -> dict:
     return scan_state()
+
+
+@router.post("/trailers/fill")
+async def trailers_fill(verify: bool = False, session: AsyncSession = Depends(get_session)) -> dict:
+    """Background: fetch a trailer for every movie that lacks one; ?verify=true
+    also re-checks cached trailers and re-pulls broken ones. Follow it on
+    GET /api/trailers/fill."""
+    movies = (await session.scalars(select(Movie).order_by(Movie.id))).all()
+    todo = [(m.id, m.tmdb_id, m.trailer_youtube, m.title, m.year) for m in movies
+            if m.tmdb_id or m.trailer_youtube]
+    return start_fill(todo, verify=verify)
+
+
+@router.get("/trailers/fill")
+async def trailers_fill_status() -> dict:
+    return fill_state()
 
 
 @router.post("/backfill-certifications")
