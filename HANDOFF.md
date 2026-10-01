@@ -28,7 +28,16 @@ then betas move to ALPINE (see "Release plan" below).
   flag; a never-set-up movie follows the habit (on → plain English text track, non-SDH
   before SDH, text before PGS). Existing movies whose saved pick is "off" stay off
   until subs are turned on in the player once.
-- Analyzer clean, web build OK. **Untested on ELKO.**
+- **TrueHD verified live on ELKO 10-01 ~01:00:** Denon "Dolby Atmos - TrueHD" from a clean
+  start/seek. Live `audio-spdif` switches are an invalid test (muxer starts without a major
+  sync → "Stream parameters not seen"). mpv's auto-safe downmixed DECODED audio to 2.0 →
+  now `--audio-channels=7.1,5.1,stereo` (56d1a5d).
+- **TrueHD + seeking:** rapid seeks break ffmpeg's spdif MAT packer ("Unusual frame timing …
+  not implemented") → Denon shows DTHD but silence. Live recovery that worked: aid no →
+  aid 1 → one exact seek. Now automatic: MpvController watches `seeking` and, when the AO is
+  spdif-truehd, re-opens the track + exact-seeks 700 ms after seeking settles. If it ever
+  isn't enough: a newer mpv/ffmpeg build (warning literally says update FFmpeg).
+- Analyzer clean, web build OK. **Untested on ELKO** (except the live IPC proofs above).
 
 **Part 2 (needs ELKO with nobody watching):** bitstream ~2 drops/min (PCM = 0, so it's
 the spdif/WASAPI timing — bitstream is non-negotiable); 1-drop/s stuck state after an
