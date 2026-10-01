@@ -7,7 +7,28 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-09-29 ~04:30 UTC) — 24p stutter ROOT CAUSE found; b46 installed, b47 building
+## Latest (2026-10-01 ~05:15 UTC) — scanner: background mode, renames keep resume/subs, [Label] versions (c9aa354, deployed)
+
+- Context: another Claude's `/root/place_finished.py` (TrueNAS cron, 30 min) places
+  movies into /mnt/scratch/movies (→ /movies-ssd) or /mnt/NAS Storage/movies (→ /movies)
+  and renamed the library to "Title (Year) - [Label]". NASCinema had not scanned since
+  the 09-28 restart (there is NO scheduled scan — only POST /api/scan).
+- **API:** `POST /api/scan` (waits, returns counts — the app's Library button) or
+  `POST /api/scan?wait=false` (background; returns at once) + `GET /api/scan/status`
+  (running, current file, live counts incl. `carried`, error). One scan at a time.
+  NOTE the route is /api/scan, NOT /api/movies/scan.
+- **Renames:** a renamed/moved file is re-added under a new MediaFile id; before the
+  old row is pruned, the successor (same movie, duration within 5 s) inherits
+  watch_progress (resume + subtitle choice — it would otherwise CASCADE away),
+  strip-job history and data/subs/<id> (server subs + offset). Unmatched titles now
+  reuse the existing unmatched movie with the same title+year (no duplicates).
+- **Versions:** `- [Label]` suffix → edition name (plus the old keyword list).
+- Tested in the live container against /tmp/t + /tmp/td (fake title, rows cleaned up): 12/12.
+- First big scan started 05:14 UTC (background). Next: give the placement Claude the
+  call (`curl -s -X POST 'http://localhost:8400/api/scan?wait=false'` once at the end
+  of each placement run). Still-open player items are in the 09-29 entry below.
+
+## Earlier (2026-09-29 ~04:30 UTC) — 24p stutter ROOT CAUSE found; b46 installed, b47 building
 
 - **Measured on ELKO (movie mode, 23.976 Hz via Denon), dropped frames / 30 s:**
   app's embedded player ~20 · mpv fullscreen alone 0 · mpv fullscreen +
