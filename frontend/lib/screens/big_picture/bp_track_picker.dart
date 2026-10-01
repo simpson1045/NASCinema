@@ -75,10 +75,48 @@ class TrackPick {
         }
       }
     } catch (_) {}
+    // Never set up: follow the habit — subtitles on last time → the plain
+    // English track; otherwise the file's own forced/default, else off.
+    final f = files.first;
+    final habitOn = await subtitlesHabit();
+    final preferred = habitOn ? preferredSubtitle(f) : null;
     return TrackPick(
-        fileId: files.first.id,
-        audio: defaultAudio(files.first),
-        subtitle: autoSubtitle(files.first) == null ? 0 : null);
+        fileId: f.id,
+        audio: defaultAudio(f),
+        subtitle: preferred ?? (autoSubtitle(f) == null ? 0 : null));
+  }
+
+  static const _habitKey = 'bp_subs_habit_on';
+
+  /// Whether subtitles were on the last time a movie was watched.
+  static Future<bool> subtitlesHabit() async {
+    try {
+      return (await SharedPreferences.getInstance()).getBool(_habitKey) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> setSubtitlesHabit(bool on) async {
+    try {
+      await (await SharedPreferences.getInstance()).setBool(_habitKey, on);
+    } catch (_) {}
+  }
+
+  /// The English track to turn on by default: plain dialogue text ("full",
+  /// "Stripped SRT") before SDH, text before picture-based (PGS/VobSub),
+  /// never a forced-only track. Null if there's no English subtitle.
+  static int? preferredSubtitle(MovieFile f) {
+    bool en(MediaTrack t) => (t.language ?? '').toLowerCase().startsWith('en');
+    bool sdh(MediaTrack t) =>
+        RegExp(r'sdh|hearing|\bcc\b', caseSensitive: false).hasMatch('${t.title} ${t.desc}');
+    bool picture(MediaTrack t) =>
+        RegExp(r'pgs|vobsub|dvd_sub|hdmv', caseSensitive: false).hasMatch('${t.title} ${t.desc}');
+    final ts = f.subtitleTracks.where((t) => en(t) && !t.forced).toList();
+    if (ts.isEmpty) return null;
+    int rank(MediaTrack t) => (sdh(t) ? 1 : 0) + (picture(t) ? 2 : 0);
+    ts.sort((a, b) => rank(a).compareTo(rank(b)));
+    return ts.first.id;
   }
 
   /// The subtitle mpv shows on its own (no --sid): a forced track (foreign-

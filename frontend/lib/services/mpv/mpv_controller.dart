@@ -17,7 +17,7 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theater/theater_prefs.dart'
-    show kMpvPathPref, kMpvDefaultPath, kTruehdBitstreamPref;
+    show kMpvPathPref, kMpvDefaultPath;
 import 'job_leash.dart';
 import 'mpv_ipc.dart';
 
@@ -64,6 +64,11 @@ class MpvController {
   String hwdec = '';
 
   bool get running => _ipc != null && !_disposed;
+
+  /// The subtitle track mpv last reported (int sid, or false = off), kept
+  /// after the player closes so the movie page can remember a choice made
+  /// in the player's own menu. Null = nothing reported since the last reset.
+  static Object? lastSid;
 
   /// Fired when uosc's fullscreen button is clicked: embedded mpv can't
   /// fullscreen itself meaningfully, so the app window takes the toggle.
@@ -180,14 +185,10 @@ class MpvController {
       ],
       '--osd-level=1',
       if (passthrough) ...[
-        // TrueHD bitstream is opt-in while the ffmpeg MAT-packer saga is
-        // unresolved (see kTruehdBitstreamPref) — off = mpv decodes TrueHD
-        // to lossless multichannel LPCM, which the seamless-branch splices
-        // can't kill. The other codecs bitstream as always.
-        if (prefs.getBool(kTruehdBitstreamPref) ?? false)
-          '--audio-spdif=truehd,dts-hd,eac3,ac3'
-        else
-          '--audio-spdif=dts-hd,eac3,ac3',
+        // Every lossless/Dolby format goes to the AVR untouched — Atmos
+        // included. (TrueHD was decoded to PCM Aug 23 – Oct 1 over a
+        // "MAT-packer bug" that turned out to be one bad Rogue One rip.)
+        '--audio-spdif=truehd,dts-hd,eac3,ac3',
         '--audio-exclusive=yes',
         '--wasapi-exclusive-buffer=100000',
         '--audio-buffer=1.0',
@@ -249,6 +250,7 @@ class MpvController {
     ipc.observe('time-pos', (v) => position = (v as num?)?.toDouble() ?? position);
     ipc.observe('duration', (v) => duration = (v as num?)?.toDouble() ?? 0);
     ipc.observe('pause', (v) => paused = v == true);
+    ipc.observe('sid', (v) => lastSid = v);
     ipc.observe('volume', (v) => volume = (v as num?)?.toDouble() ?? volume);
     ipc.observe('mute', (v) => muted = v == true);
     ipc.observe('demuxer-cache-time',

@@ -18,11 +18,19 @@ class PadDispatch {
 
   static final List<PadHandler> _handlers = [];
   static bool _started = false;
+  // Last real focus target: when an overlay steals the view's keyboard focus
+  // (NVIDIA Alt+Z, a popup), Windows gives the window back without it — a
+  // pad press puts it back instead of falling on nothing.
+  static FocusNode? _lastFocus;
 
   static void start() {
     if (_started) return;
     _started = true;
     Gamepad.instance.start();
+    FocusManager.instance.addListener(() {
+      final f = FocusManager.instance.primaryFocus;
+      if (f != null && f.context != null && f is! FocusScopeNode) _lastFocus = f;
+    });
     Gamepad.instance.presses.listen(_dispatch);
     Gamepad.instance.scroll.listen(_scrollPage);
   }
@@ -66,6 +74,12 @@ class PadDispatch {
   static void remove(PadHandler h) => _handlers.remove(h);
 
   static void _dispatch(PadButton b) {
+    final pf = FocusManager.instance.primaryFocus;
+    final last = _lastFocus;
+    if ((pf == null || pf is FocusScopeNode) &&
+        last != null && last.context != null && last.canRequestFocus) {
+      last.requestFocus();
+    }
     // View is the flag button everywhere — nothing else gets it.
     if (b == PadButton.view) {
       FlagService.flag();

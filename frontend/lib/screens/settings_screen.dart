@@ -48,7 +48,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool? _hdrDetected; // what Auto sees on this device's display
 
   // Renderer
-  bool _truehdBitstream = false;
   late final _mpvPath = TextEditingController();
 
   bool get _isRenderer => !kIsWeb && Platform.isWindows;
@@ -81,7 +80,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _tvInput.text = p.getString(kTvInputPref) ?? kDefaultTvInput;
       _tvLabel.text = p.getString(kTvLabelPref) ?? kDefaultTvLabel;
       _refreshMatch = p.getBool(kRefreshMatchPref) ?? false;
-      _truehdBitstream = p.getBool(kTruehdBitstreamPref) ?? false;
       _mpvPath.text = p.getString(kMpvPathPref) ?? kMpvDefaultPath;
     });
   }
@@ -316,17 +314,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
             _section('RENDERER', [
               _field(_mpvPath, 'mpv path', kMpvDefaultPath, kMpvPathPref),
-              _toggle(
-                  'Bitstream TrueHD (known mpv/ffmpeg bug)',
-                  'Off = TrueHD decodes to lossless multichannel PCM. On = raw '
-                      'bitstream to the AVR — currently crashes at seamless-'
-                      'branch splices (ffmpeg MAT packer; mpv#13943). Enable '
-                      'once a fixed build ships. DTS-HD/EAC3/AC3 always '
-                      'bitstream.',
-                  _truehdBitstream, (v) {
-                setState(() => _truehdBitstream = v);
-                _prefs?.setBool(kTruehdBitstreamPref, v);
-              }),
             ]),
           ] else
             const Padding(

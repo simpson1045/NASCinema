@@ -236,7 +236,9 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     if (_files.isEmpty) return; // still loading
     final pick = _pick ?? TrackPick(fileId: _files.first.id);
     unawaited(pick.save(_m.id));
-    _open(
+    playerResetLastSubtitle();
+    _openPlayer(
+      pick,
       PlayerScreen(
         fileId: pick.fileId,
         baseUrl: widget.baseUrl,
@@ -284,6 +286,29 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     if (result != null) {
       setState(() => _pick = result);
       unawaited(result.save(_m.id));
+    }
+  }
+
+  /// Play, then remember the subtitle the movie ended on — a choice made in
+  /// the player's own menu used to be forgotten, so every launch fell back
+  /// to "off" (Book of Secrets, 2026-09-29).
+  Future<void> _openPlayer(TrackPick pick, Widget page) async {
+    await _open(page);
+    final sid = playerLastSubtitle();
+    if (sid == null || !mounted) return;
+    var next = pick;
+    if (sid == 0) {
+      next = pick.copyWith(subtitle: 0, clearExternal: true);
+    } else if (pick.external == null &&
+        (_files.where((f) => f.id == pick.fileId).firstOrNull?.subtitleTracks
+                .any((t) => t.id == sid) ??
+            false)) {
+      next = pick.copyWith(subtitle: sid);
+    }
+    unawaited(TrackPick.setSubtitlesHabit(sid != 0));
+    if (next != pick) {
+      unawaited(next.save(_m.id));
+      setState(() => _pick = next);
     }
   }
 

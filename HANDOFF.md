@@ -7,7 +7,43 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-01 ~05:15 UTC) — scanner: background mode, renames keep resume/subs, [Label] versions (c9aa354, deployed)
+## Latest (2026-10-01 ~08:00 UTC) — next app build, part 1 written (NOT built/released)
+
+Committed on main, no tag. Goes into ONE public release together with part 2,
+then betas move to ALPINE (see "Release plan" below).
+- **TrueHD always bitstreamed** (`--audio-spdif=truehd,dts-hd,eac3,ac3`); the Settings
+  toggle + kTruehdBitstreamPref removed. The Aug 23 "MAT packer bug" (mpv#13943) was a
+  bad Rogue One rip (maintainer confirmed; re-rip works) — TrueHD had been decoded to
+  PCM, losing Atmos height, since f57e852.
+- **Controller dropping after NVIDIA Alt+Z:** proven with a foreground logger on ELKO —
+  Windows DID return the foreground to nascinema; the view just lost Flutter keyboard
+  focus and big_picture's `_onPad` required `_focus.hasPrimaryFocus`. Now: route-on-top
+  check + requestFocus; PadDispatch restores the last focused node on any press.
+- **uosc "Load" removed** from subtitle/audio/video menus (vendored uosc main.lua).
+  Note: with subs OFF, uosc parks the menu CURSOR on the first track — looks selected.
+- **Subtitles starting off:** (a) new-movie default was Off whenever no track was
+  flagged forced/default; (b) choices made in the player's own menu were never saved.
+  Now MpvController mirrors `sid` (static lastSid); the movie page resets it before the
+  player and saves what the movie ended on into the movie's TrackPick + a global habit
+  flag; a never-set-up movie follows the habit (on → plain English text track, non-SDH
+  before SDH, text before PGS). Existing movies whose saved pick is "off" stay off
+  until subs are turned on in the player once.
+- Analyzer clean, web build OK. **Untested on ELKO.**
+
+**Part 2 (needs ELKO with nobody watching):** bitstream ~2 drops/min (PCM = 0, so it's
+the spdif/WASAPI timing — bitstream is non-negotiable); 1-drop/s stuck state after an
+audio reinit mid-movie; startup buffering glitch (cache empty at start); one screen
+flash at player start (likely target-colorspace-hint); confirm pad A in the uosc
+subtitle menu actually switches tracks.
+
+**Release plan (Matt, 2026-10-01):** after part 1+2 → one public GitHub release. Then
+betas like NASRadio: built on ALPINE from a clean `git archive` export in a temp folder
+(NOT the repo, one build at a time, no stacked/retried SSH — see Claude memory
+alpine-ssh-connection-limit), published to the NAS updates folder with
+`channel: beta`; GitHub only gets releases Matt calls. NASRadio reference:
+scripts/beta.ps1 + scheduled task NASRadioBeta, update_service `_isNewer`.
+
+## Earlier (2026-10-01 ~05:15 UTC) — scanner: background mode, renames keep resume/subs, [Label] versions (c9aa354, deployed)
 
 - Context: another Claude's `/root/place_finished.py` (TrueNAS cron, 30 min) places
   movies into /mnt/scratch/movies (→ /movies-ssd) or /mnt/NAS Storage/movies (→ /movies)

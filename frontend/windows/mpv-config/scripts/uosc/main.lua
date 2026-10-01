@@ -855,14 +855,13 @@ bind_command('subtitles', create_select_tracklist_type_menu_opener({
 	prop = 'sid',
 	enable_prop = 'sub-visibility',
 	secondary = {prop = 'secondary-sid', icon = 'vertical_align_top', enable_prop = 'secondary-sub-visibility'},
-	load_command = 'script-binding uosc/load-subtitles',
-	download_command = 'script-binding uosc/download-subtitles',
+	-- NASCinema: no "Load" (open-file dialog) / "Search online" — it's a TV.
 }))
 bind_command('audio', create_select_tracklist_type_menu_opener({
-	title = t('Audio'), type = 'audio', prop = 'aid', load_command = 'script-binding uosc/load-audio',
+	title = t('Audio'), type = 'audio', prop = 'aid', -- NASCinema: no "Load" on a TV
 }))
 bind_command('video', create_select_tracklist_type_menu_opener({
-	title = t('Video'), type = 'video', prop = 'vid', load_command = 'script-binding uosc/load-video',
+	title = t('Video'), type = 'video', prop = 'vid', -- NASCinema: no "Load" on a TV
 }))
 bind_command('playlist', create_self_updating_menu_opener({
 	title = t('Playlist'),

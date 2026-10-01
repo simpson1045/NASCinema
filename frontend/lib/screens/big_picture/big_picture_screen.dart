@@ -224,7 +224,12 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   /// pushed page above it gets ordinary focus navigation from PadDispatch).
   /// D-pad/stick move, A selects, B/View back, Start opens the menu.
   bool _onPad(PadButton b) {
-    if (!_focus.hasPrimaryFocus || _data == null) return false;
+    // "Am I the screen on top", NOT "do I hold keyboard focus": an overlay
+    // (NVIDIA Alt+Z) takes the view's keyboard focus and Windows hands the
+    // window back without it — the pad went dead until an alt-tab
+    // (2026-10-01, foreground logged on ELKO). Take focus back as we go.
+    if (_data == null || !(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    if (!_focus.hasPrimaryFocus) _focus.requestFocus();
     switch (b) {
       case PadButton.up:
         _up();

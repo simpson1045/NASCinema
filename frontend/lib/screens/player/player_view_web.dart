@@ -46,6 +46,9 @@ Widget buildPlayerView(String url, bool isHls) {
 
 // --- accessors the Flutter control bar polls / calls ----------------------
 
+int? playerLastSubtitle() => null;
+void playerResetLastSubtitle() {}
+
 double playerCurrentTime() => _v?.currentTime ?? 0;
 
 double playerDuration() {

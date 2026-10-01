@@ -400,6 +400,15 @@ Widget _mkBuild(String url) {
 // accessors the Flutter control bar polls / calls
 // ---------------------------------------------------------------------------
 
+/// The subtitle the movie ended on: track id, 0 = off, null = unknown.
+int? playerLastSubtitle() {
+  final v = MpvController.lastSid;
+  if (v == false) return 0;
+  return v is num ? v.toInt() : null;
+}
+
+void playerResetLastSubtitle() => MpvController.lastSid = null;
+
 double playerCurrentTime() => _useMpv
     ? (_mpv?.position ?? 0)
     : (_player?.state.position.inMilliseconds ?? 0) / 1000;
