@@ -123,6 +123,7 @@ class TrailerPlayer {
       if (gen != _generation) return; // superseded before it ran
       final player = _ensurePlayer();
       await player.setVolume(muted ? 0 : 100);
+      await _audio(player, muted);
       if (gen != _generation) return;
       _active = true;
       await player.open(Media(url,
@@ -132,8 +133,18 @@ class TrailerPlayer {
     });
   }
 
-  Future<void> setMuted(bool muted) =>
-      _run(() async => _player?.setVolume(muted ? 0 : 100));
+  Future<void> setMuted(bool muted) => _run(() async {
+        final p = _player;
+        if (p == null) return;
+        await p.setVolume(muted ? 0 : 100);
+        await _audio(p, muted);
+      });
+
+  /// Muted = no audio track at all, not just volume 0: an open (silent)
+  /// stream still made Windows' spatial encoder wake the Denon into Atmos
+  /// and back on every home-screen move (2026-10-01).
+  Future<void> _audio(Player p, bool muted) =>
+      p.setAudioTrack(muted ? AudioTrack.no() : AudioTrack.auto());
 
   Future<void> stop() {
     _generation++;
