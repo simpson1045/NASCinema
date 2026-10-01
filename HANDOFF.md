@@ -7,7 +7,18 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-01 ~08:00 UTC) — next app build, part 1 written (NOT built/released)
+## Latest (2026-10-01 ~09:30 UTC) — curated franchise tiles live (fb3be7b, deployed)
+
+- MCU / Disney Animation / Pixar tiles (negative ids -1/-2/-3) lead the Franchises row;
+  pages in true release order (movies.release_date, migration 0016). Membership in
+  movies.universes from TMDB (metadata.universes): MCU keyword 180547; Pixar company 3;
+  Disney Animation = Animation genre + company 6125/2/3166, minus DisneyToon (5391) and
+  _NOT_DISNEY_ANIMATION ids (Lion King 2019, Mufasa). Backfilled: 344 checked, 49 tagged.
+  Live: MCU 23 (2008–2021), Disney Animation 19, Pixar 7. Disney Animation also caught
+  A Goofy Movie + Recess: School's Out (Disney TV Animation features) — Matt to decide.
+- Also since b51: muted home trailers open no audio track (83ae185, in the next build).
+
+## Earlier (2026-10-01 ~08:00 UTC) — next app build, part 1 written (NOT built/released)
 
 Committed on main, no tag. Goes into ONE public release together with part 2,
 then betas move to ALPINE (see "Release plan" below).
