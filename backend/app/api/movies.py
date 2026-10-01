@@ -32,7 +32,14 @@ from ..tracks import quality_label, track_rows, version_label
 from ..models import MediaFile, Movie
 from ..models.watch_progress import WatchProgress
 from ..models.watchlist import WatchlistItem
-from ..scanner import backfill_certifications, backfill_ratings, reprobe, scan
+from ..scanner import (
+    backfill_certifications,
+    backfill_ratings,
+    reprobe,
+    scan,
+    scan_state,
+    start_background_scan,
+)
 from ..trailers import (
     clear_trailer,
     ensure_trailer,
@@ -412,9 +419,18 @@ async def update_extra(
 
 
 @router.post("/scan")
-async def trigger_scan() -> dict:
-    # Synchronous for the MVP; becomes a background job with live progress later.
+async def trigger_scan(wait: bool = True) -> dict:
+    """Scan the library. Default waits and returns the counts (the app's
+    Library button); ?wait=false starts it in the background and returns at
+    once (the placement script) — follow it on GET /api/scan/status."""
+    if not wait:
+        return start_background_scan()
     return await scan()
+
+
+@router.get("/scan/status")
+async def get_scan_status() -> dict:
+    return scan_state()
 
 
 @router.post("/backfill-certifications")

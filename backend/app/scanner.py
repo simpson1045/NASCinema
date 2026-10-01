@@ -9,19 +9,22 @@ rescan."
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
 from guessit import guessit
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from .config import get_settings
 from .db import SessionLocal
 from .fingerprint import fingerprint_file
 from .metadata import get_movie_metadata, get_omdb_ratings
-from .models import MediaFile, Movie
+from .models import MediaFile, Movie, StripJob
+from .models.watch_progress import WatchProgress
 from .probe import probe_file
 from .models.media_stream import MediaStream
 from .streaming import remove_file_cache
@@ -142,6 +145,9 @@ _EXTRA_NAME_TYPES = [
 # outright; otherwise a known cut/fan-edit keyword anywhere in the filename or
 # its folder. Untagged files get None and the API labels them by resolution/HDR.
 _EDITION_TAG = re.compile(r"\{edition-([^}]+)\}", re.IGNORECASE)
+# Jellyfin's convention: "Title (Year) - [Label].mkv" — whatever is in the
+# trailing brackets IS the version name ("Theatrical", "4K UHD Remux"…).
+_EDITION_BRACKET = re.compile(r"\s-\s\[([^\]]+)\]\s*$")
 _EDITION_WORDS: list[tuple[str, str]] = [
     (r"\b4k77\b", "4K77"),
     (r"\b4k80\b", "4K80"),
@@ -168,6 +174,9 @@ def _edition(filename: str, movie_folder: str | None) -> str | None:
         m = _EDITION_TAG.search(text)
         if m:
             return m.group(1).strip()
+    m = _EDITION_BRACKET.search(Path(filename).stem)
+    if m and m.group(1).strip():
+        return m.group(1).strip()
     hay = f"{filename} {movie_folder or ''}"
     for pat, label in _EDITION_WORDS:
         if re.search(pat, hay, flags=re.IGNORECASE):
@@ -201,7 +210,99 @@ def _extra_title(filename: str, movie_title: str, extra_type: str) -> str:
     return stem.strip() or Path(filename).stem
 
 
+# One scan at a time; its live state is what GET /api/scan/status reports.
+_scan_lock = asyncio.Lock()
+_scan_state: dict = {"running": False, "started_at": None, "finished_at": None,
+                     "current": None, "stats": None, "error": None}
+_scan_task: asyncio.Task | None = None
+
+
+def scan_state() -> dict:
+    return dict(_scan_state)
+
+
+def start_background_scan() -> dict:
+    """Kick a scan off and return at once (the placement script's call)."""
+    global _scan_task
+    # The task takes the lock only once it runs — a pending one counts too.
+    if _scan_lock.locked() or (_scan_task is not None and not _scan_task.done()):
+        return {"started": False, "already_running": True, **scan_state()}
+    _scan_task = asyncio.create_task(scan())
+    return {"started": True, **scan_state()}
+
+
 async def scan(limit: int | None = None) -> dict:
+    if _scan_lock.locked():
+        return {"already_running": True, **scan_state()}
+    async with _scan_lock:
+        _scan_state.update(running=True, error=None, current=None,
+                           started_at=datetime.now(timezone.utc).isoformat(),
+                           finished_at=None)
+        try:
+            stats = await _scan(limit)
+            _scan_state["stats"] = stats
+            return stats
+        except Exception as e:  # surfaced in /scan/status, never silent
+            _scan_state["error"] = repr(e)
+            raise
+        finally:
+            _scan_state.update(running=False, current=None,
+                               finished_at=datetime.now(timezone.utc).isoformat())
+
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _carry_subs(old_id: int, new_id: int) -> None:
+    """Server subtitles + timing offset live in data/subs/<file_id>/ — move
+    them to the renamed file's id (never overwriting anything already there)."""
+    base = Path(get_settings().data_dir) / "subs"
+    src, dst = base / str(old_id), base / str(new_id)
+    if not src.is_dir():
+        return
+    dst.mkdir(parents=True, exist_ok=True)
+    for f in src.iterdir():
+        if not (dst / f.name).exists():
+            shutil.move(str(f), str(dst / f.name))
+    try:
+        src.rmdir()
+    except OSError:
+        pass  # something stayed behind (a name clash) — leave it, don't delete
+
+
+async def _carry_over(session, old: MediaFile, new_id: int) -> None:
+    """A renamed/moved file is re-added under a new id; bring its per-file
+    data along before the old row (and, by cascade, its progress) is pruned."""
+    old_wp = await session.scalar(
+        select(WatchProgress).where(WatchProgress.media_file_id == old.id))
+    new_wp = await session.scalar(
+        select(WatchProgress).where(WatchProgress.media_file_id == new_id))
+    if old_wp and not new_wp:
+        old_wp.media_file_id = new_id
+    elif old_wp and new_wp and (old_wp.updated_at or _EPOCH) > (new_wp.updated_at or _EPOCH):
+        new_wp.position_seconds = old_wp.position_seconds
+        new_wp.subtitle_id = old_wp.subtitle_id
+    await session.execute(update(StripJob).where(StripJob.media_file_id == old.id)
+                          .values(media_file_id=new_id))
+    await session.flush()
+    _carry_subs(old.id, new_id)
+
+
+def _successor(old: MediaFile, added: list[tuple[int, float | None, str | None]]) -> int | None:
+    """The file added this scan that replaces [old]: same movie (the caller
+    filters), same running time within 5 s; failing a duration, the only
+    newcomer with the same version label."""
+    if old.duration:
+        best = min((a for a in added if a[1]), default=None,
+                   key=lambda a: abs(a[1] - old.duration))
+        if best and abs(best[1] - old.duration) <= 5:
+            return best[0]
+        return None
+    same = [a for a in added if a[2] == old.edition]
+    return same[0][0] if len(same) == 1 else None
+
+
+async def _scan(limit: int | None = None) -> dict:
     settings = get_settings()
     dirs = settings.media_dir_list
 
@@ -213,10 +314,14 @@ async def scan(limit: int | None = None) -> dict:
         "extras": 0,
         "skipped": 0,
         "removed": 0,
+        "carried": 0,
         "errors": 0,
     }
+    _scan_state["stats"] = stats  # live counts while it runs
     if not dirs:
         return stats
+    # Features added this run, per movie: (file id, duration, version label).
+    added: dict[int, list[tuple[int, float | None, str | None]]] = {}
 
     meta_cache: dict[tuple, dict | None] = {}
 
@@ -239,6 +344,7 @@ async def scan(limit: int | None = None) -> dict:
                         continue
                     stats["found"] += 1
                     full = os.path.join(root, name)
+                    _scan_state["current"] = full
 
                     if await session.scalar(
                         select(MediaFile.id).where(MediaFile.path == full)
@@ -285,6 +391,9 @@ async def scan(limit: int | None = None) -> dict:
                             mf.edition = _edition(name, movie_folder)
                         session.add(mf)
                         await session.commit()
+                        if not is_extra:
+                            added.setdefault(movie.id, []).append(
+                                (mf.id, mf.duration, mf.edition))
                     except Exception:
                         await session.rollback()
                         stats["errors"] += 1
@@ -309,6 +418,11 @@ async def scan(limit: int | None = None) -> dict:
                 if any(p.startswith(r) for r in accessible) and not os.path.exists(
                     mf.path
                 ):
+                    if mf.kind != "extra" and mf.movie_id in added:
+                        new_id = _successor(mf, added[mf.movie_id])
+                        if new_id:
+                            await _carry_over(session, mf, new_id)
+                            stats["carried"] += 1
                     remove_file_cache(mf.id)  # drop stale cached transcode
                     await session.delete(mf)
                     stats["removed"] += 1
@@ -331,6 +445,16 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
     if meta and meta.get("tmdb_id"):
         movie = await session.scalar(
             select(Movie).where(Movie.tmdb_id == meta["tmdb_id"])
+        )
+        if movie:
+            return movie
+    else:
+        # No TMDB match: reuse the unmatched movie with this title + year, so a
+        # renamed file stays on the same movie (and keeps its resume point)
+        # instead of spawning a duplicate.
+        movie = await session.scalar(
+            select(Movie).where(Movie.tmdb_id.is_(None), Movie.title == title,
+                                Movie.year == year if year is not None else Movie.year.is_(None))
         )
         if movie:
             return movie
