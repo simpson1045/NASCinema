@@ -295,15 +295,17 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   Future<void> _openPlayer(TrackPick pick, Widget page) async {
     await _open(page);
     final sid = playerLastSubtitle();
+    final server = playerLastServerSubtitle();
     if (sid == null || !mounted) return;
     var next = pick;
-    if (sid == 0) {
+    if (server != null) {
+      next = pick.copyWith(external: server, clearSubtitle: true);
+    } else if (sid == 0) {
       next = pick.copyWith(subtitle: 0, clearExternal: true);
-    } else if (pick.external == null &&
-        (_files.where((f) => f.id == pick.fileId).firstOrNull?.subtitleTracks
-                .any((t) => t.id == sid) ??
-            false)) {
-      next = pick.copyWith(subtitle: sid);
+    } else if (_files.where((f) => f.id == pick.fileId).firstOrNull?.subtitleTracks
+            .any((t) => t.id == sid) ??
+        false) {
+      next = pick.copyWith(subtitle: sid, clearExternal: true);
     }
     unawaited(TrackPick.setSubtitlesHabit(sid != 0));
     if (next != pick) {

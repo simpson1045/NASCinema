@@ -8,6 +8,7 @@ they're tiny and worth keeping. PGS overlay is a later phase.
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -49,10 +50,20 @@ def _read_offset(file_id: int) -> float:
 
 def _entry(file_id: int, path: Path) -> dict:
     lang = path.stem.split("-")[0]
+    release = None
+    meta = path.with_suffix(".json")
+    if meta.exists():
+        try:
+            release = json.loads(meta.read_text("utf-8")).get("release") or None
+        except (OSError, ValueError):
+            pass
     return {
         "id": path.stem,
         "lang": lang,
         "label": lang.upper(),
+        # The release it was made for ("…BluRay.720p…CHD") — what tells two
+        # downloads apart in the player's subtitle menu.
+        "release": release,
         "url": f"/api/subtitles/{file_id}/file/{path.name}",
     }
 
@@ -103,6 +114,7 @@ async def search_subtitles(
 class DownloadReq(BaseModel):
     os_file_id: int
     language: str = "und"
+    release: str | None = None  # from the search result; shown in the menu
 
 
 @router.post("/{file_id}/download")
@@ -116,6 +128,9 @@ async def download_subtitle(
     name = f"{req.language}-{req.os_file_id}.vtt"
     path = _subs_dir(file_id) / name
     await asyncio.to_thread(path.write_text, osub.srt_to_vtt(raw), "utf-8")
+    if req.release:
+        await asyncio.to_thread(path.with_suffix(".json").write_text,
+                                json.dumps({"release": req.release}), "utf-8")
     return _entry(file_id, path)
 
 

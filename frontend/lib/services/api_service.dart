@@ -386,12 +386,16 @@ class ApiService {
 
   /// Download a chosen subtitle; returns {id, label, lang, url}.
   Future<Map<String, dynamic>> downloadSubtitle(
-      int fileId, int osFileId, String language) async {
+      int fileId, int osFileId, String language, {String? release}) async {
     final r = await http
         .post(
           _u('/api/subtitles/$fileId/download'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'os_file_id': osFileId, 'language': language}),
+          body: jsonEncode({
+            'os_file_id': osFileId,
+            'language': language,
+            if (release != null && release.isNotEmpty) 'release': release,
+          }),
         )
         .timeout(const Duration(seconds: 40));
     if (r.statusCode != 200) {

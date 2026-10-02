@@ -383,6 +383,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _subOffset = r.offset;
       });
       if (r.offset != 0) playerSetSubtitleOffset(r.offset);
+      // Native player: its own subtitle menu (the controller's) only lists
+      // tracks mpv has loaded — so hand it every downloaded subtitle, the
+      // remembered one selected. (Downloads used to sit on the server,
+      // invisible: Lion King II, 2026-10-02.)
+      if (_nativeVideo && _subs.isNotEmpty) {
+        // mpv launches a beat after this screen — anything sent before it's
+        // listening is dropped (why downloads never showed). Wait for it.
+        for (var i = 0; i < 50 && !playerReady(); i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          if (!mounted) return;
+        }
+        var n = 0;
+        for (final s in _subs) {
+          n++;
+          final sel = s['id'] == _resumeSubtitle;
+          final rel = (s['release'] ?? '').toString();
+          final title = rel.isNotEmpty
+              ? 'Downloaded: $rel'
+              : 'Downloaded ${s['label'] ?? ''} #$n';
+          if (playerAddSubtitle('${widget.baseUrl}${s['url']}', title,
+                  lang: (s['lang'] ?? 'und').toString(), select: sel) &&
+              sel) {
+            setState(() => _activeSub = s['id'] as String?);
+          }
+        }
+        return;
+      }
       // Re-enable the subtitle the user had on last time, if it still exists.
       if (_resumeSubtitle != null && _activeSub == null) {
         for (final s in _subs) {
@@ -1059,6 +1086,7 @@ class _SubsSheetState extends State<_SubsSheet> {
         widget.fileId,
         res['os_file_id'] as int,
         (res['language'] ?? 'und').toString(),
+        release: res['release']?.toString(),
       );
       widget.onDownloaded(sub);
     } catch (_) {

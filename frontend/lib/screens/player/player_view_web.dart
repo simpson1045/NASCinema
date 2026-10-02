@@ -48,6 +48,10 @@ Widget buildPlayerView(String url, bool isHls) {
 
 int? playerLastSubtitle() => null;
 void playerResetLastSubtitle() {}
+String? playerLastServerSubtitle() => null;
+bool playerReady() => true;
+bool playerAddSubtitle(String url, String title, {String lang = 'und', bool select = false}) =>
+    false;
 
 double playerCurrentTime() => _v?.currentTime ?? 0;
 

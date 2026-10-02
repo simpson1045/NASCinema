@@ -70,6 +70,10 @@ class MpvController {
   /// in the player's own menu. Null = nothing reported since the last reset.
   static Object? lastSid;
 
+  /// The external file behind the subtitle mpv last showed (a server
+  /// subtitle URL), or null for an embedded track / none.
+  static String? lastSubFile;
+
   /// Fired when uosc's fullscreen button is clicked: embedded mpv can't
   /// fullscreen itself meaningfully, so the app window takes the toggle.
   void Function()? onFullscreenRequest;
@@ -256,6 +260,8 @@ class MpvController {
     ipc.observe('duration', (v) => duration = (v as num?)?.toDouble() ?? 0);
     ipc.observe('pause', (v) => paused = v == true);
     ipc.observe('sid', (v) => lastSid = v);
+    ipc.observe('current-tracks/sub/external-filename',
+        (v) => lastSubFile = v is String && v.isNotEmpty ? v : null);
     ipc.observe('volume', (v) => volume = (v as num?)?.toDouble() ?? volume);
     ipc.observe('mute', (v) => muted = v == true);
     ipc.observe('demuxer-cache-time',
@@ -543,6 +549,11 @@ class MpvController {
   /// Load a sidecar subtitle (backend WebVTT URL) and select it.
   void setSubtitleUri(String url) =>
       _ipc?.command(['sub-add', url, 'select']);
+
+  /// Add a server subtitle to mpv's own track menu (the one the controller
+  /// uses), selected or not.
+  void addSubtitle(String url, String title, {String lang = 'und', bool select = false}) =>
+      _ipc?.command(['sub-add', url, select ? 'select' : 'auto', title, lang]);
 
   void clearSubtitle() => _ipc?.set('sid', 'no');
 

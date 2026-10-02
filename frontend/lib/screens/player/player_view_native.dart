@@ -407,7 +407,28 @@ int? playerLastSubtitle() {
   return v is num ? v.toInt() : null;
 }
 
-void playerResetLastSubtitle() => MpvController.lastSid = null;
+void playerResetLastSubtitle() {
+  MpvController.lastSid = null;
+  MpvController.lastSubFile = null;
+}
+
+/// The server subtitle id ("en-164365") the movie ended on, if any.
+String? playerLastServerSubtitle() {
+  final f = MpvController.lastSubFile;
+  if (f == null || MpvController.lastSid == false) return null;
+  final m = RegExp(r'/api/subtitles/\d+/file/([^/?#]+)\.vtt').firstMatch(f);
+  return m?.group(1);
+}
+
+/// mpv is up and taking commands (it launches a beat after the screen).
+bool playerReady() => _useMpv && (_mpv?.running ?? false);
+
+/// Put a server subtitle in the native player's menu (no-op off mpv).
+bool playerAddSubtitle(String url, String title, {String lang = 'und', bool select = false}) {
+  if (!_useMpv || _mpv == null) return false;
+  _mpv!.addSubtitle(url, title, lang: lang, select: select);
+  return true;
+}
 
 double playerCurrentTime() => _useMpv
     ? (_mpv?.position ?? 0)

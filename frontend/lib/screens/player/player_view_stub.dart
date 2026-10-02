@@ -16,6 +16,10 @@ Widget buildPlayerView(String url, bool isHls) {
 // Accessors mirrored from the web player; no-ops until media_kit lands.
 int? playerLastSubtitle() => null;
 void playerResetLastSubtitle() {}
+String? playerLastServerSubtitle() => null;
+bool playerReady() => true;
+bool playerAddSubtitle(String url, String title, {String lang = 'und', bool select = false}) =>
+    false;
 
 double playerCurrentTime() => 0;
 double playerDuration() => 0;

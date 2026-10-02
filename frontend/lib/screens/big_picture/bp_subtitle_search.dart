@@ -69,7 +69,8 @@ class _BpSubtitleSearchState extends State<BpSubtitleSearch> {
       final entry = await ApiService(widget.baseUrl).downloadSubtitle(
           widget.fileId,
           (pick['os_file_id'] as num).toInt(),
-          (pick['language'] ?? widget.lang).toString());
+          (pick['language'] ?? widget.lang).toString(),
+          release: pick['release']?.toString());
       if (!mounted) return;
       FlagService.say('Subtitle downloaded');
       Navigator.of(context).pop(entry);
@@ -199,9 +200,14 @@ class _BpSubtitleSearchState extends State<BpSubtitleSearch> {
   Widget _row(Map<String, dynamic> r, {required bool focused}) {
     final fg = focused ? NasColors.bg : Colors.white;
     final release = (r['release'] ?? '').toString();
+    // The server ranks results by fit to THIS file and says why (tags);
+    // older servers only send the flags.
+    final serverTags = (r['tags'] as List?)?.map((t) => '$t'.toUpperCase()).toList();
     final tags = [
-      if (r['hearing_impaired'] == true) 'SDH',
-      if (r['from_trusted'] == true) 'TRUSTED',
+      if (r['best'] == true) 'BEST MATCH',
+      ...?serverTags,
+      if (serverTags == null && r['hearing_impaired'] == true) 'SDH',
+      if (serverTags == null && r['from_trusted'] == true) 'TRUSTED',
     ];
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -225,11 +231,16 @@ class _BpSubtitleSearchState extends State<BpSubtitleSearch> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: focused ? NasColors.bg : NasColors.muted),
+                border: Border.all(
+                    color: t == 'BEST MATCH'
+                        ? NasColors.amber
+                        : (focused ? NasColors.bg : NasColors.muted)),
               ),
               child: Text(t,
                   style: TextStyle(
-                      color: focused ? NasColors.bg : NasColors.muted,
+                      color: t == 'BEST MATCH'
+                          ? NasColors.amber
+                          : (focused ? NasColors.bg : NasColors.muted),
                       fontSize: 16,
                       fontWeight: FontWeight.w800)),
             ),
