@@ -7,7 +7,24 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-01 ~09:30 UTC) — curated franchise tiles live (fb3be7b, deployed)
+## Latest (2026-10-02 ~09:00 UTC) — subtitles: ranking live, menu fix committed
+
+- **Backend live (f946028):** OpenSubtitles fallback results ranked by fit to the file
+  (opensubtitles.rank: Blu-ray/WEB vs DVD/VHS by file height, 25 fps, trusted, SDH,
+  machine-translated, release must name the movie, downloads only as a tiebreak;
+  `tags` + `best`). srt_to_vtt strips `{...}` MicroDVD/ASS tags ({Y:i}). Lion King II:
+  perfect Blu-ray sub (164365) now #1; the old VHS-era pick was #1, now #36.
+- **Committed, NOT deployed/built (22f99fe):** backend stores each download's release
+  name (<id>.json) and returns `release`; app adds EVERY server subtitle to mpv's own
+  menu ("Downloaded: <release>"), waits for mpv first (the old one-sub path fired
+  before mpv listened → dropped), remembers the downloaded sub the movie ended on
+  (MpvController.lastSubFile), search list shows BEST MATCH + tags.
+- The center-channel offset measurement (suboff.py, pure Python) is unreliable on
+  music-heavy films (LK2 gave contradictory results) — don't trust it there.
+- Unreleased app changes since b51: muted home trailers no audio (83ae185) + the
+  subtitle menu fix above. Backend needs a deploy for the release-name part.
+
+## Earlier (2026-10-01 ~09:30 UTC) — curated franchise tiles live (fb3be7b, deployed)
 
 - MCU / Disney Animation / Pixar tiles (negative ids -1/-2/-3) lead the Franchises row;
   pages in true release order (movies.release_date, migration 0016). Membership in
