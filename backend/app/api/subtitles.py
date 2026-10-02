@@ -95,6 +95,8 @@ async def search_subtitles(
         languages=lang,
         moviehash=moviehash,
     )
+    results = osub.rank(results, file_height=mf.height,
+                        title=movie.title if movie else None)
     return {"results": results, "moviehash_matched": bool(moviehash)}
 
 

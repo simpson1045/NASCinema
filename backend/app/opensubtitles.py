@@ -8,6 +8,7 @@ read, which callers run via asyncio.to_thread.
 from __future__ import annotations
 
 import os
+import math
 import re
 import struct
 
@@ -66,7 +67,71 @@ def _normalize(item: dict) -> dict | None:
         "downloads": a.get("download_count") or 0,
         "hearing_impaired": bool(a.get("hearing_impaired")),
         "from_trusted": bool(a.get("from_trusted")),
+        "fps": a.get("fps"),
+        "machine_translated": bool(a.get("machine_translated") or a.get("ai_translated")),
     }
+
+
+_HD_SRC = re.compile(r"blu-?ray|bd-?rip|br-?rip|bd-?remux|remux|web-?dl|web-?rip|webrip|"
+                     r"\b(720|1080|2160)p\b|\buhd\b|hdtv", re.I)
+_SD_SRC = re.compile(r"\bdvd|xvid|divx|\bvhs\b|\(v\)|tv-?rip|\bntsc\b|\bpal\b|"
+                     r"\b(480|576)p\b|vcd", re.I)
+
+
+_STOP = {"the", "and", "of", "a", "an", "part", "ii", "iii", "iv"}
+
+
+def _words(s: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", s.lower().replace("'", "")) if w not in _STOP}
+
+
+def rank(results: list[dict], *, file_height: int | None,
+         title: str | None = None) -> list[dict]:
+    """Order title-search results by how likely each is synced to THIS file,
+    not by popularity: OpenSubtitles' download_count put a VHS-era SDH file
+    on top for a Blu-ray of Lion King II (off by 15-45 s), while a trusted
+    Blu-ray release ten rows down was perfect (2026-10-02). Adds `tags` and
+    `best` for the UI. Exact moviehash matches always lead."""
+    hd_file = (file_height or 0) >= 700
+    want = {w for w in _words(title or "") if len(w) >= 3}
+    for r in results:
+        rel = r.get("release") or ""
+        tags, score = [], 0.0
+        # The title search also returns other films ("Species II", "The
+        # Prophecy II" for Lion King II): the release must name this movie.
+        if want and not r.get("exact"):
+            hit = len(want & _words(rel)) / len(want)
+            if hit < 0.5:
+                tags.append("Other movie?")
+                score -= 200
+        if r.get("exact"):
+            tags.append("Exact match")
+            score += 1000
+        if _HD_SRC.search(rel):
+            tags.append("Blu-ray/WEB" if re.search(r"blu|bd|remux|web", rel, re.I) else "HD")
+            score += 40 if hd_file else -10
+        elif _SD_SRC.search(rel):
+            tags.append("DVD/TV")
+            score += -40 if hd_file else 20
+        fps = r.get("fps")
+        if hd_file and fps and abs(float(fps) - 25.0) < 0.1:
+            tags.append("25 fps")
+            score -= 30  # PAL timing on a 23.976 Blu-ray drifts ~4%
+        if r.get("from_trusted"):
+            tags.append("Trusted")
+            score += 15
+        if r.get("hearing_impaired"):
+            tags.append("SDH")
+            score -= 10
+        if r.get("machine_translated"):
+            tags.append("Machine-translated")
+            score -= 100
+        score += math.log10((r.get("downloads") or 0) + 1) * 5  # tiebreak only
+        r["tags"], r["score"] = tags, round(score, 1)
+    results.sort(key=lambda r: r["score"], reverse=True)
+    for i, r in enumerate(results):
+        r["best"] = i == 0
+    return results
 
 
 async def _query(client: httpx.AsyncClient, params: dict) -> list[dict]:
@@ -141,4 +206,6 @@ def srt_to_vtt(raw: bytes) -> str:
         text = raw.decode("utf-8", errors="replace")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = _TS.sub(r"\1.\2", text)
+    # MicroDVD/ASS leftovers ({Y:i}, {\\an8}) show up as literal text in VTT.
+    text = re.sub(r"\{[^}\n]{1,40}\}", "", text)
     return "WEBVTT\n\n" + text.lstrip("﻿")
