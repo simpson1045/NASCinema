@@ -7,7 +7,24 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-03 ~08:00 UTC) — TrueHD silences solved; b54 built; "Up Next" planned
+## Latest (2026-10-03 ~19:00 UTC) — TrueHD dropouts SOLVED: new FFmpeg; b55 live
+
+- **Root cause found upstream:** FFmpeg fixed the TrueHD MAT packer on 2026-06-16
+  (2db563fac2, "preserve TrueHD MAT padding across branches" — seamless-branching
+  discs, i.e. most Disney/Pixar). ELKO's mpv (Program Files, 2026-03-02) predated it.
+  Library check (old FFmpeg 7.1.5): 40/111 TrueHD movies trip; FFmpeg master: 0 on the
+  worst (Monsters University 99→0, Incredibles 2 74→0, Cars 68→0). Replacing files
+  doesn't help (Monsters FraMeSToR remux tripped too) — told the NAS Claude to stop.
+- **ELKO now uses mpv 20261003 (shinchiro, FFmpeg N-127117)** at
+  `C:\NASCinema\mpv-20261003\mpv.exe` via app pref `flutter.mpv_path`
+  (rollback: `shared_preferences.json.bak-20261003`). Needs a Monsters University
+  play-through + rewinds on ELKO to confirm.
+- **TODO:** bundle a current mpv in the release zip (CI) and default to it.
+- **b55 live** (app + backend f5e1eb8): scan errors named in /api/scan/status;
+  Theatrical-first versions (unprobed last, HDR before SDR); all-"default" tracks ignored.
+- Next after the mpv bundling: Up Next (plan below), music Blu-rays.
+
+## Earlier (2026-10-03 ~08:00 UTC) — TrueHD silences solved; b54 built; "Up Next" planned
 
 - **TrueHD silence, root cause:** ffmpeg's spdif MAT packer (mpv 0.41 / FFmpeg
   N-123099 on ELKO — already current) logs `spdif: Unusual frame timing … 40
