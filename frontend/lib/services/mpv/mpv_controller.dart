@@ -267,20 +267,6 @@ class MpvController {
     ipc.observe('demuxer-cache-time',
         (v) => cacheTime = (v as num?)?.toDouble() ?? 0);
     ipc.observe('eof-reached', (v) => eofReached = v == true);
-    ipc.observe('audio-out-params', (v) {
-      if (v is Map) _aoFormat = v['format']?.toString() ?? '';
-    });
-    // TrueHD bitstream breaks on seeks: ffmpeg's spdif MAT packer loses its
-    // frame timing on a timeline jump ("Unusual frame timing … 40 samples/
-    // frame is not implemented") and keeps emitting frames the Denon locks
-    // to ("DTHD") but plays as silence. Re-opening the audio track + one
-    // exact seek restarts the packer clean — proven live on ELKO
-    // 2026-10-01 after 11 rapid rewinds killed the sound.
-    ipc.observe('seeking', (v) {
-      if (v == true || _resyncing || _aoFormat != 'spdif-truehd') return;
-      _resyncTimer?.cancel();
-      _resyncTimer = Timer(const Duration(milliseconds: 700), _resyncTrueHd);
-    });
     ipc.observe('video-params', (v) {
       if (v is Map) {
         videoW = (v['w'] as num?)?.toInt();
@@ -309,31 +295,6 @@ class MpvController {
         onFullscreenRequest?.call();
       }
     });
-  }
-
-  String _aoFormat = '';
-  bool _resyncing = false;
-  Timer? _resyncTimer;
-
-  Future<void> _resyncTrueHd() async {
-    final ipc = _ipc;
-    if (ipc == null || _disposed || _aoFormat != 'spdif-truehd') return;
-    _resyncing = true;
-    try {
-      final aid = await ipc.get('aid');
-      final pos = position;
-      if (aid == null || aid == false) return;
-      ipc.set('aid', 'no');
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      ipc.set('aid', aid);
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      ipc.command(['seek', pos, 'absolute', 'exact']);
-      await Future<void>.delayed(const Duration(milliseconds: 1500));
-    } catch (_) {
-      // best effort — worst case is the silence this exists to fix
-    } finally {
-      _resyncing = false;
-    }
   }
 
   /// Container fps once demuxing starts (null until the file is open).
@@ -619,7 +580,6 @@ class MpvController {
     if (_disposed) return;
     _disposed = true;
     _hintsTimer?.cancel();
-    _resyncTimer?.cancel();
     if (_live == this) _live = null;
     try {
       await _ipc?.quit();
