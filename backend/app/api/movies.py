@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -78,8 +79,39 @@ async def _logo_fields(m: Movie) -> dict:
     return {"logo": info["url"], "logo_subtitle": sub}
 
 
+_QUALITY_ONLY = re.compile(
+    r"^\[?\s*(4k|uhd|remux|hdr|sdr|dv|dolby vision|streaming|web|blu-?ray|"
+    r"1080p|2160p|720p|\s|-)+\]?$", re.IGNORECASE)
+
+
+def _cut_rank(f: MediaFile) -> int:
+    """Theatrical first, then no label / a quality-only label ("[4K UHD Remux]",
+    "[SDR Streaming]"), then other cuts (Extended, Open Matte, Director's Cut) —
+    a plain Play gets the cut people expect (LOTR, GBU, Patriot, Phantasm)."""
+    ed = (f.edition or "").strip()
+    if "theatrical" in ed.lower():
+        return 0
+    if not ed or _QUALITY_ONLY.match(ed):
+        return 1
+    return 2
+
+
+def _features(files) -> list[MediaFile]:
+    """Versions in play order: files we could never probe last (maybe broken),
+    then cut rank, then best quality (4K HDR > 4K > 1080p; an "SDR" label after
+    its HDR twin — the hdr flag doesn't always tell them apart)."""
+    return sorted(
+        (f for f in files if f.kind == "feature"),
+        key=lambda f: (f.height is None,
+                       _cut_rank(f),
+                       -max(f.height or 0, round((f.width or 0) * 9 / 16)),
+                       not f.hdr,
+                       "sdr" in (f.edition or "").lower()),
+    )
+
+
 def _summary(m: Movie) -> dict:
-    features = [f for f in m.files if f.kind == "feature"]
+    features = _features(m.files)
     primary = features[0] if features else (m.files[0] if m.files else None)
     return {
         "id": m.id,
@@ -275,13 +307,9 @@ async def get_movie(
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
     data = _summary(movie)
-    # Versions best-first (4K HDR > 4K > 1080p …) so a plain Play gets the
-    # best copy; each carries its label and tracks for the pickers.
-    features = sorted(
-        (f for f in movie.files if f.kind == "feature"),
-        key=lambda f: (max(f.height or 0, round((f.width or 0) * 9 / 16)), f.hdr),
-        reverse=True,
-    )
+    # Versions in play order (see _features) so a plain Play gets the right
+    # cut in the best copy; each carries its label and tracks for the pickers.
+    features = _features(movie.files)
     data["files"] = [
         {
             "id": f.id,

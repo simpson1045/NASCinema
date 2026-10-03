@@ -10,6 +10,7 @@ rescan."
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 import shutil
@@ -28,6 +29,8 @@ from .models.watch_progress import WatchProgress
 from .probe import probe_file
 from .models.media_stream import MediaStream
 from .streaming import remove_file_cache
+
+log = logging.getLogger(__name__)
 
 VIDEO_EXTENSIONS = {
     ".mkv", ".mp4", ".m4v", ".avi", ".mov", ".wmv", ".ts", ".m2ts", ".webm", ".flv",
@@ -302,6 +305,13 @@ def _successor(old: MediaFile, added: list[tuple[int, float | None, str | None]]
     return same[0][0] if len(same) == 1 else None
 
 
+def _scan_error(stats: dict, path: str, reason: str) -> None:
+    stats["errors"] += 1
+    if len(stats["error_files"]) < 100:
+        stats["error_files"].append({"path": path, "error": reason[:300]})
+    log.warning("scan: %s — %s", path, reason)
+
+
 def _rewritten(path: str, size_bytes: int | None, probed_at: datetime | None) -> bool:
     """A known path whose file was replaced in place (a track strip, a remux):
     the size changed, or it was modified after we last probed it."""
@@ -350,6 +360,7 @@ async def _scan(limit: int | None = None) -> dict:
         "carried": 0,
         "refreshed": 0,
         "errors": 0,
+        "error_files": [],  # [{path, error}] — which files failed and why
     }
     _scan_state["stats"] = stats  # live counts while it runs
     if not dirs:
@@ -392,7 +403,7 @@ async def _scan(limit: int | None = None) -> dict:
                             if await _refresh(session, known.id):
                                 stats["refreshed"] += 1
                             else:
-                                stats["errors"] += 1
+                                _scan_error(stats, full, "re-probe failed (file changed but ffprobe couldn't read it)")
                         else:
                             stats["skipped"] += 1
                         continue
@@ -442,9 +453,9 @@ async def _scan(limit: int | None = None) -> dict:
                             new_movies[movie.id] = (movie.id, movie.tmdb_id,
                                                     movie.trailer_youtube,
                                                     movie.title, movie.year)
-                    except Exception:
+                    except Exception as e:
                         await session.rollback()
-                        stats["errors"] += 1
+                        _scan_error(stats, full, repr(e))
                         continue
 
                     if is_extra:
