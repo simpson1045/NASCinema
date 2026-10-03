@@ -7,7 +7,35 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-03 ~05:00 UTC) — b52 live; Denon HDMI fault fixed by a full unplug
+## Latest (2026-10-03 ~08:00 UTC) — TrueHD silences solved; b54 built; "Up Next" planned
+
+- **TrueHD silence, root cause:** ffmpeg's spdif MAT packer (mpv 0.41 / FFmpeg
+  N-123099 on ELKO — already current) logs `spdif: Unusual frame timing … 40
+  samples/frame` on any jump in frame timing and then sends misaligned frames the
+  Denon mutes (~50 s). Triggers: seeks, and some encodes on their own — the old
+  Monsters, Inc. (2020 mkvmerge encode) tripped every ~50 s (offline check on the NAS:
+  8 trips in 10 min vs 0 for B&B; its other audio track was flawless). A FRESH packer
+  plays the same spots fine → re-opening the audio track with NO seek restores sound.
+  The b51 resync (aid toggle + exact seek) re-tripped it — removed in b53 (installed).
+- **b54 (ffb3b28, tagged, not installed yet):** watches mpv log messages; within 3 s
+  of a seek the audio track is re-opened. Mid-play trips are left alone (would blip
+  every minute on bad encodes). Other Claude is replacing Monsters with a DV remux.
+- **Offline TrueHD check:** `/tmp/thd_scan.sh` in the `nascinema` container runs every
+  TrueHD feature (111) through `ffmpeg -c copy -f spdif` and logs `trips|id|title` to
+  `/tmp/thd_scan.log` (~1.5 min/file; DONE line at the end).
+- **Scanner (5e7205a, committed, NOT deployed — restarts the backend):** known paths
+  are re-probed into the same row when size/mtime changed. One-time `reprobe(all)` ran:
+  779/786 refreshed, 7 failed (look at them); New Groove now English-only.
+- **Next feature — "Up Next" (Matt approved the plan):** always auto-play so the
+  screen is never dead (he falls asleep in his chair). ~20 s before the end the mpv
+  child window shrinks to a PIP corner (EmbedWindow resize, keeps playing + audio);
+  fullscreen Flutter "Up Next" screen behind it: backdrop, logo centered over the info
+  line, reason ("Next in The Lion King" / "Because you watched X"), 15 s countdown.
+  A = play now, B = cancel → movie page, Y = movie back to fullscreen + cancel.
+  Pick: next in franchise (release order) → unwatched sharing genres/universe → any
+  unwatched → anything. Chains forever. Drops during the PIP are accepted (credits).
+
+## Earlier (2026-10-03 ~05:00 UTC) — b52 live; Denon HDMI fault fixed by a full unplug
 
 - **Shipped:** app b52 (0.9.0+52, 3e60409) installed on ELKO; backend 3e60409 deployed
   (subtitle release names, ranked search, every downloaded sub in mpv's menu,
