@@ -124,7 +124,14 @@ class TrackPick {
   /// "Automatic" would just mean Off.
   static MediaTrack? autoSubtitle(MovieFile f) =>
       f.subtitleTracks.where((t) => t.forced).firstOrNull ??
-      f.subtitleTracks.where((t) => t.isDefault).firstOrNull;
+      (defaultFlagMeans(f.subtitleTracks)
+          ? f.subtitleTracks.where((t) => t.isDefault).firstOrNull
+          : null);
+
+  /// Some releases flag EVERY track "default" — then the flag says nothing
+  /// (The Emperor's New Groove: ~20 dubs, Català first). More than one = ignore.
+  static bool defaultFlagMeans(List<MediaTrack> ts) =>
+      ts.where((t) => t.isDefault).length <= 1;
 
   Future<void> save(int movieId) async {
     try {
@@ -139,17 +146,21 @@ class TrackPick {
     } catch (_) {}
   }
 
-  /// The file's default audio: flagged default, else first English, else first.
+  /// The file's default audio: flagged default (when the flag means
+  /// something), else first English, else first.
   static int? defaultAudio(MovieFile f, {String? preferLang}) {
     final ts = f.audioTracks.where((t) => !t.commentary).toList();
     if (ts.isEmpty) return null;
+    final flagged = defaultFlagMeans(f.audioTracks);
     if (preferLang != null) {
       final same = ts.where((t) => t.language == preferLang);
       if (same.isNotEmpty) {
-        return (same.where((t) => t.isDefault).firstOrNull ?? same.first).id;
+        return ((flagged ? same.where((t) => t.isDefault).firstOrNull : null) ??
+                same.first)
+            .id;
       }
     }
-    return (ts.where((t) => t.isDefault).firstOrNull ??
+    return ((flagged ? ts.where((t) => t.isDefault).firstOrNull : null) ??
             ts.where((t) => (t.language ?? '').startsWith('en')).firstOrNull ??
             ts.first)
         .id;
@@ -244,7 +255,8 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
                 tags: [
                   if (t.lossless) 'LOSSLESS',
                   if (t.commentary) 'COMMENTARY',
-                  if (t.isDefault) 'DEFAULT',
+                  if (t.isDefault && TrackPick.defaultFlagMeans(_file.audioTracks))
+                    'DEFAULT',
                 ],
                 dim: t.commentary ||
                     !((t.language ?? 'en').startsWith('en') ||
@@ -262,7 +274,11 @@ class _BpTrackPickerState extends State<BpTrackPicker> {
           for (final t in _file.subtitleTracks)
             _Item(t.id, t.title,
                 desc: t.title == t.desc ? '' : t.desc,
-                tags: [if (t.forced) 'FORCED', if (t.isDefault) 'DEFAULT'],
+                tags: [
+                  if (t.forced) 'FORCED',
+                  if (t.isDefault && TrackPick.defaultFlagMeans(_file.subtitleTracks))
+                    'DEFAULT',
+                ],
                 dim: !((t.language ?? 'en').startsWith('en'))),
           // Downloaded ones: negative values index _externals.
           for (var i = 0; i < _externals.length; i++)
