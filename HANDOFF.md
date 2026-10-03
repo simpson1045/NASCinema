@@ -7,7 +7,28 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-02 ~09:00 UTC) — subtitles: ranking live, menu fix committed
+## Latest (2026-10-03 ~05:00 UTC) — b52 live; Denon HDMI fault fixed by a full unplug
+
+- **Shipped:** app b52 (0.9.0+52, 3e60409) installed on ELKO; backend 3e60409 deployed
+  (subtitle release names, ranked search, every downloaded sub in mpv's menu,
+  silent background trailers).
+- **Denon 8K path fault (not the app):** in movie mode the audio lock kept dropping
+  (DD+ ↔ Unknown, crackly), then no picture — survived standby on/off cycles and
+  re-handshakes; new cable. **Fix: pull the Denon's power cord ~60 s (+ C2 power
+  cycle)**, then `house_denon on` + `house_elko movie`. Afterwards B&B locked TrueHD
+  Atmos instantly, LK 1½ played DD+, TruMotion worked with no popup.
+- **Game mode is a poor detour for movies:** 120 Hz greys TruMotion out entirely; at
+  23.976 the NVIDIA "PC" tag still locks TruMotion to Off/User Selection on HDMI_4 and
+  the setDeviceInfo popup didn't lift it (label saved, lock stayed); the C2 won't pass
+  lossless TrueHD from HDMI inputs. Added ELKO display mode `tv24` (TV only, 23.976 HDR)
+  to `C:\Users\matth\ClaudeDisplay\elko-display.ps1` (backup `.bak-20261002`). HDMI_4 is
+  now labelled "Blu-ray Player".
+- **Still open:** ALPINE beta channel; part-2 player items (bitstream ~2 drops/min,
+  1/s stuck state after audio reinit, startup buffering glitch, one-time startup flash,
+  pad A in the uosc menu); Matt decisions on A Goofy Movie / Recess in Disney Animation
+  and a Charlie Brown Christmas trailer pin.
+
+## Earlier (2026-10-02 ~09:00 UTC) — subtitles: ranking live, menu fix committed
 
 - **Backend live (f946028):** OpenSubtitles fallback results ranked by fit to the file
   (opensubtitles.rank: Blu-ray/WEB vs DVD/VHS by file height, 25 fps, trusted, SDH,
