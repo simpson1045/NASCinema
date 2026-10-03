@@ -302,6 +302,39 @@ def _successor(old: MediaFile, added: list[tuple[int, float | None, str | None]]
     return same[0][0] if len(same) == 1 else None
 
 
+def _rewritten(path: str, size_bytes: int | None, probed_at: datetime | None) -> bool:
+    """A known path whose file was replaced in place (a track strip, a remux):
+    the size changed, or it was modified after we last probed it."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    if size_bytes is not None and st.st_size != size_bytes:
+        return True
+    return probed_at is not None and st.st_mtime > probed_at.timestamp() + 2
+
+
+async def _refresh(session, file_id: int) -> bool:
+    """Re-read a rewritten file's tracks into its EXISTING row, so resume
+    points, downloaded subtitles and watch history stay attached."""
+    from sqlalchemy.orm import selectinload
+
+    mf = await session.scalar(
+        select(MediaFile).options(selectinload(MediaFile.streams)).where(MediaFile.id == file_id)
+    )
+    probe = await probe_file(mf.path) if mf else None
+    if not probe:
+        return False
+    try:
+        await apply_probe(session, mf, probe)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        return False
+    remove_file_cache(file_id)  # a cached transcode is of the old file
+    return True
+
+
 async def _scan(limit: int | None = None) -> dict:
     settings = get_settings()
     dirs = settings.media_dir_list
@@ -315,6 +348,7 @@ async def _scan(limit: int | None = None) -> dict:
         "skipped": 0,
         "removed": 0,
         "carried": 0,
+        "refreshed": 0,
         "errors": 0,
     }
     _scan_state["stats"] = stats  # live counts while it runs
@@ -347,10 +381,20 @@ async def _scan(limit: int | None = None) -> dict:
                     full = os.path.join(root, name)
                     _scan_state["current"] = full
 
-                    if await session.scalar(
-                        select(MediaFile.id).where(MediaFile.path == full)
-                    ):
-                        stats["skipped"] += 1
+                    known = (
+                        await session.execute(
+                            select(MediaFile.id, MediaFile.size_bytes, MediaFile.probed_at)
+                            .where(MediaFile.path == full)
+                        )
+                    ).first()
+                    if known:
+                        if _rewritten(full, known.size_bytes, known.probed_at):
+                            if await _refresh(session, known.id):
+                                stats["refreshed"] += 1
+                            else:
+                                stats["errors"] += 1
+                        else:
+                            stats["skipped"] += 1
                         continue
 
                     try:
