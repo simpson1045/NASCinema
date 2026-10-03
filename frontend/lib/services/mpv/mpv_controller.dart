@@ -267,6 +267,27 @@ class MpvController {
     ipc.observe('demuxer-cache-time',
         (v) => cacheTime = (v as num?)?.toDouble() ?? 0);
     ipc.observe('eof-reached', (v) => eofReached = v == true);
+    // TrueHD bitstream: ffmpeg's spdif MAT packer trips on a jump in the
+    // stream's frame timing — after a seek it logs "Unusual frame timing"
+    // and keeps sending misaligned frames the Denon mutes (~50 s of silence).
+    // Re-opening the audio track with NO seek gives it a fresh packer and the
+    // sound returns (a seek re-trips it — the b51 resync's mistake). Proven
+    // live on ELKO 2026-10-03. Only right after a seek: a seek already
+    // interrupts playback, while files that trip mid-play on their own (that
+    // Monsters, Inc. encode, ~every 50 s) would get a blip a minute.
+    // Debounced so a burst of rewinds resets once.
+    ipc.observe('seeking', (v) => _lastSeek = DateTime.now());
+    ipc.command(['request_log_messages', 'warn']);
+    _logSub = ipc.events.listen((e) {
+      if (e['event'] == 'log-message' &&
+          e['prefix'] == 'ffmpeg' &&
+          '${e['text']}'.contains('Unusual frame timing') &&
+          DateTime.now().difference(_lastSeek) < const Duration(seconds: 3)) {
+        _audioResetTimer?.cancel();
+        _audioResetTimer =
+            Timer(const Duration(milliseconds: 400), _resetAudioTrack);
+      }
+    });
     ipc.observe('video-params', (v) {
       if (v is Map) {
         videoW = (v['w'] as num?)?.toInt();
@@ -295,6 +316,20 @@ class MpvController {
         onFullscreenRequest?.call();
       }
     });
+  }
+
+  StreamSubscription<Map<String, dynamic>>? _logSub;
+  Timer? _audioResetTimer;
+  DateTime _lastSeek = DateTime.fromMillisecondsSinceEpoch(0);
+
+  Future<void> _resetAudioTrack() async {
+    final ipc = _ipc;
+    if (ipc == null || _disposed) return;
+    final aid = await ipc.get('aid');
+    if (aid == null || aid == false || _disposed) return;
+    ipc.set('aid', 'no');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!_disposed) ipc.set('aid', aid);
   }
 
   /// Container fps once demuxing starts (null until the file is open).
@@ -580,6 +615,8 @@ class MpvController {
     if (_disposed) return;
     _disposed = true;
     _hintsTimer?.cancel();
+    _audioResetTimer?.cancel();
+    await _logSub?.cancel();
     if (_live == this) _live = null;
     try {
       await _ipc?.quit();
