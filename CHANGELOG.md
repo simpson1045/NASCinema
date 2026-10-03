@@ -4,6 +4,8 @@ The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.9.0 - 2026-09-26
 - **Track Manager:** press **Back** on the Big Picture home and choose **Track Manager** to clean foreign dubs and subtitles out of your movies — biggest space savings first, with a warning on movies that start in the wrong language. Open a movie to see every track marked Keep or Drop (and why); **X** strips it, **Y** protects it so it's never touched. On the list, **Y** strips all the worthwhile ones. The **Jobs** tab shows progress; every original is kept until you choose **Confirm & free space** (Y), and **X** undoes a strip until then.
+- **Downloaded subtitles just work:** every subtitle you've downloaded for a movie shows up in the player's subtitle menu, labeled with the release it was made for, and the one you used last turns on by itself. Subtitle search now ranks results by how well they fit your copy (Blu-ray vs DVD, trusted uploaders) and marks the best match.
+- **Quiet home screen:** the muted background trailers no longer open any audio — no more faint static or your receiver flipping into Atmos and back as you browse.
 - **Real Atmos:** TrueHD soundtracks now go to your receiver untouched (Dolby Atmos - TrueHD), instead of being decoded — and rewinding or skipping in them no longer drops the sound. Anything that does get decoded now plays in full 7.1, never squashed to stereo.
 - **Controller fix:** the controller no longer stops responding after an overlay (like NVIDIA's Alt+Z) pops up.
 - **Subtitles remember:** turning subtitles on from the player's own menu sticks for that movie, and new movies follow what you usually do. The useless "Load" entry is gone from the subtitle/audio menus.
