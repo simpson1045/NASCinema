@@ -225,6 +225,19 @@ class ApiService {
     );
   }
 
+  /// Where the user left off in a file, seconds (0 = not started / unknown).
+  Future<double> getProgress(int fileId) async {
+    try {
+      final r = await http
+          .get(_u('/api/progress/$fileId'))
+          .timeout(const Duration(seconds: 8));
+      if (r.statusCode != 200) return 0;
+      return ((jsonDecode(r.body) as Map)['position'] as num?)?.toDouble() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Save where the user is in a file (+ which subtitle is on) so the next play
   /// resumes there. Best-effort — never throws into the playback path.
   Future<void> saveProgress(int fileId, double position, String? subtitle) async {

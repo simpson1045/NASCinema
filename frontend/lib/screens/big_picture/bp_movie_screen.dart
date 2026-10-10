@@ -64,7 +64,25 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   int _extra = 0;
 
   Movie get _m => widget.movie;
-  bool get _resume => (_m.progress ?? 0) > 0.01;
+  // The resume point used to come only from Continue Watching — opened from
+  // anywhere else the page showed plain Play (which still resumed) and no way
+  // to start over. Now it's looked up on open and after every playback.
+  double? _resumeSecs;
+  double? get _progress {
+    final secs = _resumeSecs;
+    if (secs == null) return _m.progress;
+    final f = _files.where((f) => f.id == (_pick?.fileId ?? _files.first.id)).firstOrNull;
+    final total = f?.duration ?? ((_m.runtime ?? 0) * 60);
+    return total > 0 ? (secs / total).clamp(0.0, 1.0) : null;
+  }
+
+  bool get _resume => (_progress ?? 0) > 0.01;
+
+  Future<void> _refreshProgress() async {
+    if (_files.isEmpty) return;
+    final secs = await _api.getProgress(_pick?.fileId ?? _files.first.id);
+    if (mounted) setState(() => _resumeSecs = secs);
+  }
 
   @override
   void initState() {
@@ -108,6 +126,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       });
       final pick = await TrackPick.load(_m.id, d.files);
       if (mounted) setState(() => _pick = pick);
+      unawaited(_refreshProgress());
       final rel = await _api.getRelated(_m.id);
       if (mounted) {
         setState(() {
@@ -294,6 +313,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   /// to "off" (Book of Secrets, 2026-09-29).
   Future<void> _openPlayer(TrackPick pick, Widget page) async {
     await _open(page);
+    unawaited(_refreshProgress());
     final sid = playerLastSubtitle();
     final server = playerLastServerSubtitle();
     if (sid == null || !mounted) return;
@@ -466,7 +486,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                     primary: true,
                     focused: _on('play'),
                     busy: !_loaded,
-                    progress: _resume ? _m.progress : null,
+                    progress: _resume ? _progress : null,
                     onTap: () {
                       _focusButton('play');
                       _play();
@@ -476,7 +496,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                     const SizedBox(width: 24),
                     _BpButton(
                       icon: Icons.replay_rounded,
-                      label: '',
+                      label: 'Start Over',
                       focused: _on('restart'),
                       onTap: () {
                         _focusButton('restart');
