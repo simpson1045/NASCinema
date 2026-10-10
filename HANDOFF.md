@@ -7,7 +7,24 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-09) — LWAN fixes; b57 tagged; server deploy PENDING
+## Latest (2026-10-10) — bitstream guard committed (untagged); b59 tagged, not installed
+
+- **Bitstream guard (committed, NO tag — Matt: "don't update the app yet"):** during a
+  pause the HDMI endpoint briefly reported no spdif formats (mpv log: spdif-truehd /
+  spdif-ac3 "unsupported"), mpv fell back to decoding TrueHD → s32 7.1 and stayed after the
+  device recovered (Denon: PCM / Multi Ch In). Fixed live by aid no→1. MpvController now
+  watches current-tracks/audio/codec + audio-out-params: bitstreamable codec but non-spdif
+  output → re-open the track (no seek) after 4/10/30/60/60/60 s; stands down when the
+  startup fallback ladder chose PCM on purpose (_pcmByChoice).
+- **b59 (13c76ac) tagged, not installed:** home rows refresh after a page closes; movie page
+  uses fresh detail data. Next build (b60) = b59 + guard.
+- **Backend 9743879 live:** TMDB retries shorter titles; /api/rematch-unmatched fixed John
+  Williams: The Berlin Concert + Wonder Woman 1984. Left: "PAR OWN 1080 (2014)" (unknown),
+  `/movies/spdif_truehd_sample.mkv` (40 s test clip — delete only on Matt's word).
+- LWAN 5.1: the downloaded DVD has NO audio in VOBs 1–2 (first 42.5 min) — not encrypted
+  (0 scrambled packets). Needs a complete DVD source.
+
+## Earlier (2026-10-09) — LWAN fixes; b57 tagged; server deploy PENDING
 
 - **Live (backend f543061):** More like this ranks by genre closeness (>=0.4), untagged
   tracks drop "Unknown language", TMDB titles whitespace-collapsed (Van Halen fixed in DB).

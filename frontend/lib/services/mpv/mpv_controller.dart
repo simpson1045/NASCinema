@@ -301,6 +301,17 @@ class MpvController {
         audioChannels = (v['channel-count'] as num?)?.toInt() ?? 0;
       }
     });
+    // Bitstream guard: the movie's audio can go out untouched, but the
+    // device is taking PCM — mpv fell back to DECODING (ELKO 2026-10-10: the
+    // HDMI endpoint briefly reported no bitstream formats during a pause, and
+    // mpv stayed on decoded 7.1 after it recovered). Retry bitstream by
+    // re-opening the track (no seek), backing off, until it takes.
+    ipc.observe('current-tracks/audio/codec',
+        (v) => _audioCodec = v?.toString() ?? '');
+    ipc.observe('audio-out-params', (v) {
+      _outFormat = v is Map ? (v['format']?.toString() ?? '') : '';
+      _checkBitstream();
+    });
     ipc.observe('audio-bitrate',
         (v) => audioBitrate = (v as num?)?.toDouble() ?? 0);
     ipc.observe('hwdec-current', (v) => hwdec = v?.toString() ?? '');
@@ -321,6 +332,36 @@ class MpvController {
   StreamSubscription<Map<String, dynamic>>? _logSub;
   Timer? _audioResetTimer;
   DateTime _lastSeek = DateTime.fromMillisecondsSinceEpoch(0);
+
+  String _audioCodec = '';
+  String _outFormat = '';
+  Timer? _bitstreamTimer;
+  int _bitstreamTries = 0;
+  bool _pcmByChoice = false; // the fallback ladder chose PCM on purpose
+  static const _bitstreamable = {'truehd', 'dts', 'eac3', 'ac3'};
+  static const _bitstreamBackoff = [4, 10, 30, 60, 60, 60]; // seconds
+
+  void _checkBitstream() {
+    if (_outFormat.startsWith('spdif')) {
+      _bitstreamTries = 0; // healthy — a later hiccup gets a fresh ladder
+      _bitstreamTimer?.cancel();
+      return;
+    }
+    if (_pcmByChoice ||
+        _outFormat.isEmpty ||
+        !_bitstreamable.contains(_audioCodec)) {
+      return;
+    }
+    if (_bitstreamTimer?.isActive ?? false) return;
+    if (_bitstreamTries >= _bitstreamBackoff.length) return; // device can't
+    final wait = _bitstreamBackoff[_bitstreamTries++];
+    _bitstreamTimer = Timer(Duration(seconds: wait), () async {
+      if (_disposed || _outFormat.startsWith('spdif') || _outFormat.isEmpty) {
+        return;
+      }
+      await _resetAudioTrack();
+    });
+  }
 
   Future<void> _resetAudioTrack() async {
     final ipc = _ipc;
@@ -405,6 +446,7 @@ class MpvController {
       }
     }
     diag?.call('audio: bitstream refused by endpoint — lossless PCM fallback');
+    _pcmByChoice = true; // the bitstream guard stands down
     _ipc?.set('options/audio-spdif', '');
     _ipc?.set('options/audio-exclusive', 'no');
     await _reinitAudio();
@@ -632,6 +674,7 @@ class MpvController {
     _disposed = true;
     _hintsTimer?.cancel();
     _audioResetTimer?.cancel();
+    _bitstreamTimer?.cancel();
     await _logSub?.cancel();
     if (_live == this) _live = null;
     try {
