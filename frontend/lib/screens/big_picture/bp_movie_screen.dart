@@ -63,7 +63,10 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   int _button = 0;
   int _extra = 0;
 
-  Movie get _m => widget.movie;
+  // The list copy the page was opened with, until the server's fresh copy
+  // arrives (a re-match since the home screen loaded showed the old title).
+  Movie? _fresh;
+  Movie get _m => _fresh ?? widget.movie;
   // The resume point used to come only from Continue Watching — opened from
   // anywhere else the page showed plain Play (which still resumed) and no way
   // to start over. Now it's looked up on open and after every playback.
@@ -112,6 +115,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       final d = await _api.getMovieDetail(_m.id);
       if (!mounted) return;
       setState(() {
+        _fresh = d.movie;
         _files = d.files;
         _extras = d.extras;
         if (_logo == null) {

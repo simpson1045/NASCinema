@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -107,24 +109,58 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       if (!mounted) return;
       setState(() {
         _data = data;
-        _rails = data.rails.where((r) => r.movies.isNotEmpty).toList();
-        // Disney+-style Franchises row: right after Continue Watching (or
-        // first when there's nothing to continue).
-        if (data.collections.isNotEmpty) {
-          final at = _rails.indexWhere((r) => r.key == 'continue') + 1;
-          _rails.insert(
-              at,
-              HomeRail(
-                  key: 'franchises',
-                  title: 'Franchises',
-                  movies: const [],
-                  franchises: data.collections));
-        }
+        _rails = _railsOf(data);
         _zone = _rails.isEmpty ? _Zone.hero : _Zone.rails;
       });
       _replayScriptedKeys();
     } catch (e) {
       if (mounted) setState(() => _error = e);
+    }
+  }
+
+  List<HomeRail> _railsOf(HomeData data) {
+    final rails = data.rails.where((r) => r.movies.isNotEmpty).toList();
+    // Disney+-style Franchises row: right after Continue Watching (or
+    // first when there's nothing to continue).
+    if (data.collections.isNotEmpty) {
+      final at = rails.indexWhere((r) => r.key == 'continue') + 1;
+      rails.insert(
+          at,
+          HomeRail(
+              key: 'franchises',
+              title: 'Franchises',
+              movies: const [],
+              franchises: data.collections));
+    }
+    return rails;
+  }
+
+  /// Quietly re-read the rows after a page closes — the home loaded once at
+  /// start, so Continue Watching, new movies and re-matches never showed
+  /// until a restart. The hero keeps its own list (no trailer interruption);
+  /// focus stays on the same row and movie even if rows appear or shift.
+  Future<void> _refreshRails() async {
+    try {
+      final fresh = await _api.getHome();
+      if (!mounted || _rails.isEmpty) return;
+      final rail = _rails[_rail.clamp(0, _rails.length - 1)];
+      final key = rail.key;
+      final movieId = rail.movies.isEmpty ? null : rail.movies[_itemOf(_rail)].id;
+      final item = _itemOf(_rail);
+      setState(() {
+        _rails = _railsOf(fresh);
+        if (_rails.isEmpty) return;
+        final r = _rails.indexWhere((x) => x.key == key);
+        _item.clear();
+        _rail = r < 0 ? _rail.clamp(0, _rails.length - 1) : r;
+        final movies = _rails[_rail].movies;
+        if (movies.isNotEmpty) {
+          final i = movies.indexWhere((m) => m.id == movieId);
+          _item[_rail] = i >= 0 ? i : item.clamp(0, movies.length - 1);
+        }
+      });
+    } catch (_) {
+      // best effort — the old rows stay
     }
   }
 
@@ -322,6 +358,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     if (!mounted) return;
     hero?.resumeAfterPage();
     _focus.requestFocus();
+    unawaited(_refreshRails());
   }
 
   Future<void> _push(Widget page) async {

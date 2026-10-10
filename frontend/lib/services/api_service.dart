@@ -95,6 +95,7 @@ class ApiService {
 
   Future<
           ({
+            Movie movie,
             List<MovieFile> files,
             List<Extra> extras,
             String? logo,
@@ -117,6 +118,9 @@ class ApiService {
         .map((e) => Extra.fromJson(e as Map<String, dynamic>))
         .toList();
     return (
+      // The movie itself, fresh — callers opened it from a list loaded earlier
+      // (a re-match or new artwork since then must show).
+      movie: Movie.fromJson(data),
       files: files,
       extras: extras,
       logo: data['logo'] as String?,
