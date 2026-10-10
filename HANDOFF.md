@@ -13,7 +13,12 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   tracks drop "Unknown language", TMDB titles whitespace-collapsed (Van Halen fixed in DB).
 - **Committed, NOT deployed (Matt stopped the deploy mid-movie):** e180df0 server
   `has_trailer` (cached or not ruled out by `<id>.none.json`). Deploy with plain deploy.sh.
-- **b57 tagged (d9a8a10), NOT installed:** includes b56 (Trailer button hidden when
+- **b58 tagged (0344894), NOT installed — supersedes b56/b57:** match dynamic range
+  (SDR film → pause, Windows HDR off via DisplayConfigSetDeviceInfo in
+  services/theater/hdr_mode.dart, mpv target-colorspace-hint cycled, audio re-checked,
+  resume; HDR back on at stop; pref `theater_hdr_match`, default on). UNTESTED on ELKO —
+  verify an SDR title (LWAN) isn't washed out after the switch, and an HDR title is untouched.
+- **b57 (d9a8a10), included in b58:** includes b56 (Trailer button hidden when
   has_trailer=false) + movie page looks up /api/progress on open and after playback
   so Resume + labelled "Start Over" show from anywhere (was Continue Watching only).
   Install + deploy only when Matt says (not while watching).
