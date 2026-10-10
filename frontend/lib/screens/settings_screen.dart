@@ -43,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Display
   bool _refreshMatch = false;
+  bool _hdrMatch = true;
   bool _bigPicture = true;
   HdrMode _hdrMode = HdrMode.auto;
   bool? _hdrDetected; // what Auto sees on this device's display
@@ -80,6 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _tvInput.text = p.getString(kTvInputPref) ?? kDefaultTvInput;
       _tvLabel.text = p.getString(kTvLabelPref) ?? kDefaultTvLabel;
       _refreshMatch = p.getBool(kRefreshMatchPref) ?? false;
+      _hdrMatch = p.getBool(kHdrMatchPref) ?? true;
       _mpvPath.text = p.getString(kMpvPathPref) ?? kMpvDefaultPath;
     });
   }
@@ -310,6 +312,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _refreshMatch, (v) {
                 setState(() => _refreshMatch = v);
                 _prefs?.setBool(kRefreshMatchPref, v);
+              }),
+              _toggle(
+                  'Match dynamic range to the movie',
+                  'Send SDR movies as real SDR: Windows HDR switches off when an '
+                      'SDR movie starts (a 1–2 s blink) and back on when you stop. '
+                      'HDR movies are untouched.',
+                  _hdrMatch, (v) {
+                setState(() => _hdrMatch = v);
+                _prefs?.setBool(kHdrMatchPref, v);
               }),
             ]),
             _section('RENDERER', [

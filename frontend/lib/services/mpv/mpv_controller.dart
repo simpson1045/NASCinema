@@ -338,6 +338,22 @@ class MpvController {
     return v is num ? v.toDouble() : null;
   }
 
+  /// Make mpv re-read the display's colour space (after Windows HDR flips):
+  /// cycling the hint re-evaluates the swapchain's target.
+  Future<void> refreshTargetColorspace() async {
+    _ipc?.set('target-colorspace-hint', false);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    _ipc?.set('target-colorspace-hint', true);
+  }
+
+  /// The source's transfer curve once decoding starts ("pq"/"hlg" = HDR,
+  /// "bt.1886"/"srgb" = SDR) — what mpv actually decodes, not the library's
+  /// hdr flag (which misses some Dolby Vision files).
+  Future<String?> videoGamma() async {
+    final v = await _ipc?.get('video-params/gamma');
+    return v is String && v.isNotEmpty ? v : null;
+  }
+
   /// Re-check the audio chain and rebuild it if the device died — a display
   /// mode switch (refresh-rate match) renegotiates HDMI and can drop the
   /// exclusive endpoint out from under mpv.

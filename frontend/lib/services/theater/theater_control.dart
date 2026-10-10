@@ -17,6 +17,7 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'denon_control.dart';
+import 'hdr_mode.dart';
 import 'refresh_rate.dart';
 import 'theater_prefs.dart';
 import 'webos_control.dart';
@@ -29,12 +30,17 @@ class TheaterControl {
 
   DisplayMode? _restoreMode;
   bool _refreshWanted = false;
+  bool _hdrMatchWanted = true;
+  // Displays whose HDR we switched off for an SDR film — switched back on
+  // when the player stops (or the next film is HDR).
+  final _hdrRestore = <HdrTarget>[];
 
   /// Fire the AVR/TV hooks. Called as mpv launches; runs in the background.
   Future<void> onPlayStarted({void Function(String line)? diag}) async {
     if (!Platform.isWindows) return;
     final p = await SharedPreferences.getInstance();
     _refreshWanted = p.getBool(kRefreshMatchPref) ?? false;
+    _hdrMatchWanted = p.getBool(kHdrMatchPref) ?? true;
 
     if (p.getBool(kDenonEnabledPref) ?? false) {
       final host = p.getString(kDenonHostPref) ?? '';
@@ -88,11 +94,38 @@ class TheaterControl {
     return restore != null;
   }
 
+  /// Match the signal to the film's dynamic range. Call once mpv reports
+  /// the source's transfer curve. SDR film → Windows HDR off on every display
+  /// that has it on; HDR film → put back any we switched off. Returns true if
+  /// a display changed (HDMI renegotiates — the caller re-checks audio).
+  bool onDynamicRangeKnown(bool sourceHdr, {void Function(String line)? diag}) {
+    if (!Platform.isWindows || !_hdrMatchWanted) return false;
+    if (sourceHdr) return _restoreHdr(diag);
+    var changed = false;
+    for (final d in HdrMode.displays(onDiag: diag)) {
+      if (d.on && HdrMode.set(d.target, false, onDiag: diag)) {
+        _hdrRestore.add(d.target);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  bool _restoreHdr(void Function(String line)? diag) {
+    var changed = false;
+    for (final t in _hdrRestore) {
+      changed = HdrMode.set(t, true, onDiag: diag) || changed;
+    }
+    _hdrRestore.clear();
+    return changed;
+  }
+
   /// Put the desktop back. Called from player teardown.
   void onPlayStopped({void Function(String line)? diag}) {
     if (!Platform.isWindows) return;
     final mode = _restoreMode;
     _restoreMode = null;
     if (mode != null) RefreshRate.restore(mode, onDiag: diag);
+    _restoreHdr(diag);
   }
 }

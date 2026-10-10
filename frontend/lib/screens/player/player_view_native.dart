@@ -235,7 +235,7 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
       Timer(const Duration(milliseconds: 2500), () {
         if (_mpv == c) c.showHints(versions: _versionsHandler != null);
       });
-      unawaited(_matchRefreshRate(c));
+      unawaited(_matchRefreshRate(c).then((_) => _matchDynamicRange(c)));
     }
     // Geometry truth into the log (letterbox debugging): our window chain +
     // mpv's own belief about its window/video size, at launch and settled.
@@ -277,6 +277,36 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
       return;
     }
     _diag('refresh: container-fps never reported — no match attempted');
+  }
+
+  /// SDR film → SDR signal (Windows HDR off for the film, back on at stop).
+  /// Paused across the switch so the 1–2 s HDMI re-sync costs no picture,
+  /// then the exclusive audio endpoint is re-checked like a rate change.
+  Future<void> _matchDynamicRange(MpvController c) async {
+    for (var i = 0; i < 20; i++) {
+      if (!mounted || !c.running) return;
+      final gamma = await c.videoGamma();
+      if (gamma == null) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        continue;
+      }
+      final hdr = gamma == 'pq' || gamma == 'hlg';
+      final wasPaused = c.paused;
+      if (!hdr && !wasPaused) c.setPaused(true);
+      final changed =
+          TheaterControl.instance.onDynamicRangeKnown(hdr, diag: _diag);
+      _diag('hdr match: source $gamma → ${hdr ? 'HDR' : 'SDR'}'
+          '${changed ? ' (display switched)' : ''}');
+      if (changed) {
+        await Future.delayed(const Duration(milliseconds: 2500));
+        if (!mounted || !c.running) return;
+        await c.refreshTargetColorspace();
+        await c.ensureAudioAlive(diag: _diag);
+      }
+      if (!hdr && !wasPaused && mounted && c.running) c.setPaused(false);
+      return;
+    }
+    _diag('hdr match: transfer curve never reported — no match attempted');
   }
 
   void _syncBounds() {

@@ -16,6 +16,8 @@ const kTvLabelPref = 'theater_tv_label'; // label to force when it flips to PC
 const kTvSwitchInputPref = 'theater_tv_switch'; // also switch the TV on play
 
 const kRefreshMatchPref = 'theater_refresh_match';
+// Send SDR films as SDR: switch Windows HDR off for them, back on after.
+const kHdrMatchPref = 'theater_hdr_match'; // default ON
 
 const kDefaultTvInput = 'HDMI_2';
 const kDefaultTvLabel = 'Denon AVR';
