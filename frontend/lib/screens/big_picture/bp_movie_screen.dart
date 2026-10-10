@@ -125,7 +125,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
   List<String> get _buttons => [
     'play',
     if (_resume) 'restart',
-    'trailer',
+    if (_m.hasTrailer) 'trailer',
     'tracks',
     'list',
   ];
@@ -302,7 +302,10 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
       next = pick.copyWith(external: server, clearSubtitle: true);
     } else if (sid == 0) {
       next = pick.copyWith(subtitle: 0, clearExternal: true);
-    } else if (_files.where((f) => f.id == pick.fileId).firstOrNull?.subtitleTracks
+    } else if (_files
+            .where((f) => f.id == pick.fileId)
+            .firstOrNull
+            ?.subtitleTracks
             .any((t) => t.id == sid) ??
         false) {
       next = pick.copyWith(subtitle: sid, clearExternal: true);
@@ -481,16 +484,18 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
                       },
                     ),
                   ],
-                  const SizedBox(width: 24),
-                  _BpButton(
-                    icon: Icons.movie_outlined,
-                    label: 'Trailer',
-                    focused: _on('trailer'),
-                    onTap: () {
-                      _focusButton('trailer');
-                      _activate();
-                    },
-                  ),
+                  if (_m.hasTrailer) ...[
+                    const SizedBox(width: 24),
+                    _BpButton(
+                      icon: Icons.movie_outlined,
+                      label: 'Trailer',
+                      focused: _on('trailer'),
+                      onTap: () {
+                        _focusButton('trailer');
+                        _activate();
+                      },
+                    ),
+                  ],
                   const SizedBox(width: 24),
                   _BpButton(
                     icon: Icons.tune_rounded,
@@ -1265,8 +1270,9 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
     var hdr = false;
     if (wantHdr) {
       try {
-        final src = await ApiService(widget.baseUrl)
-            .getTrailerSource(widget.movie.id);
+        final src = await ApiService(
+          widget.baseUrl,
+        ).getTrailerSource(widget.movie.id);
         hdr = src['hdr'] == true;
       } catch (_) {}
     }
@@ -1283,7 +1289,9 @@ class _BpTrailerScreenState extends State<_BpTrailerScreen> {
       setStartTracks(null, null);
       setState(() {
         _native = buildPlayerView(
-            hdr ? '${widget.url}?variant=hdr' : widget.url, false);
+          hdr ? '${widget.url}?variant=hdr' : widget.url,
+          false,
+        );
         _playing = true;
       });
       // Show the title bar once it's up (the UI only appears on activity).

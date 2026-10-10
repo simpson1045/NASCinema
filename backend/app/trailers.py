@@ -341,6 +341,12 @@ def _recently_found_nothing(movie_id: int) -> bool:
         return False
 
 
+def has_trailer(movie_id: int) -> bool:
+    """For the Trailer button: cached, or not ruled out yet. False only after a
+    recent search found nothing (Van Halen - Live Without a Net)."""
+    return is_cached(movie_id) or not _recently_found_nothing(movie_id)
+
+
 def _ytdlp_json(ref: str, flat: bool = False) -> dict | None:
     ytdlp = yt_dlp_path()
     if not ytdlp:

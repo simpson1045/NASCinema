@@ -45,6 +45,7 @@ from ..scanner import (
     start_background_scan,
 )
 from ..trailers import (
+    has_trailer,
     fill_state,
     start_fill,
     clear_trailer,
@@ -128,6 +129,7 @@ def _summary(m: Movie) -> dict:
         "locked": m.locked,
         "bluray_url": m.bluray_url,
         "trailer_youtube": m.trailer_youtube,
+        "has_trailer": has_trailer(m.id),
         "added_at": m.added_at.isoformat() if m.added_at else None,
         "popularity": m.popularity,
         "vote_count": m.vote_count,

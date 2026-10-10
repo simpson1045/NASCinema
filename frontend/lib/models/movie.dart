@@ -16,6 +16,7 @@ class Movie {
     this.hdr = false,
     this.blurayUrl,
     this.trailerYoutube,
+    this.hasTrailer = true,
     this.imdbRating,
     this.rtScore,
     this.certification,
@@ -46,6 +47,7 @@ class Movie {
   final bool hdr;
   final String? blurayUrl;
   final String? trailerYoutube; // manual trailer override (YouTube URL/key)
+  final bool hasTrailer; // false once the server searched and found none
   final double? imdbRating; // external ratings (OMDb), null if unknown
   final int? rtScore; // Rotten Tomatoes %, 0–100
   final String? certification; // content rating: PG-13, R … (region setting)
@@ -81,6 +83,7 @@ class Movie {
         hdr: j['hdr'] == true,
         blurayUrl: j['bluray_url'] as String?,
         trailerYoutube: j['trailer_youtube'] as String?,
+        hasTrailer: j['has_trailer'] != false,
         imdbRating: (j['imdb_rating'] as num?)?.toDouble(),
         rtScore: (j['rt_score'] as num?)?.toInt(),
         certification: j['certification'] as String?,
