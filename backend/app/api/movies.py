@@ -39,6 +39,7 @@ from ..scanner import (
     backfill_certifications,
     backfill_ratings,
     backfill_universes,
+    rematch_unmatched,
     reprobe,
     scan,
     scan_state,
@@ -488,6 +489,13 @@ async def trailers_fill_status() -> dict:
 async def trigger_backfill_certifications(limit: int | None = None) -> dict:
     """Fetch content ratings (PG-13, R …) for movies that don't have one yet."""
     return await backfill_certifications(limit)
+
+
+@router.post("/rematch-unmatched")
+async def trigger_rematch_unmatched() -> dict:
+    """Retry TMDB for movies that never matched (shorter titles, year in the
+    title). Safe to re-run."""
+    return await rematch_unmatched()
 
 
 @router.post("/backfill-universes")

@@ -416,7 +416,7 @@ async def _scan(limit: int | None = None) -> dict:
                         if key in meta_cache:
                             meta = meta_cache[key]
                         else:
-                            meta = await get_movie_metadata(title, year)
+                            meta = await _match(title, year)
                             meta_cache[key] = meta
 
                         movie = await _find_or_create_movie(session, title, year, meta)
@@ -534,32 +534,88 @@ async def _find_or_create_movie(session, title, year, meta) -> Movie:
         year=(meta.get("year") if meta else year),
     )
     if meta:
-        movie.tmdb_id = meta.get("tmdb_id")
-        movie.original_title = meta.get("original_title")
-        movie.overview = meta.get("overview")
-        movie.runtime = meta.get("runtime")
-        movie.rating = meta.get("rating")
-        movie.poster_path = meta.get("poster_path")
-        movie.backdrop_path = meta.get("backdrop_path")
-        movie.genres = meta.get("genres")
-        movie.match_confidence = meta.get("match_confidence")
-        movie.popularity = meta.get("popularity")
-        movie.vote_count = meta.get("vote_count")
-        movie.imdb_id = meta.get("imdb_id")
-        movie.collection_id = meta.get("collection_id")
-        movie.collection_name = meta.get("collection_name")
-        movie.certification = meta.get("certification")
-        movie.release_date = meta.get("release_date")
-        movie.universes = meta.get("universes") or []
-        omdb = await get_omdb_ratings(meta.get("imdb_id") or "")
-        if omdb:
-            movie.imdb_rating = omdb.get("imdb_rating")
-            movie.rt_score = omdb.get("rt_score")
-            movie.metacritic = omdb.get("metacritic")
+        await _apply_meta(movie, meta)
 
     session.add(movie)
     await session.flush()
     return movie
+
+
+async def _apply_meta(movie: Movie, meta: dict) -> None:
+    """Write a TMDB match onto a movie row (new, or a re-matched one)."""
+    movie.title = meta.get("title") or movie.title
+    movie.year = meta.get("year") or movie.year
+    movie.tmdb_id = meta.get("tmdb_id")
+    movie.original_title = meta.get("original_title")
+    movie.overview = meta.get("overview")
+    movie.runtime = meta.get("runtime")
+    movie.rating = meta.get("rating")
+    movie.poster_path = meta.get("poster_path")
+    movie.backdrop_path = meta.get("backdrop_path")
+    movie.genres = meta.get("genres")
+    movie.match_confidence = meta.get("match_confidence")
+    movie.popularity = meta.get("popularity")
+    movie.vote_count = meta.get("vote_count")
+    movie.imdb_id = meta.get("imdb_id")
+    movie.collection_id = meta.get("collection_id")
+    movie.collection_name = meta.get("collection_name")
+    movie.certification = meta.get("certification")
+    movie.release_date = meta.get("release_date")
+    movie.universes = meta.get("universes") or []
+    omdb = await get_omdb_ratings(meta.get("imdb_id") or "")
+    if omdb:
+        movie.imdb_rating = omdb.get("imdb_rating")
+        movie.rt_score = omdb.get("rt_score")
+        movie.metacritic = omdb.get("metacritic")
+
+
+def _title_variants(title: str, year: int | None) -> list[tuple[str, int | None]]:
+    """Searches to try, in order, when the name as-is finds nothing on TMDB.
+    "John Williams And Berliner Philharmoniker - The Berlin Concert" → "The
+    Berlin Concert"; "Wonder Woman (1984)" (the year is in the TITLE) →
+    "Wonder Woman 1984" with no year; finally the title without its year."""
+    out: list[tuple[str, int | None]] = [(title, year)]
+    if " - " in title:
+        head, tail = title.rsplit(" - ", 1)
+        out += [(tail.strip(), year), (head.strip(), year)]
+    if year:
+        out += [(f"{title} {year}", None), (title, None)]
+    seen, uniq = set(), []
+    for t, y in out:
+        if t and (t.lower(), y) not in seen:
+            seen.add((t.lower(), y))
+            uniq.append((t, y))
+    return uniq
+
+
+async def _match(title: str, year: int | None) -> dict | None:
+    for t, y in _title_variants(title, year):
+        meta = await get_movie_metadata(t, y)
+        if meta and meta.get("tmdb_id"):
+            return meta
+    return None
+
+
+async def rematch_unmatched() -> dict:
+    """Retry TMDB for movies that never matched, with the title variants.
+    A match that another movie already has is reported, not merged."""
+    stats = {"checked": 0, "matched": [], "already_in_library": [], "still_unmatched": []}
+    async with SessionLocal() as session:
+        movies = (await session.scalars(select(Movie).where(Movie.tmdb_id.is_(None)))).all()
+        for m in movies:
+            stats["checked"] += 1
+            meta = await _match(m.title, m.year)
+            if not meta:
+                stats["still_unmatched"].append(m.title)
+                continue
+            if await session.scalar(select(Movie.id).where(Movie.tmdb_id == meta["tmdb_id"])):
+                stats["already_in_library"].append(f"{m.title} → {meta.get('title')}")
+                continue
+            old = m.title
+            await _apply_meta(m, meta)
+            await session.commit()
+            stats["matched"].append(f"{old} → {m.title} ({m.year})")
+    return stats
 
 
 async def backfill_universes(limit: int | None = None) -> dict:
