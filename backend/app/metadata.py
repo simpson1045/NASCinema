@@ -111,7 +111,8 @@ async def get_movie_metadata(title: str, year: int | None = None) -> dict | None
     collection = detail.get("belongs_to_collection") or {}
     return {
         "tmdb_id": best["id"],
-        "title": best.get("title") or title,
+        # TMDB titles sometimes carry stray double spaces ("Van Halen -  Live …").
+        "title": " ".join((best.get("title") or title).split()),
         "original_title": best.get("original_title"),
         "year": int(release[:4]) if release[:4].isdigit() else year,
         "overview": best.get("overview"),

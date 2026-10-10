@@ -754,12 +754,21 @@ async def movie_related(
     by_tmdb = {m.tmdb_id: m for m in library if m.tmdb_id and eligible(m)}
     picks: list[Movie] = [by_tmdb[t] for t in (rel or {}).get("related", []) if t in by_tmdb]
     if len(picks) < 12 and movie.genres:
+        # Top up by how CLOSELY the genres match overall (shared / combined),
+        # not "shares one": a one-genre concert film ("Music") pulled Coco,
+        # Soul and The Sound of Music. Weak matches are left out — a shorter
+        # row beats a nonsense one.
         mine = set(movie.genres)
         chosen = {m.id for m in picks}
+
+        def closeness(m: Movie) -> float:
+            theirs = set(m.genres or [])
+            return len(mine & theirs) / len(mine | theirs) if theirs else 0.0
+
         extra = sorted(
             (m for m in library if eligible(m) and m.id not in chosen
-             and len(mine & set(m.genres or [])) >= min(2, len(mine))),
-            key=lambda m: (len(mine & set(m.genres or [])), m.popularity or 0),
+             and closeness(m) >= 0.4),
+            key=lambda m: (closeness(m), m.popularity or 0),
             reverse=True,
         )
         picks += extra[: 12 - len(picks)]

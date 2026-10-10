@@ -53,6 +53,13 @@ def lang_name(code: str | None) -> str:
     return _LANGS.get(code.lower(), code.upper())
 
 
+def _desc_lang(code: str | None) -> str:
+    """Language for a track's description — left out when the file doesn't tag
+    one, instead of a useless "Unknown language" ("DTS-HD MA · Stereo")."""
+    name = lang_name(code)
+    return "" if name == "Unknown language" else name
+
+
 def _channels(st: MediaStream) -> str:
     n = st.channels or 0
     return {1: "Mono", 2: "Stereo", 3: "3.0", 6: "5.1", 7: "6.1", 8: "7.1"}.get(
@@ -136,7 +143,7 @@ def track_rows(mf: MediaFile) -> dict:
         title = clean_title(st.title)
         if st.kind == "audio":
             codec = _audio_codec(st)
-            desc = " · ".join(p for p in (lang_name(st.language), codec,
+            desc = " · ".join(p for p in (_desc_lang(st.language), codec,
                                           _channels(st)) if p)
             if title and _GENERIC.match(title):
                 # "Original · English DTS-HD MA 5.1" — the name alone says nothing.
@@ -154,7 +161,7 @@ def track_rows(mf: MediaFile) -> dict:
             })
         elif st.kind == "subtitle":
             codec = _SUB_CODECS.get((st.codec or "").lower(), (st.codec or "").upper())
-            desc = " · ".join(p for p in (lang_name(st.language), codec,
+            desc = " · ".join(p for p in (_desc_lang(st.language), codec,
                                           "Forced" if st.is_forced else "") if p)
             subs.append({
                 "id": len(subs) + 1,
