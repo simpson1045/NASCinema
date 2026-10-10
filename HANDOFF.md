@@ -7,7 +7,21 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-03 ~19:00 UTC) — TrueHD dropouts SOLVED: new FFmpeg; b55 live
+## Latest (2026-10-09) — LWAN fixes; b57 tagged; server deploy PENDING
+
+- **Live (backend f543061):** More like this ranks by genre closeness (>=0.4), untagged
+  tracks drop "Unknown language", TMDB titles whitespace-collapsed (Van Halen fixed in DB).
+- **Committed, NOT deployed (Matt stopped the deploy mid-movie):** e180df0 server
+  `has_trailer` (cached or not ruled out by `<id>.none.json`). Deploy with plain deploy.sh.
+- **b57 tagged (d9a8a10), NOT installed:** includes b56 (Trailer button hidden when
+  has_trailer=false) + movie page looks up /api/progress on open and after playback
+  so Resume + labelled "Start Over" show from anywhere (was Continue Watching only).
+  Install + deploy only when Matt says (not while watching).
+- Game mode strips DTS on the C2 too (LWAN glitched as PCM) → movie mode fixed it.
+  house_elko movie can time out on the Denon's HTTP API — a retry worked.
+- **Reminder owed to Matt:** test Monsters University on mpv 20261003 (memory file).
+
+## Earlier (2026-10-03 ~19:00 UTC) — TrueHD dropouts SOLVED: new FFmpeg; b55 live
 
 - **Root cause found upstream:** FFmpeg fixed the TrueHD MAT packer on 2026-06-16
   (2db563fac2, "preserve TrueHD MAT padding across branches" — seamless-branching
