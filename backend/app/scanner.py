@@ -188,7 +188,19 @@ def _edition(filename: str, movie_folder: str | None) -> str | None:
 
 
 def _stream_rows(probe: dict) -> list[MediaStream]:
-    return [MediaStream(**row) for row in probe.get("streams") or []]
+    """Probe rows, with every text field trimmed to its column. A rip whose
+    commentary track lists 15 participants (The Mask, The Incredibles) or an
+    Atmos layout string ("8 channels (FL+FR+…+TFR)") overflowed and the whole
+    file failed to save — so the movie never appeared."""
+    rows = []
+    for row in probe.get("streams") or []:
+        row = dict(row)
+        for key, col in MediaStream.__table__.columns.items():
+            n = getattr(col.type, "length", None)
+            if n and isinstance(row.get(key), str) and len(row[key]) > n:
+                row[key] = row[key][: n - 1] + "…"
+        rows.append(MediaStream(**row))
+    return rows
 
 
 def _extra_type(filename: str, folder_key: str | None) -> str:
