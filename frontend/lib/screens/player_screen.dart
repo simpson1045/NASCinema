@@ -30,6 +30,7 @@ class PlayerScreen extends StatefulWidget {
     this.startAt,
     this.versions = const [],
     this.externalSubtitle,
+    this.popOnEnd = false,
   });
 
   final int fileId;
@@ -45,6 +46,11 @@ class PlayerScreen extends StatefulWidget {
   final List<MovieFile> versions;
   // A downloaded subtitle (sidecar id) picked before Play — loaded at start.
   final String? externalSubtitle;
+
+  /// TV episodes: at the end of the file, save it as watched and close with
+  /// the result 'ended' so the show page can start the next episode. Movies
+  /// leave this off (the player holds the last frame).
+  final bool popOnEnd;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -115,6 +121,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double _resumePosition = 0;
   String? _resumeSubtitle;
   bool _resumeApplied = false;
+  bool _endHandled = false; // popOnEnd fired once
   Timer? _saveTimer;
 
   // Desktop: player chrome hides after a few idle seconds (real-player feel),
@@ -351,6 +358,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           read();
         } else {
           setState(read);
+        }
+        if (widget.popOnEnd && !_endHandled && _duration > 0 && playerEnded()) {
+          _endHandled = true;
+          ApiService(widget.baseUrl).saveProgress(_fileId, _duration, _activeSub);
+          Navigator.of(context).pop('ended');
+          return;
         }
         // Resume once the player knows its duration (so the seek lands).
         if (!_resumeApplied && _resumePosition > 2 && _duration > 0) {

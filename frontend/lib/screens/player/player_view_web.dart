@@ -62,6 +62,8 @@ double playerDuration() {
 
 bool playerPaused() => _v?.paused ?? true;
 
+bool playerEnded() => _v?.ended ?? false;
+
 void playerSeek(double seconds) {
   final v = _v;
   if (v != null) v.currentTime = seconds;

@@ -24,6 +24,7 @@ bool playerAddSubtitle(String url, String title, {String lang = 'und', bool sele
 double playerCurrentTime() => 0;
 double playerDuration() => 0;
 bool playerPaused() => true;
+bool playerEnded() => false;
 void playerSeek(double seconds) {}
 void playerTogglePlay() {}
 List<double> playerBuffered() => const [];

@@ -8,6 +8,7 @@ import '../models/franchise.dart';
 import '../models/home.dart';
 import '../models/movie.dart';
 import '../models/movie_file.dart';
+import '../models/show.dart';
 import '../models/video.dart';
 
 /// Parsed result of GET /api/health.
@@ -72,6 +73,41 @@ class ApiService {
       throw Exception('Backend returned HTTP ${r.statusCode}');
     }
     return HomeData.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
+  }
+
+  /// Every TV show, by title. Best-effort: empty on any failure (an older
+  /// server has no /api/shows), so the home screen still loads.
+  Future<List<Show>> getShows() async {
+    try {
+      final r = await http.get(_u('/api/shows')).timeout(const Duration(seconds: 15));
+      if (r.statusCode != 200) return const [];
+      return ((jsonDecode(r.body) as Map)['shows'] as List)
+          .map((e) => Show.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Shows you're partway through, with the episode to play next.
+  Future<List<UpNext>> getShowsUpNext() async {
+    try {
+      final r = await http.get(_u('/api/shows/continue')).timeout(const Duration(seconds: 15));
+      if (r.statusCode != 200) return const [];
+      return ((jsonDecode(r.body) as Map)['items'] as List)
+          .map((e) => UpNext.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<ShowDetail> getShow(int id) async {
+    final r = await http.get(_u('/api/shows/$id')).timeout(const Duration(seconds: 20));
+    if (r.statusCode != 200) {
+      throw Exception('Backend returned HTTP ${r.statusCode}');
+    }
+    return ShowDetail.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
   /// Re-scan the media folders on the server: add new files, prune deleted ones.

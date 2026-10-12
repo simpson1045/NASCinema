@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/franchise.dart';
+import '../../models/show.dart';
 import '../../models/home.dart';
 import '../../models/movie.dart';
 import '../../services/api_service.dart';
@@ -21,6 +22,7 @@ import 'bp_franchise_tile.dart';
 import 'bp_hero.dart';
 import 'bp_movie_screen.dart';
 import 'bp_search_screen.dart';
+import 'bp_show_screen.dart';
 import 'bp_track_manager.dart';
 
 /// Big picture mode: the 10-foot, fullscreen home for the couch PC, built to
@@ -106,10 +108,11 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   Future<void> _load() async {
     try {
       final data = widget.initialData ?? await _api.getHome();
+      final tv = await _tv();
       if (!mounted) return;
       setState(() {
         _data = data;
-        _rails = _railsOf(data);
+        _rails = _railsOf(data, tv);
         _zone = _rails.isEmpty ? _Zone.hero : _Zone.rails;
       });
       _replayScriptedKeys();
@@ -118,8 +121,20 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     }
   }
 
-  List<HomeRail> _railsOf(HomeData data) {
+  /// The TV rows' data, fetched beside the home (best-effort: an older server
+  /// or a failed call just means no TV rows).
+  Future<(List<Show>, List<UpNext>)> _tv() async {
+    final r = await Future.wait([_api.getShows(), _api.getShowsUpNext()]);
+    return (r[0] as List<Show>, r[1] as List<UpNext>);
+  }
+
+  List<HomeRail> _railsOf(HomeData data, (List<Show>, List<UpNext>) tv) {
     final rails = data.rails.where((r) => r.movies.isNotEmpty).toList();
+    // Up Next (TV) right after Continue Watching (or first).
+    if (tv.$2.isNotEmpty) {
+      final at = rails.indexWhere((r) => r.key == 'continue') + 1;
+      rails.insert(at, HomeRail(key: 'upnext', title: 'Up Next', movies: const [], upNext: tv.$2));
+    }
     // Disney+-style Franchises row: right after Continue Watching (or
     // first when there's nothing to continue).
     if (data.collections.isNotEmpty) {
@@ -132,6 +147,16 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
               movies: const [],
               franchises: data.collections));
     }
+    // TV Shows right after Franchises (or after Up Next / Continue Watching).
+    if (tv.$1.isNotEmpty) {
+      var at = rails.indexWhere((r) => r.key == 'franchises') + 1;
+      if (at == 0) {
+        at = [rails.indexWhere((r) => r.key == 'upnext'),
+              rails.indexWhere((r) => r.key == 'continue')]
+            .reduce((a, b) => a > b ? a : b) + 1;
+      }
+      rails.insert(at, HomeRail(key: 'shows', title: 'TV Shows', movies: const [], shows: tv.$1));
+    }
     return rails;
   }
 
@@ -142,21 +167,31 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   Future<void> _refreshRails() async {
     try {
       final fresh = await _api.getHome();
+      final tv = await _tv();
       if (!mounted || _rails.isEmpty) return;
       final rail = _rails[_rail.clamp(0, _rails.length - 1)];
       final key = rail.key;
-      final movieId = rail.movies.isEmpty ? null : rail.movies[_itemOf(_rail)].id;
+      final movieId = rail.movies.isEmpty
+          ? (rail.isShows
+              ? rail.shows[_itemOf(_rail)].id
+              : rail.isUpNext ? rail.upNext[_itemOf(_rail)].show.id : null)
+          : rail.movies[_itemOf(_rail)].id;
       final item = _itemOf(_rail);
       setState(() {
-        _rails = _railsOf(fresh);
+        _rails = _railsOf(fresh, tv);
         if (_rails.isEmpty) return;
         final r = _rails.indexWhere((x) => x.key == key);
         _item.clear();
         _rail = r < 0 ? _rail.clamp(0, _rails.length - 1) : r;
-        final movies = _rails[_rail].movies;
-        if (movies.isNotEmpty) {
-          final i = movies.indexWhere((m) => m.id == movieId);
-          _item[_rail] = i >= 0 ? i : item.clamp(0, movies.length - 1);
+        final rr = _rails[_rail];
+        final ids = rr.isShows
+            ? rr.shows.map((x) => x.id).toList()
+            : rr.isUpNext
+                ? rr.upNext.map((x) => x.show.id).toList()
+                : rr.movies.map((x) => x.id).toList();
+        if (ids.isNotEmpty) {
+          final i = ids.indexOf(movieId ?? -1);
+          _item[_rail] = i >= 0 ? i : item.clamp(0, ids.length - 1);
         }
       });
     } catch (_) {
@@ -205,6 +240,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
 
   bool _isWide(HomeRail r) =>
       r.isFranchises ||
+      r.isUpNext ||
       (r.movies.isNotEmpty && r.movies.first.resumePosition != null);
 
   double _rowHeight(HomeRail r) => r.isFranchises
@@ -220,7 +256,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     if (hero == null) return;
     if (_zone == _Zone.hero || _rails.isEmpty) {
       hero.follow(null);
-    } else if (_rails[_rail].isFranchises) {
+    } else if (_rails[_rail].isFranchises || _rails[_rail].isTv) {
       // Franchise tiles leave the hero as it is: no trailer swap right as a
       // franchise page opens (see BpHero.pauseForPage).
     } else {
@@ -327,6 +363,11 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
       final rail = _rails[_rail];
       if (rail.isFranchises) {
         _openFranchise(rail.franchises[_itemOf(_rail)]);
+      } else if (rail.isShows) {
+        _openShow(rail.shows[_itemOf(_rail)]);
+      } else if (rail.isUpNext) {
+        final u = rail.upNext[_itemOf(_rail)];
+        _openShow(u.show, playEpisodeId: u.episode.id);
       } else {
         _openMovie(rail.movies[_itemOf(_rail)]);
       }
@@ -379,6 +420,13 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   Future<void> _openMovie(Movie m) async {
     await _pushPage(MaterialPageRoute(
       builder: (_) => BpMovieScreen(movie: m, baseUrl: widget.baseUrl),
+    ));
+  }
+
+  Future<void> _openShow(Show s, {int? playEpisodeId}) async {
+    await _pushPage(MaterialPageRoute(
+      builder: (_) =>
+          BpShowScreen(baseUrl: widget.baseUrl, show: s, playEpisodeId: playEpisodeId),
     ));
   }
 
@@ -578,10 +626,51 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
                   },
                 ),
               ],
+              for (int i = 0; i < rail.shows.length; i++) ...[
+                if (i > 0) const SizedBox(width: _tileGap),
+                _BpTile(
+                  url: rail.shows[i].posterUrl(size: 'w500'),
+                  title: rail.shows[i].title,
+                  wide: false,
+                  focused: railFocused && i == focusedItem,
+                  onTap: () {
+                    setState(() {
+                      _zone = _Zone.rails;
+                      _rail = r;
+                      _item[r] = i;
+                    });
+                    _openShow(rail.shows[i]);
+                  },
+                ),
+              ],
+              for (int i = 0; i < rail.upNext.length; i++) ...[
+                if (i > 0) const SizedBox(width: _tileGap),
+                _BpTile(
+                  url: rail.upNext[i].episode.stillUrl(size: 'w780') ??
+                      rail.upNext[i].show.backdropUrl(size: 'w780'),
+                  title: '${rail.upNext[i].show.title} · ${rail.upNext[i].episode.code}',
+                  progress: rail.upNext[i].episode.progress,
+                  wide: true,
+                  focused: railFocused && i == focusedItem,
+                  onTap: () {
+                    setState(() {
+                      _zone = _Zone.rails;
+                      _rail = r;
+                      _item[r] = i;
+                    });
+                    final u = rail.upNext[i];
+                    _openShow(u.show, playEpisodeId: u.episode.id);
+                  },
+                ),
+              ],
               for (int i = 0; i < rail.movies.length; i++) ...[
                 if (i > 0) const SizedBox(width: _tileGap),
                 _BpTile(
-                  movie: rail.movies[i],
+                  url: wide
+                      ? rail.movies[i].backdropUrl(size: 'w780')
+                      : rail.movies[i].posterUrl(size: 'w500'),
+                  title: rail.movies[i].title,
+                  progress: rail.movies[i].progress,
                   wide: wide,
                   focused: railFocused && i == focusedItem,
                   onTap: () {
@@ -617,13 +706,17 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
 /// 480x270 backdrop card with an amber progress bar + one-line title.
 class _BpTile extends StatelessWidget {
   const _BpTile({
-    required this.movie,
+    required this.url,
+    required this.title,
+    this.progress,
     required this.wide,
     required this.focused,
     required this.onTap,
   });
 
-  final Movie movie;
+  final String? url;
+  final String title;
+  final double? progress;
   final bool wide;
   final bool focused;
   final VoidCallback onTap;
@@ -632,10 +725,8 @@ class _BpTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final w = wide ? _wideW : _posterW;
     final h = wide ? _wideH : _posterH;
-    final url = wide
-        ? movie.backdropUrl(size: 'w780')
-        : movie.posterUrl(size: 'w500');
-    final progress = movie.progress;
+    final url = this.url;
+    final progress = this.progress;
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -685,7 +776,7 @@ class _BpTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              movie.title,
+              title,
               maxLines: wide ? 1 : 2,
               overflow: TextOverflow.ellipsis,
               textAlign: wide ? TextAlign.start : TextAlign.center,

@@ -471,6 +471,11 @@ double playerDuration() => _useMpv
 bool playerPaused() =>
     _useMpv ? (_mpv?.paused ?? true) : !(_player?.state.playing ?? false);
 
+/// Playback reached the end of the file (mpv stays open on the last frame).
+bool playerEnded() => _useMpv
+    ? (_mpv?.eofReached ?? false)
+    : (_player?.state.completed ?? false);
+
 void playerSeek(double seconds) {
   if (_useMpv) {
     _mpv?.seek(seconds);

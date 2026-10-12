@@ -3,6 +3,7 @@
 The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.9.0 - 2026-09-26
+- **TV shows are here:** a **TV Shows** row on the home screen and an **Up Next** row with the next episode of every show you're watching. A show's page has its seasons (LB/RB to switch), every episode with its picture, title and progress, and Play/Resume for the next one. When an episode ends, the next starts by itself. Same player as movies — untouched Atmos/DTS, subtitles and resume points.
 - **Track Manager:** press **Back** on the Big Picture home and choose **Track Manager** to clean foreign dubs and subtitles out of your movies — biggest space savings first, with a warning on movies that start in the wrong language. Open a movie to see every track marked Keep or Drop (and why); **X** strips it, **Y** protects it so it's never touched. On the list, **Y** strips all the worthwhile ones. The **Jobs** tab shows progress; every original is kept until you choose **Confirm & free space** (Y), and **X** undoes a strip until then.
 - **Downloaded subtitles just work:** every subtitle you've downloaded for a movie shows up in the player's subtitle menu, labeled with the release it was made for, and the one you used last turns on by itself. Subtitle search now ranks results by how well they fit your copy (Blu-ray vs DVD, trusted uploaders) and marks the best match.
 - **Quiet home screen:** the muted background trailers no longer open any audio — no more faint static or your receiver flipping into Atmos and back as you browse.
