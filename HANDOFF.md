@@ -7,7 +7,32 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-10) — bitstream guard committed (untagged); b59 tagged, not installed
+## Latest (2026-10-11) — TV shows Step 1 LIVE (backend); b60 installed
+
+- **TV backend deployed (bbed513):** migration 0017 (shows / seasons / episodes,
+  media_files.episode_id; episode files are kind='episode'). `app/shows_scanner.py` runs
+  after the movie scan over NASCINEMA_SHOW_DIRS (/shows = /mnt/NAS Storage/shows, ro —
+  live compose edited, backup docker-compose.yml.bak-20261011-preshows). Parses SxxEyy,
+  "S01 E04", double eps, V01E23, year seasons (MythBusters 2003+, Tom and Jerry 1940+),
+  unnumbered files; Specials/featurettes/extras folders → season 0 (numbers ignored there
+  — Batman Beyond's Specials hold other shows' episodes). TMDB TV match: " - "→":"
+  variants, (US) country hint, year hint from year-numbered seasons. Tested all 51
+  folders: correct except Looney Tunes Platinum Collection + The Censored Eleven (no TMDB
+  entry → folder names/filename titles). **Whose Line: Matt said hold — the NAS Claude is
+  fixing those files; it currently matches TMDB 2013. Needs a re-match endpoint after.**
+  An "earliest same-named show" tiebreak was tried and REVERTED (it picked a 1995 "The Office").
+- API: GET /api/shows, /api/shows/{id} (logo, seasons, episodes w/ files+tracks+
+  progress+watched, next_up), /api/shows/continue. First full scan started 03:54 UTC
+  Oct 12 (~5,400 files, ~1 h).
+- **680c38b NOT deployed (wait for the scan):** _stream_rows trims text to column
+  lengths — The Mask, The Incredibles, Monty Python & the Holy Grail, First Blood never
+  saved (commentary titles >256, Atmos channel_layout >32). Deploy, then rescan.
+- b60 installed on ELKO + published (home refresh, fresh movie pages, bitstream guard).
+- spdif_truehd_sample.mkv = KEEP (memory file) — I wrongly suggested deleting it.
+- **Next: Step 2 = app** (TV Shows row, Continue Watching with episodes, show page with
+  season picker + episode list, play in the same player, auto-next-episode).
+
+## Earlier (2026-10-10) — bitstream guard committed (untagged); b59 tagged, not installed
 
 - **Bitstream guard (committed, NO tag — Matt: "don't update the app yet"):** during a
   pause the HDMI endpoint briefly reported no spdif formats (mpv log: spdif-truehd /
