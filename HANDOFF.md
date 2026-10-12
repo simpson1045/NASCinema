@@ -29,7 +29,14 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   saved (commentary titles >256, Atmos channel_layout >32). Deploy, then rescan.
 - b60 installed on ELKO + published (home refresh, fresh movie pages, bitstream guard).
 - spdif_truehd_sample.mkv = KEEP (memory file) — I wrongly suggested deleting it.
-- **Next: Step 2 = app** (TV Shows row, Continue Watching with episodes, show page with
+- **Step 2 = app, b61 (979dcd2):** home "Up Next" (after Continue Watching; opens the
+  show and plays that episode) + "TV Shows" (after Franchises); BpShowScreen (header,
+  Play/Resume S·E + Start Over, season tabs, LB/RB, episode cards w/ progress + watched);
+  PlayerScreen.popOnEnd (episodes: save watched at EOF, pop 'ended' → next episode,
+  never rolls into Specials). playerEnded() on native/web/stub. _BpTile generalized.
+- Still to do: Whose Line re-match endpoint (after the NAS Claude's cleanup); deploy
+  680c38b after the TV scan; Up Next PIP overlay (movies) later.
+- (old) Next: Step 2 = app (TV Shows row, Continue Watching with episodes, show page with
   season picker + episode list, play in the same player, auto-next-episode).
 
 ## Earlier (2026-10-10) — bitstream guard committed (untagged); b59 tagged, not installed
