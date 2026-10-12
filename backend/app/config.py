@@ -33,6 +33,8 @@ class Settings(BaseSettings):
 
     # Media
     media_dirs: str = ""
+    # TV show roots (Sonarr layout: <Show>/Season N/<Show> - SxxEyy - Title.ext).
+    show_dirs: str = ""
     data_dir: Path = Path(".nascinema")
     # Persistent HLS transcode cache cap (GiB); LRU eviction. 0 = unlimited.
     transcode_cache_gb: float = 20.0
@@ -97,6 +99,13 @@ class Settings(BaseSettings):
     # Opt-in: fingerprint extras so they can later be matched/contributed.
     contribute_extras: bool = False
     fpcalc: str = ""  # Chromaprint binary; auto-discovered when blank
+
+    @property
+    def show_dir_list(self) -> list[str]:
+        """TV show folders, split like media_dirs."""
+        if not self.show_dirs.strip():
+            return []
+        return [p.strip() for p in self.show_dirs.split(os.pathsep) if p.strip()]
 
     @property
     def media_dir_list(self) -> list[str]:

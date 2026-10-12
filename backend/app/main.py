@@ -21,6 +21,7 @@ from .api.flags import router as flags_router
 from .api.movies import router as movies_router
 from .api.progress import router as progress_router
 from .api.renderer import router as renderer_router
+from .api.shows import router as shows_router
 from .api.stream import router as stream_router
 from .api.subtitles import router as subtitles_router
 from .api.track_manager import router as track_manager_router
@@ -76,6 +77,7 @@ def create_fastapi() -> FastAPI:
         }
 
     app.include_router(movies_router)
+    app.include_router(shows_router)
     app.include_router(stream_router)
     app.include_router(subtitles_router)
     app.include_router(update_router)

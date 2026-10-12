@@ -4,9 +4,10 @@ from .flag import Flag
 from .media_file import MediaFile
 from .media_stream import MediaStream
 from .movie import Movie
+from .show import Episode, Season, Show
 from .strip_job import StripJob
 from .user import User
 from .watch_progress import WatchProgress
 from .watchlist import WatchlistItem
 
-__all__ = ["User", "Movie", "MediaFile", "MediaStream", "WatchProgress", "Flag", "WatchlistItem", "StripJob"]
+__all__ = ["User", "Movie", "MediaFile", "MediaStream", "WatchProgress", "Flag", "WatchlistItem", "StripJob", "Show", "Season", "Episode"]

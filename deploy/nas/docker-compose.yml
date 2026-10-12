@@ -39,6 +39,8 @@ services:
       NASCINEMA_PORT: "8400"
       # Movies live on the HDD pool and the SSD scratch pool (':'-separated).
       NASCINEMA_MEDIA_DIRS: /movies:/movies-ssd
+      # TV shows (Sonarr's library), read-only.
+      NASCINEMA_SHOW_DIRS: /shows
       NASCINEMA_DATA_DIR: /data
       NASCINEMA_CACHE_DIR: /data/hls
       NASCINEMA_TRAILERS_DIR: /data/trailers
@@ -48,6 +50,7 @@ services:
       - ./data:/data
       - "/mnt/NAS Storage/movies:/movies:ro"
       - "/mnt/scratch/movies:/movies-ssd:ro"
+      - "/mnt/NAS Storage/shows:/shows:ro"
 
   # Track Manager strip worker (docs/SPEC-track-manager.md): the ONLY
   # container with write access to the movies. Same image and code; runs

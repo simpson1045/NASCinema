@@ -243,6 +243,9 @@ async def scan(limit: int | None = None) -> dict:
                            finished_at=None)
         try:
             stats = await _scan(limit)
+            if limit is None:  # TV shows after the movies (same live stats)
+                from .shows_scanner import scan_shows
+                await scan_shows(stats)
             _scan_state["stats"] = stats
             return stats
         except Exception as e:  # surfaced in /scan/status, never silent

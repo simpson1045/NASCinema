@@ -562,3 +562,138 @@ async def get_movie_videos(tmdb_id: int) -> list[dict]:
     order = {"Trailer": 0, "Teaser": 1, "Clip": 2, "Featurette": 3}
     videos.sort(key=lambda v: order.get(v["type"], 9))
     return videos
+
+
+# --- TV shows ----------------------------------------------------------------
+
+def _pick_show(results: list[dict], title: str, year: int | None) -> dict:
+    """Like _pick for movies: exact (punctuation-blind) name, then first-air
+    year, then TMDB's order — "The Office" (US, 2005) over the UK one. (An
+    "earliest same-named show" tiebreak picked an obscure 1995 "The Office";
+    year-numbered seasons pass a year hint instead — Tom and Jerry 1940.)"""
+    want = _norm(title)
+
+    def score(i_r: tuple[int, dict]) -> tuple:
+        i, r = i_r
+        names = {_norm(r.get("name", "")), _norm(r.get("original_name", ""))}
+        aired = (r.get("first_air_date") or "")[:4]
+        return (want in names, bool(year) and aired == str(year), -i)
+
+    return max(enumerate(results), key=score)[1]
+
+
+def _tv_certification(detail: dict) -> str:
+    for r in (detail.get("content_ratings") or {}).get("results", []):
+        if r.get("iso_3166_1") == "US" and r.get("rating"):
+            return r["rating"]
+    return ""
+
+
+async def get_show_metadata(title: str, year: int | None = None,
+                            country: str | None = None) -> dict | None:
+    """Search TMDB TV for a show, then fetch its details. `country` ("US") is
+    the Sonarr-style hint from a folder like "The Office (US)"."""
+    key = get_settings().tmdb_api_key
+    if not key:
+        return None
+    params: dict = {"api_key": key, "query": title, "include_adult": "false"}
+    if year:
+        params["first_air_date_year"] = year
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{TMDB_BASE}/search/tv", params=params)
+            r.raise_for_status()
+            results = r.json().get("results", [])
+            if country:
+                same = [x for x in results if country in (x.get("origin_country") or [])]
+                results = same or results
+            if not results:
+                return None
+            best = _pick_show(results, title, year)
+            d = await client.get(f"{TMDB_BASE}/tv/{best['id']}",
+                                 params={"api_key": key,
+                                         "append_to_response": "content_ratings"})
+            d.raise_for_status()
+            detail = d.json()
+    except (httpx.HTTPError, KeyError, ValueError):
+        return None
+    aired = detail.get("first_air_date") or best.get("first_air_date") or ""
+    return {
+        "tmdb_id": best["id"],
+        "title": " ".join((detail.get("name") or best.get("name") or title).split()),
+        "year": int(aired[:4]) if aired[:4].isdigit() else year,
+        "overview": detail.get("overview") or best.get("overview"),
+        "poster_path": detail.get("poster_path") or best.get("poster_path"),
+        "backdrop_path": detail.get("backdrop_path") or best.get("backdrop_path"),
+        "genres": [g["name"] for g in detail.get("genres", [])],
+        "rating": detail.get("vote_average"),
+        "certification": _tv_certification(detail),
+        "status": detail.get("status"),
+        "first_air_date": aired or None,
+        "seasons": [s.get("season_number") for s in detail.get("seasons", [])
+                    if s.get("season_number") is not None],
+    }
+
+
+async def get_season_metadata(tmdb_id: int, season_number: int) -> dict | None:
+    """A season's name/poster plus its episodes keyed by episode number."""
+    key = get_settings().tmdb_api_key
+    if not key or not tmdb_id:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{TMDB_BASE}/tv/{tmdb_id}/season/{season_number}",
+                                 params={"api_key": key})
+            if r.status_code == 404:
+                return None  # e.g. MythBusters' year-numbered seasons
+            r.raise_for_status()
+            data = r.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    return {
+        "name": data.get("name"),
+        "overview": data.get("overview") or None,
+        "poster_path": data.get("poster_path"),
+        "air_date": data.get("air_date"),
+        "episodes": {
+            e["episode_number"]: {
+                "title": e.get("name"),
+                "overview": e.get("overview") or None,
+                "still_path": e.get("still_path"),
+                "air_date": e.get("air_date"),
+                "runtime": e.get("runtime"),
+                "rating": e.get("vote_average"),
+            }
+            for e in data.get("episodes", []) if e.get("episode_number") is not None
+        },
+    }
+
+
+_show_logo_cache: dict[int, str | None] = {}
+
+
+async def get_show_logo(tmdb_id: int) -> str | None:
+    """A show's clearlogo URL (English first, then PNG, then most-voted)."""
+    if tmdb_id in _show_logo_cache:
+        return _show_logo_cache[tmdb_id]
+    key = get_settings().tmdb_api_key
+    if not key or not tmdb_id:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            r = await client.get(f"{TMDB_BASE}/tv/{tmdb_id}/images",
+                                 params={"api_key": key, "include_image_language": "en,null"})
+            r.raise_for_status()
+            logos = r.json().get("logos", [])
+    except (httpx.HTTPError, ValueError):
+        return None  # uncached — retry later
+    url = None
+    if logos:
+        best = max(logos, key=lambda lg: (
+            1 if lg.get("iso_639_1") == "en" else 0,
+            1 if str(lg.get("file_path", "")).lower().endswith(".png") else 0,
+            lg.get("vote_average") or 0))
+        if best.get("file_path"):
+            url = f"https://image.tmdb.org/t/p/w500{best['file_path']}"
+    _show_logo_cache[tmdb_id] = url
+    return url

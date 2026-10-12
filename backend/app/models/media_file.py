@@ -34,12 +34,17 @@ class MediaFile(Base):
     movie_id: Mapped[int | None] = mapped_column(
         ForeignKey("movies.id", ondelete="CASCADE"), index=True
     )
+    # TV: the episode this file is (kind='episode'); None for movie files.
+    episode_id: Mapped[int | None] = mapped_column(
+        ForeignKey("episodes.id", ondelete="CASCADE"), index=True
+    )
 
     path: Mapped[str] = mapped_column(String(1024), unique=True, index=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
     # 'feature' = the movie itself; 'extra' = bonus content (featurette, trailer,
-    # deleted scene, …). Extras carry their own display title + type.
+    # deleted scene, …), with its own display title + type; 'episode' = a TV
+    # episode (episode_id set).
     kind: Mapped[str] = mapped_column(String(16), default="feature", index=True)
     extra_type: Mapped[str | None] = mapped_column(String(32))
     extra_title: Mapped[str | None] = mapped_column(String(512))
@@ -66,6 +71,7 @@ class MediaFile(Base):
     probed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     movie: Mapped["Movie | None"] = relationship(back_populates="files")  # noqa: F821
+    episode: Mapped["Episode | None"] = relationship(back_populates="files")  # noqa: F821
     # Per-track probe rows (video/audio/subtitle), ordered by stream index.
     streams: Mapped[list["MediaStream"]] = relationship(  # noqa: F821
         back_populates="media_file",
