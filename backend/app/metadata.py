@@ -635,6 +635,36 @@ async def get_show_metadata(title: str, year: int | None = None,
     }
 
 
+async def get_show_metadata_by_id(tmdb_id: int) -> dict | None:
+    """A show's details for a known TMDB id (manual re-match)."""
+    key = get_settings().tmdb_api_key
+    if not key or not tmdb_id:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            d = await client.get(f"{TMDB_BASE}/tv/{tmdb_id}",
+                                 params={"api_key": key,
+                                         "append_to_response": "content_ratings"})
+            d.raise_for_status()
+            detail = d.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    aired = detail.get("first_air_date") or ""
+    return {
+        "tmdb_id": tmdb_id,
+        "title": " ".join((detail.get("name") or "").split()) or None,
+        "year": int(aired[:4]) if aired[:4].isdigit() else None,
+        "overview": detail.get("overview"),
+        "poster_path": detail.get("poster_path"),
+        "backdrop_path": detail.get("backdrop_path"),
+        "genres": [g["name"] for g in detail.get("genres", [])],
+        "rating": detail.get("vote_average"),
+        "certification": _tv_certification(detail),
+        "status": detail.get("status"),
+        "first_air_date": aired or None,
+    }
+
+
 async def get_season_metadata(tmdb_id: int, season_number: int) -> dict | None:
     """A season's name/poster plus its episodes keyed by episode number."""
     key = get_settings().tmdb_api_key

@@ -4,6 +4,7 @@ tracks and progress), and the shows half of Continue Watching."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -159,6 +160,19 @@ async def continue_shows(session: AsyncSession = Depends(get_session)) -> dict:
         if len(out) >= 20:
             break
     return {"items": out}
+
+
+class RematchReq(BaseModel):
+    tmdb_id: int
+    # [[first_folder_season, tmdb_id, season_offset], …] — optional.
+    season_map: list[list[int]] | None = None
+
+
+@router.post("/shows/{show_id}/rematch")
+async def rematch(show_id: int, body: RematchReq) -> dict:
+    """Fix a show's TMDB match by hand (and route merged seasons)."""
+    from ..shows_scanner import rematch_show
+    return await rematch_show(show_id, body.tmdb_id, body.season_map)
 
 
 @router.get("/shows/{show_id}")

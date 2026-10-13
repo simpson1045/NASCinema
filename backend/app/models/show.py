@@ -33,6 +33,9 @@ class Show(Base):
     certification: Mapped[str | None] = mapped_column(String(16))
     status: Mapped[str | None] = mapped_column(String(32))  # Ended / Returning Series
     first_air_date: Mapped[str | None] = mapped_column(String(10))
+    # [[first_folder_season, tmdb_id, season_offset], …] when the folder merges
+    # series TMDB keeps apart (Whose Line 1998 + 2013). None = all from tmdb_id.
+    season_map: Mapped[list | None] = mapped_column(JSON)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     seasons: Mapped[list["Season"]] = relationship(

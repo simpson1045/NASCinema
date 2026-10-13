@@ -142,19 +142,29 @@ def _video_files(show_dir: str) -> list[str]:
     return sorted(out)
 
 
-async def _season_meta(cache: dict, tmdb_id: int | None, season: int) -> dict | None:
-    if not tmdb_id:
+def _tmdb_season(show: Show, season: int) -> tuple[int | None, int]:
+    """Where a folder season's details live on TMDB: (tmdb_id, tmdb season).
+    season_map routes merged folders (Whose Line 9+ → the 2013 revival, −8)."""
+    for first, tmdb_id, offset in sorted(show.season_map or [], reverse=True):
+        if season >= first:
+            return tmdb_id, season + offset
+    return show.tmdb_id, season
+
+
+async def _season_meta(cache: dict, show: Show, season: int) -> dict | None:
+    tmdb_id, tmdb_season = _tmdb_season(show, season)
+    if not tmdb_id or season == 0 and show.season_map:
         return None
-    key = (tmdb_id, season)
+    key = (tmdb_id, tmdb_season)
     if key not in cache:
-        cache[key] = await get_season_metadata(tmdb_id, season)
+        cache[key] = await get_season_metadata(tmdb_id, tmdb_season)
     return cache[key]
 
 
 async def _episode_for(session, show: Show, season: int, ep: int | None,
                        ep_end: int | None, file_title: str | None,
                        cache: dict) -> Episode:
-    sm = await _season_meta(cache, show.tmdb_id, season)
+    sm = await _season_meta(cache, show, season)
     if not await session.scalar(select(Season.id).where(
             Season.show_id == show.id, Season.season_number == season)):
         session.add(Season(
@@ -195,6 +205,43 @@ def _apply_show_meta(show: Show, meta: dict) -> None:
     show.certification = meta.get("certification") or None
     show.status = meta.get("status")
     show.first_air_date = meta.get("first_air_date")
+
+
+async def rematch_show(show_id: int, tmdb_id: int, season_map: list | None) -> dict:
+    """Point a show at a TMDB entry (+ optional season map) and refresh the
+    show, its season names and every episode's title/description/still."""
+    from .metadata import get_show_metadata_by_id
+    meta = await get_show_metadata_by_id(tmdb_id)
+    if not meta:
+        return {"ok": False, "error": f"TMDB has no show {tmdb_id}"}
+    cache: dict = {}
+    async with SessionLocal() as session:
+        show = await session.get(Show, show_id)
+        if not show:
+            return {"ok": False, "error": "no such show"}
+        _apply_show_meta(show, meta)
+        show.season_map = season_map
+        updated = 0
+        for season in (await session.scalars(select(Season).where(Season.show_id == show_id))).all():
+            sm = await _season_meta(cache, show, season.season_number)
+            if sm:
+                season.name = (f"Season {season.season_number}" if show.season_map
+                               else sm.get("name")) or season.name
+                season.overview, season.poster_path, season.air_date = (
+                    sm.get("overview"), sm.get("poster_path"), sm.get("air_date"))
+        for e in (await session.scalars(select(Episode).where(Episode.show_id == show_id))).all():
+            if e.episode_number is None:
+                continue
+            em = ((await _season_meta(cache, show, e.season_number)) or {}).get(
+                "episodes", {}).get(e.episode_number)
+            if em:
+                e.title = em.get("title") or e.title
+                e.overview, e.still_path = em.get("overview"), em.get("still_path")
+                e.air_date, e.runtime, e.tmdb_rating = (
+                    em.get("air_date"), em.get("runtime"), em.get("rating"))
+                updated += 1
+        await session.commit()
+        return {"ok": True, "show": show.title, "episodes_updated": updated}
 
 
 async def scan_shows(stats: dict) -> None:
