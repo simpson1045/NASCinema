@@ -746,5 +746,10 @@ Future<String?> playerCurrentAudioLang() async =>
 /// A notice on the video (mpv's OSD — draws in the native window).
 void playerShowText(String text, {int ms = 3000}) => _mpv?.showText(text, ms: ms);
 
-void playerLoadMedia(String media, {double start = 0, String? alang}) =>
-    _mpv?.loadFile(media, start: start, alang: alang);
+/// [play]: un-pause after loading. mpv pauses itself at the end of a file
+/// (keep-open holds the last frame), and that pause carried into the next
+/// episode — it loaded and sat at 0:00 (2026-10-13).
+void playerLoadMedia(String media, {double start = 0, String? alang, bool play = false}) {
+  _mpv?.loadFile(media, start: start, alang: alang);
+  if (play) _mpv?.setPaused(false);
+}

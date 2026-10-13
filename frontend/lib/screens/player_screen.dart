@@ -293,7 +293,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final p = await ApiService(widget.baseUrl).getPlay(next.fileId, client: 'native');
       if (!mounted) return;
       playerShowText('Up next:  ${next.label}', ms: 5000);
-      playerLoadMedia(p.path ?? '${widget.baseUrl}${p.url}', start: 0, alang: lang);
+      playerLoadMedia(p.path ?? '${widget.baseUrl}${p.url}', start: 0, alang: lang, play: true);
       setState(() {
         _fileId = next!.fileId;
         _title = next.title;
