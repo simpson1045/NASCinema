@@ -41,7 +41,12 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   intact. Revival gaps (S9, 11, 13–17, 20) fill by normal scans — no re-match needed.
 - 680c38b deployed too: The Mask, The Incredibles, Monty Python & the Holy Grail, First
   Blood now in the library (scan: 4 added, 0 errors).
-- Next: Up Next PIP overlay (movies) when Matt wants it.
+- **b62 (3bcf836) tagged, NOT installed (Matt watching):** white flash fixed (embed
+  window created hidden, shown when mpv reports video-params, 8 s fallback); next episode
+  loads in place (PlayerScreen.nextEpisode → playerLoadMedia + "Up next" OSD; web keeps
+  close/reopen); DD+/AC3 bitstream re-opens the track after seeks (popping after rewind,
+  confirmed fixed live by an aid toggle). Untested on ELKO — verify all three.
+- Next: full Up Next (PIP shrink, countdown screen, movie auto-play) when Matt wants it.
 - (old) Next: Step 2 = app (TV Shows row, Continue Watching with episodes, show page with
   season picker + episode list, play in the same player, auto-next-episode).
 
