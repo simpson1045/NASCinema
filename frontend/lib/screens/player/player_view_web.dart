@@ -232,3 +232,4 @@ void setVersionsHandler(void Function()? h) {}
 void playerOpenMenu(Map<String, Object?> menu) {}
 Future<String?> playerCurrentAudioLang() async => null;
 void playerLoadMedia(String media, {double start = 0, String? alang}) {}
+void playerShowText(String text, {int ms = 3000}) {}

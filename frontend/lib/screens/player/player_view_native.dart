@@ -195,7 +195,7 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
     unawaited(TheaterControl.instance.onPlayStarted(diag: _diag));
     final dpr = MediaQuery.of(context).devicePixelRatio;
     final rect = _physicalRect();
-    final win = rect == null ? null : EmbedWindow.create(rect);
+    final win = rect == null ? null : EmbedWindow.create(rect, visible: false);
     if (win == null) {
       _diag('embed window create failed');
       if (mounted) setState(() => _failed = true);
@@ -236,6 +236,9 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
         if (_mpv == c) c.showHints(versions: _versionsHandler != null);
       });
       unawaited(_matchRefreshRate(c).then((_) => _matchDynamicRange(c)));
+      unawaited(_revealWhenFramed(c, win));
+    } else {
+      win.setVisible(true);
     }
     // Geometry truth into the log (letterbox debugging): our window chain +
     // mpv's own belief about its window/video size, at launch and settled.
@@ -277,6 +280,21 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
       return;
     }
     _diag('refresh: container-fps never reported — no match attempted');
+  }
+
+  /// Show the (hidden) video window once mpv has a picture — never its white
+  /// first paint. Fallback: show after 8 s regardless. An overlay that's open
+  /// by then keeps it hidden (playerSetOverlayOpen restores it on dismiss).
+  Future<void> _revealWhenFramed(MpvController c, EmbedWindow win) async {
+    for (var i = 0; i < 80; i++) {
+      if (!mounted || _win != win) return;
+      if (c.videoW != null) {
+        await Future.delayed(const Duration(milliseconds: 150));
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    if (mounted && _win == win && !_overlayOpen) win.setVisible(true);
   }
 
   /// SDR film → SDR signal (Windows HDR off for the film, back on at stop).
@@ -368,8 +386,11 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
 /// and restore on dismiss. No-op on the media_kit leg (real texture, real
 /// compositing).
 void playerSetOverlayOpen(bool open) {
+  _overlayOpen = open;
   if (_useMpv) _embedWin?.setVisible(!open);
 }
+
+bool _overlayOpen = false;
 
 /// Stats overlay: Flutter's panel can't draw above the native video, so the
 /// mpv leg shows mpv's own in-video stats page instead. Returns true when
@@ -722,5 +743,8 @@ Future<String?> playerCurrentAudioLang() async =>
     await _mpv?.currentAudioLang();
 
 /// Switch the live player to another file (another version) in place.
+/// A notice on the video (mpv's OSD — draws in the native window).
+void playerShowText(String text, {int ms = 3000}) => _mpv?.showText(text, ms: ms);
+
 void playerLoadMedia(String media, {double start = 0, String? alang}) =>
     _mpv?.loadFile(media, start: start, alang: alang);

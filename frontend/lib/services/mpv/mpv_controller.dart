@@ -276,7 +276,21 @@ class MpvController {
     // interrupts playback, while files that trip mid-play on their own (that
     // Monsters, Inc. encode, ~every 50 s) would get a blip a minute.
     // Debounced so a burst of rewinds resets once.
-    ipc.observe('seeking', (v) => _lastSeek = DateTime.now());
+    ipc.observe('seeking', (v) {
+      _lastSeek = DateTime.now();
+      // DD+/Dolby Digital bitstream: a rewind can leave mpv's HDMI burst
+      // packing misaligned and the receiver POPS on the broken frames (Mega-
+      // Brands, 2026-10-12) — re-opening the track (no seek) fixed it live.
+      // So after a seek settles, re-open once. Skipped right after our own
+      // reset, so its internal re-sync can't loop.
+      if (v == false &&
+          (_outFormat == 'spdif-eac3' || _outFormat == 'spdif-ac3') &&
+          DateTime.now().difference(_lastReset) > const Duration(seconds: 2)) {
+        _audioResetTimer?.cancel();
+        _audioResetTimer =
+            Timer(const Duration(milliseconds: 400), _resetAudioTrack);
+      }
+    });
     ipc.command(['request_log_messages', 'warn']);
     _logSub = ipc.events.listen((e) {
       if (e['event'] == 'log-message' &&
@@ -363,9 +377,12 @@ class MpvController {
     });
   }
 
+  DateTime _lastReset = DateTime.fromMillisecondsSinceEpoch(0);
+
   Future<void> _resetAudioTrack() async {
     final ipc = _ipc;
     if (ipc == null || _disposed) return;
+    _lastReset = DateTime.now();
     final aid = await ipc.get('aid');
     if (aid == null || aid == false || _disposed) return;
     ipc.set('aid', 'no');

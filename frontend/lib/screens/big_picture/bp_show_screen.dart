@@ -130,6 +130,7 @@ class _BpShowScreenState extends State<BpShowScreen> {
       final habitOn = await TrackPick.subtitlesHabit();
       final sub = habitOn ? TrackPick.preferredSubtitle(f) : null;
       if (!mounted) return;
+      var current = ep; // advances as the player moves on in place
       final result = await Navigator.of(context).push<Object?>(MaterialPageRoute(
         builder: (_) => PlayerScreen(
           fileId: f.id,
@@ -140,8 +141,20 @@ class _BpShowScreenState extends State<BpShowScreen> {
           subtitleTrack: sub ?? (TrackPick.autoSubtitle(f) == null ? 0 : null),
           versions: ep.files,
           popOnEnd: true,
+          nextEpisode: () async {
+            final n = _after(current);
+            if (n == null || n.files.isEmpty) return null;
+            current = n;
+            return PlayerNext(
+              fileId: n.files.first.id,
+              title: '${_show.title} · ${n.code} · ${n.displayTitle}',
+              label: '${n.code} · ${n.displayTitle}',
+              versions: n.files,
+            );
+          },
         ),
       ));
+      ep = current;
       if (!mounted) return;
       _focus.requestFocus();
       await _load();

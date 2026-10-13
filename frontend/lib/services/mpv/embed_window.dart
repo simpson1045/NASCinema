@@ -90,7 +90,11 @@ class EmbedWindow {
 
   /// Find the app's root window and create the child over [physicalBounds].
   /// Returns null if the root can't be found (never expected in practice).
-  static EmbedWindow? create(Rect physicalBounds) {
+  ///
+  /// [visible] false creates it hidden: the player shows it only once mpv has
+  /// a frame up — a freshly made mpv window paints WHITE until its first
+  /// frame, the flash at the start of everything (2026-10-12).
+  static EmbedWindow? create(Rect physicalBounds, {bool visible = true}) {
     final cls = 'FLUTTER_RUNNER_WIN32_WINDOW'.toNativeUtf16();
     final root = _findWindowW(cls, nullptr);
     calloc.free(cls);
@@ -102,7 +106,7 @@ class EmbedWindow {
       0,
       staticCls,
       none,
-      _wsChild | _wsVisible | _wsClipSiblings | _ssBlackRect,
+      _wsChild | (visible ? _wsVisible : 0) | _wsClipSiblings | _ssBlackRect,
       physicalBounds.left.round(),
       physicalBounds.top.round(),
       physicalBounds.width.round(),
@@ -122,7 +126,7 @@ class EmbedWindow {
     _setWindowPos(h, _hwndTop, physicalBounds.left.round(),
         physicalBounds.top.round(), physicalBounds.width.round(),
         physicalBounds.height.round(),
-        _swpNoActivate | _swpShowWindow | _swpAsyncWindowPos);
+        _swpNoActivate | (visible ? _swpShowWindow : 0) | _swpAsyncWindowPos);
     return w;
   }
 

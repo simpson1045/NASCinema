@@ -19,6 +19,21 @@ import 'cast_picker.dart';
 import 'player/player_view.dart';
 import 'player/scrubber.dart';
 
+/// What a show page hands the player for the next episode.
+class PlayerNext {
+  const PlayerNext({
+    required this.fileId,
+    required this.title,
+    required this.label,
+    this.versions = const [],
+  });
+
+  final int fileId;
+  final String title; // the player's title line
+  final String label; // "S1 · E5 · Title" for the Up next notice
+  final List<MovieFile> versions;
+}
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -31,6 +46,7 @@ class PlayerScreen extends StatefulWidget {
     this.versions = const [],
     this.externalSubtitle,
     this.popOnEnd = false,
+    this.nextEpisode,
   });
 
   final int fileId;
@@ -52,6 +68,11 @@ class PlayerScreen extends StatefulWidget {
   /// leave this off (the player holds the last frame).
   final bool popOnEnd;
 
+  /// TV: the episode after the one that just ended (null = none). With it,
+  /// the player loads the next episode in place — no close, no bounce back
+  /// to the show page, no second start-up.
+  final Future<PlayerNext?> Function()? nextEpisode;
+
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
@@ -61,6 +82,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // must not clear its successor's).
   static Object? _hooksOwner;
   late int _fileId = widget.fileId; // changes when you switch versions
+  late String _title = widget.title; // and with the next episode
+  late List<MovieFile> _versions = widget.versions;
   String? _mode;
   String? _reason;
   String? _error;
@@ -150,11 +173,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     PadDispatch.add(_onPad);
     _hooksOwner = this;
     setPlayerMessageHandler(_onPlayerMessage);
-    setVersionsHandler(widget.versions.length > 1 ? _openVersions : null);
+    setVersionsHandler(_versions.length > 1 ? _openVersions : null);
     FlagService.register(this, 'player', widget.baseUrl, () => {
           'kind': 'movie',
           'media_file_id': _fileId,
-          'movie_title': widget.title,
+          'movie_title': _title,
           'position_seconds': _position,
           'mode': _mode,
           'source': _source,
@@ -226,7 +249,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'type': 'nascinema_versions',
       'title': 'Versions',
       'items': [
-        for (final v in widget.versions)
+        for (final v in _versions)
           {
             'title': v.label ?? v.filename,
             'hint': v.quality ?? '',
@@ -246,6 +269,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (i >= 0 && i + 1 < args.length) {
       final id = int.tryParse(args[i + 1]);
       if (id != null) _switchVersion(id);
+    }
+  }
+
+  /// An episode ended: load the next one into this same player (with an
+  /// "Up next" notice), or close with 'ended' when there isn't one.
+  Future<void> _onEnded() async {
+    PlayerNext? next;
+    // In-place only on the native player (ELKO); the browser leg can't swap
+    // media, so it closes and the show page opens the next one.
+    if (_nativeVideo) {
+      try {
+        next = await widget.nextEpisode?.call();
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (next == null) {
+      Navigator.of(context).pop('ended');
+      return;
+    }
+    final lang = await playerCurrentAudioLang();
+    try {
+      final p = await ApiService(widget.baseUrl).getPlay(next.fileId, client: 'native');
+      if (!mounted) return;
+      playerShowText('Up next:  ${next.label}', ms: 5000);
+      playerLoadMedia(p.path ?? '${widget.baseUrl}${p.url}', start: 0, alang: lang);
+      setState(() {
+        _fileId = next!.fileId;
+        _title = next.title;
+        _versions = next.versions;
+        _mode = p.mode;
+        _reason = p.reason;
+        _source = p.source;
+        _position = 0;
+        _duration = 0;
+        _resumeApplied = true;
+        _endHandled = false;
+      });
+      setVersionsHandler(_versions.length > 1 ? _openVersions : null);
+      _loadSubs();
+    } catch (_) {
+      if (mounted) Navigator.of(context).pop('ended');
     }
   }
 
@@ -362,7 +426,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (widget.popOnEnd && !_endHandled && _duration > 0 && playerEnded()) {
           _endHandled = true;
           ApiService(widget.baseUrl).saveProgress(_fileId, _duration, _activeSub);
-          Navigator.of(context).pop('ended');
+          unawaited(_onEnded());
           return;
         }
         // Resume once the player knows its duration (so the seek lands).
@@ -732,7 +796,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       cast: _cast,
       baseUrl: widget.baseUrl,
       fileId: _fileId,
-      title: widget.title,
+      title: _title,
       activeSubtitleId: _activeSub,
     );
   }
@@ -912,7 +976,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             icon: const Icon(Icons.arrow_back, color: Colors.white),
           ),
           Expanded(
-            child: Text(widget.title,
+            child: Text(_title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
