@@ -50,6 +50,21 @@ class _BpShowScreenState extends State<BpShowScreen> {
   int _seasonIdx = 0;
   int _episodeIdx = 0;
 
+  // One key per season tab, so the selected tab can be scrolled into view
+  // (a 21-season show runs off the right edge — Whose Line).
+  final _tabKeys = <int, GlobalKey>{};
+
+  void _revealSeason() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _tabKeys[_seasonIdx]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx,
+            alignment: 0.35, duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic);
+      }
+    });
+  }
+
   static const _cardW = 420.0;
   static const _cardH = 236.0;
   static const _gap = 28.0;
@@ -101,6 +116,7 @@ class _BpShowScreenState extends State<BpShowScreen> {
         _loading = false;
         if (first) _focusEpisode(d.nextUp ?? (d.episodes.isEmpty ? null : d.episodes.first));
       });
+      _revealSeason();
       if (first && widget.playEpisodeId != null) {
         final e = d.episodes.where((e) => e.id == widget.playEpisodeId).firstOrNull;
         if (e != null) unawaited(_play(e));
@@ -161,6 +177,7 @@ class _BpShowScreenState extends State<BpShowScreen> {
       final next = result == 'ended' ? _after(ep) : null;
       if (next == null) {
         setState(() => _focusEpisode(_d?.nextUp ?? ep));
+        _revealSeason();
         return;
       }
       FlagService.say('Up next: ${next.code} · ${next.displayTitle}');
@@ -212,6 +229,7 @@ class _BpShowScreenState extends State<BpShowScreen> {
       _seasonIdx = s;
       _episodeIdx = 0;
     });
+    _revealSeason();
   }
 
   void _sideways(int dir) {
@@ -483,34 +501,46 @@ class _BpShowScreenState extends State<BpShowScreen> {
 
   Widget _seasonTabs() {
     final focusedRow = _row == _Row.seasons;
-    return ListView.separated(
+    return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      itemCount: _seasons.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 14),
-      itemBuilder: (_, i) {
-        final s = _seasons[i];
-        final selected = i == _seasonIdx;
-        final focused = focusedRow && selected;
-        return GestureDetector(
-          onTap: () => setState(() {
-            _seasonIdx = i;
-            _episodeIdx = 0;
-          }),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
-            decoration: BoxDecoration(
-              color: focused ? Colors.white : (selected ? const Color(0x55FFFFFF) : Colors.transparent),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: selected ? Colors.white : const Color(0x44FFFFFF), width: 2),
-            ),
-            child: Text(s.name,
-                style: TextStyle(
-                    color: focused ? Colors.black : Colors.white,
-                    fontSize: 24,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
-          ),
-        );
+      // Every tab built (a show has a couple dozen seasons at most), so the
+      // selected one can always be scrolled into view.
+      child: Row(children: [
+        for (var i = 0; i < _seasons.length; i++) ...[
+          if (i > 0) const SizedBox(width: 14),
+          _seasonTab(i, focusedRow),
+        ],
+        const SizedBox(width: 90),
+      ]),
+    );
+  }
+
+  Widget _seasonTab(int i, bool focusedRow) {
+    final s = _seasons[i];
+    final selected = i == _seasonIdx;
+    final focused = focusedRow && selected;
+    return GestureDetector(
+      key: _tabKeys.putIfAbsent(i, GlobalKey.new),
+      onTap: () {
+        setState(() {
+          _seasonIdx = i;
+          _episodeIdx = 0;
+        });
+        _revealSeason();
       },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+        decoration: BoxDecoration(
+          color: focused ? Colors.white : (selected ? const Color(0x55FFFFFF) : Colors.transparent),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: selected ? Colors.white : const Color(0x44FFFFFF), width: 2),
+        ),
+        child: Text(s.name,
+            style: TextStyle(
+                color: focused ? Colors.black : Colors.white,
+                fontSize: 24,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+      ),
     );
   }
 
