@@ -34,8 +34,14 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   Play/Resume S·E + Start Over, season tabs, LB/RB, episode cards w/ progress + watched);
   PlayerScreen.popOnEnd (episodes: save watched at EOF, pop 'ended' → next episode,
   never rolls into Specials). playerEnded() on native/web/stub. _BpTile generalized.
-- Still to do: Whose Line re-match endpoint (after the NAS Claude's cleanup); deploy
-  680c38b after the TV scan; Up Next PIP overlay (movies) later.
+- **Deployed 7fc917f (Oct 12):** migration 0018 shows.season_map + POST
+  /api/shows/{id}/rematch {tmdb_id, season_map}. Whose Line (show 50) re-matched to
+  1998 #61018 with season_map [[1,61018,0],[9,64978,-8]] (folder 9–21 = revival S1–13):
+  394 eps / 394 files, S1–8 now the SD originals (NAS Claude swapped them Oct 12), titles
+  intact. Revival gaps (S9, 11, 13–17, 20) fill by normal scans — no re-match needed.
+- 680c38b deployed too: The Mask, The Incredibles, Monty Python & the Holy Grail, First
+  Blood now in the library (scan: 4 added, 0 errors).
+- Next: Up Next PIP overlay (movies) when Matt wants it.
 - (old) Next: Step 2 = app (TV Shows row, Continue Watching with episodes, show page with
   season picker + episode list, play in the same player, auto-next-episode).
 
