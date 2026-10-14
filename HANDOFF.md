@@ -7,7 +7,24 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-11) — TV shows Step 1 LIVE (backend); b60 installed
+## Latest (2026-10-14) — b66 live: audio-stream-silence fixes pause/rewind crackle
+
+- **b66 installed (5344ffc):** `--audio-stream-silence=yes` by default — pausing or
+  rewinding DD/DD+ made the Denon lose lock and crackle/pop; a silent stream keeps it
+  locked. Enabled live first, Matt confirmed ("remarkably better"). The re-open-after-seek
+  band-aid (b62/b65) removed; TrueHD warning reset + PCM bitstream guard kept.
+- Also live since b64: next episode loads in place AND plays (mpv's EOF pause carried
+  over); b63 season tabs scroll; b62 no white flash (window hidden until first frame).
+- **Backend 5344ffc:** probes with no tracks → error_files + retried every scan
+  (_trackless_ids); _refresh never overwrites rows with an empty probe. Whose Line S01E06
+  re-probed (had 0 streams → subtitles started off). 7 unreadable files (5 HP Open Matte,
+  2 Blue Collar YTS) — Matt passing to the NAS Claude to re-grab.
+- ELKO installs end with C:\Users\matth\.adms-desktop\front_app.ps1 via run_desktop
+  (hide ffplay console, foreground the app). keep_audio_alive.vbs now in Startup (hidden);
+  old .bat at C:\Users\matth\keep_audio_alive.bat.bak; current ffplay is the old one.
+- Open: full Up Next (PIP/countdown/movie auto-play); Monsters University test reminder.
+
+## Earlier (2026-10-11) — TV shows Step 1 LIVE (backend); b60 installed
 
 - **TV backend deployed (bbed513):** migration 0017 (shows / seasons / episodes,
   media_files.episode_id; episode files are kind='episode'). `app/shows_scanner.py` runs
