@@ -298,6 +298,55 @@ async def home(session: AsyncSession = Depends(get_session)) -> dict:
             "collections": await _collections(movies, summ, curated=True)}
 
 
+@router.get("/movies/{movie_id}/up-next")
+async def movie_up_next(movie_id: int, session: AsyncSession = Depends(get_session)) -> dict:
+    """What plays after this movie, so the screen is never left dead: the next
+    film in its franchise (release order); else the closest unwatched genre
+    match; else any unwatched film; else anything. {"movie": summary,
+    "reason": "Next in Jurassic Park"} — or {"movie": null}."""
+    movie = await session.get(Movie, movie_id)
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    library = (await session.scalars(
+        select(Movie).options(selectinload(Movie.files)))).all()
+    # Started = any of its files has a resume point past the opening.
+    prog = (await session.execute(
+        select(MediaFile.movie_id, WatchProgress.position_seconds)
+        .join(WatchProgress, WatchProgress.media_file_id == MediaFile.id))).all()
+    started = {mid for mid, pos in prog if mid and (pos or 0) > 30}
+    playable = [m for m in library if m.id != movie.id
+                and any(f.kind == "feature" for f in m.files)]
+
+    def pick(m: Movie, reason: str) -> dict:
+        return {"movie": _summary(m), "reason": reason}
+
+    if movie.collection_id:
+        series = _release_order([m for m in library if m.collection_id == movie.collection_id
+                                 and any(f.kind == "feature" for f in m.files)])
+        ids = [m.id for m in series]
+        if movie.id in ids and ids.index(movie.id) + 1 < len(series):
+            return pick(series[ids.index(movie.id) + 1],
+                        f"Next in {franchise_name(movie.collection_name) or movie.collection_name}")
+
+    mine = set(movie.genres or [])
+
+    def closeness(m: Movie) -> float:
+        theirs = set(m.genres or [])
+        return len(mine & theirs) / len(mine | theirs) if mine and theirs else 0.0
+
+    unwatched = [m for m in playable if m.id not in started]
+    close = sorted((m for m in unwatched if closeness(m) >= 0.4),
+                   key=lambda m: (closeness(m), m.popularity or 0), reverse=True)
+    if close:
+        # A little variety among the best few, so it isn't the same film every time.
+        return pick(random.choice(close[:5]), f"Because you watched {movie.title}")
+    if unwatched:
+        return pick(random.choice(unwatched), "Something you haven't seen")
+    if playable:
+        return pick(random.choice(playable), "From your library")
+    return {"movie": None, "reason": None}
+
+
 @router.get("/movies/{movie_id}")
 async def get_movie(
     movie_id: int, session: AsyncSession = Depends(get_session)
