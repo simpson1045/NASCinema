@@ -443,7 +443,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final p = await ApiService(widget.baseUrl).getPlay(next.fileId, client: 'native');
       if (!mounted) return;
       next.onStart?.call();
-      playerShowText('Up next:  ${next.heading}${next.subtitle.isEmpty ? '' : '  ·  ${next.subtitle}'}', ms: 4000);
       playerLoadMedia(p.path ?? '${widget.baseUrl}${p.url}', start: 0, alang: lang, play: true);
       setState(() {
         _fileId = next.fileId;
