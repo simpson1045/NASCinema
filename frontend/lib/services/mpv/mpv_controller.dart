@@ -281,14 +281,17 @@ class MpvController {
       // DD+/Dolby Digital bitstream: a rewind can leave mpv's HDMI burst
       // packing misaligned and the receiver POPS on the broken frames (Mega-
       // Brands, 2026-10-12) — re-opening the track (no seek) fixed it live.
-      // So after a seek settles, re-open once. Skipped right after our own
+      // Re-open once, 1.5 s after the LAST seek: at 0.4 s it ran before
+      // playback had settled and the popping stayed (Whose Line S1E6, 10-13);
+      // the same reset a moment later was clean. Skipped right after our own
       // reset, so its internal re-sync can't loop.
-      if (v == false &&
-          (_outFormat == 'spdif-eac3' || _outFormat == 'spdif-ac3') &&
+      // Restarted on every seeking change (start AND end), so it lands 1.5 s
+      // after everything settles — even a slow, buffering seek.
+      if ((_outFormat == 'spdif-eac3' || _outFormat == 'spdif-ac3') &&
           DateTime.now().difference(_lastReset) > const Duration(seconds: 2)) {
         _audioResetTimer?.cancel();
         _audioResetTimer =
-            Timer(const Duration(milliseconds: 400), _resetAudioTrack);
+            Timer(const Duration(milliseconds: 1500), _resetAudioTrack);
       }
     });
     ipc.command(['request_log_messages', 'warn']);
