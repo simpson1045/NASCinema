@@ -327,6 +327,21 @@ def _scan_error(stats: dict, path: str, reason: str) -> None:
     log.warning("scan: %s — %s", path, reason)
 
 
+async def _trackless_ids(session) -> set[int]:
+    """Files saved with no track rows — a probe that came back empty (Whose
+    Line S01E06, read while the NAS Claude was still swapping files in). Every
+    scan retries these instead of treating them as done."""
+    from sqlalchemy import exists
+    rows = await session.scalars(select(MediaFile.id).where(
+        ~exists().where(MediaStream.media_file_id == MediaFile.id)))
+    return set(rows.all())
+
+
+def _no_tracks(stats: dict, path: str) -> None:
+    _scan_error(stats, path, "ffprobe found no tracks (unreadable or still copying) — "
+                             "retried on the next scan")
+
+
 def _rewritten(path: str, size_bytes: int | None, probed_at: datetime | None) -> bool:
     """A known path whose file was replaced in place (a track strip, a remux):
     the size changed, or it was modified after we last probed it."""
@@ -348,7 +363,8 @@ async def _refresh(session, file_id: int) -> bool:
         select(MediaFile).options(selectinload(MediaFile.streams)).where(MediaFile.id == file_id)
     )
     probe = await probe_file(mf.path) if mf else None
-    if not probe:
+    # No tracks = a failed read, not a result — keep the old rows (if any).
+    if not probe or not probe.get("streams"):
         return False
     try:
         await apply_probe(session, mf, probe)
@@ -387,6 +403,7 @@ async def _scan(limit: int | None = None) -> dict:
     meta_cache: dict[tuple, dict | None] = {}
 
     async with SessionLocal() as session:
+        trackless = await _trackless_ids(session)
         reached_limit = False
         for directory in dirs:
             if reached_limit:
@@ -414,11 +431,11 @@ async def _scan(limit: int | None = None) -> dict:
                         )
                     ).first()
                     if known:
-                        if _rewritten(full, known.size_bytes, known.probed_at):
+                        if known.id in trackless or _rewritten(full, known.size_bytes, known.probed_at):
                             if await _refresh(session, known.id):
                                 stats["refreshed"] += 1
                             else:
-                                _scan_error(stats, full, "re-probe failed (file changed but ffprobe couldn't read it)")
+                                _no_tracks(stats, full)
                         else:
                             stats["skipped"] += 1
                         continue
@@ -437,6 +454,8 @@ async def _scan(limit: int | None = None) -> dict:
                         movie = await _find_or_create_movie(session, title, year, meta)
 
                         probe = await probe_file(full) or {}
+                        if not probe.get("streams"):
+                            _no_tracks(stats, full)  # saved anyway; retried next scan
                         mf = MediaFile(
                             movie_id=movie.id,
                             path=full,

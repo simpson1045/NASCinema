@@ -25,6 +25,8 @@ from .probe import probe_file
 from .scanner import (
     EXCLUDED_DIRS,
     VIDEO_EXTENSIONS,
+    _no_tracks,
+    _trackless_ids,
     _carry_over,
     _refresh,
     _rewritten,
@@ -256,6 +258,7 @@ async def scan_shows(stats: dict) -> None:
     added: dict[int, list[int]] = defaultdict(list)  # episode id -> new file ids
 
     async with SessionLocal() as session:
+        trackless = await _trackless_ids(session)
         for root in roots:
             for name in sorted(os.listdir(root)):
                 show_dir = os.path.join(root, name)
@@ -284,17 +287,19 @@ async def scan_shows(stats: dict) -> None:
                         select(MediaFile.id, MediaFile.size_bytes, MediaFile.probed_at)
                         .where(MediaFile.path == path))).first()
                     if known:
-                        if _rewritten(path, known.size_bytes, known.probed_at):
+                        if known.id in trackless or _rewritten(path, known.size_bytes, known.probed_at):
                             if await _refresh(session, known.id):
                                 stats["episodes_refreshed"] += 1
                             else:
-                                _scan_error(stats, path, "re-probe failed")
+                                _no_tracks(stats, path)
                         continue
                     try:
                         season, ep, ep_end, ftitle = _parse_episode(path, show_dir)
                         episode = await _episode_for(session, show, season, ep, ep_end,
                                                      ftitle, cache)
                         probe = await probe_file(path) or {}
+                        if not probe.get("streams"):
+                            _no_tracks(stats, path)  # saved anyway; retried next scan
                         mf = MediaFile(
                             episode_id=episode.id, kind="episode", path=path,
                             size_bytes=probe.get("size_bytes"),
