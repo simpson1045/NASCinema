@@ -15,23 +15,39 @@ import '../services/cast_controller.dart';
 import '../services/flag_service.dart';
 import '../services/gamepad/pad_dispatch.dart';
 import '../theme/app_theme.dart';
+import '../widgets/pad_hints.dart';
+import 'big_picture/bp_hero.dart' show bpLogoOver;
 import 'cast_picker.dart';
 import 'player/player_view.dart';
 import 'player/scrubber.dart';
 
 /// What a show page hands the player for the next episode.
-class PlayerNext {
-  const PlayerNext({
+/// What plays after this title — a show page hands over the next episode, a
+/// movie page the next film (franchise, else something like it). Drives the
+/// Up Next screen and the in-place handoff.
+class UpNextInfo {
+  const UpNextInfo({
     required this.fileId,
     required this.title,
-    required this.label,
+    required this.heading,
+    this.subtitle = '',
+    this.reason = '',
+    this.backdropUrl,
+    this.logoUrl,
     this.versions = const [],
+    this.onStart,
   });
 
   final int fileId;
-  final String title; // the player's title line
-  final String label; // "S1 · E5 · Title" for the Up next notice
+  final String title; // the player's title line once it plays
+  final String heading; // big name on the Up Next screen (the logo's fallback)
+  final String subtitle; // "S1 · E5 · Title" / "1994 · Comedy, Family"
+  final String reason; // "Next in Jurassic Park" / "Because you watched …"
+  final String? backdropUrl;
+  final String? logoUrl;
   final List<MovieFile> versions;
+  // Called when it actually starts (not when it's merely offered).
+  final void Function()? onStart;
 }
 
 class PlayerScreen extends StatefulWidget {
@@ -46,7 +62,7 @@ class PlayerScreen extends StatefulWidget {
     this.versions = const [],
     this.externalSubtitle,
     this.popOnEnd = false,
-    this.nextEpisode,
+    this.upNext,
   });
 
   final int fileId;
@@ -68,10 +84,11 @@ class PlayerScreen extends StatefulWidget {
   /// leave this off (the player holds the last frame).
   final bool popOnEnd;
 
-  /// TV: the episode after the one that just ended (null = none). With it,
-  /// the player loads the next episode in place — no close, no bounce back
-  /// to the show page, no second start-up.
-  final Future<PlayerNext?> Function()? nextEpisode;
+  /// What plays next (null = nothing). On the native player: ~20 s before the
+  /// end the video shrinks to a corner over a fullscreen Up Next screen (A play
+  /// now · B cancel · Y back to fullscreen), and at the end the next title
+  /// loads in place — no close, no bounce back to the page.
+  final Future<UpNextInfo?> Function()? upNext;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -274,28 +291,162 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// An episode ended: load the next one into this same player (with an
   /// "Up next" notice), or close with 'ended' when there isn't one.
+  // ── Up Next ─────────────────────────────────────────────────────────────
+  UpNextInfo? _next; // fetched ~45 s before the end
+  bool _nextAsked = false;
+  bool _pip = false; // the video is in the corner, Up Next screen behind
+  bool _keepFull = false; // Y: back to fullscreen, still auto-plays at the end
+  bool _upNextCancelled = false; // B: no auto-play; leave at the end
+  Timer? _pipSync;
+
+  bool get _upNextAllowed =>
+      widget.upNext != null && _nativeVideo && _duration > 120 && !_upNextCancelled;
+
+  /// Called from the poll: fetch the next title early, shrink into the PIP
+  /// for the last 20 s.
+  void _upNextTick() {
+    if (!_upNextAllowed) return;
+    final left = _duration - _position;
+    if (!_nextAsked && left <= 45) {
+      _nextAsked = true;
+      widget.upNext!().then((n) {
+        if (mounted) setState(() => _next = n);
+      }).catchError((_) {});
+    }
+    if (_next != null && !_pip && !_keepFull && left <= 20 && left > 1) _setPip(true);
+  }
+
+  /// Animate the video into / out of the corner; the native window is
+  /// re-glued every frame of the slide.
+  void _setPip(bool on) {
+    setState(() => _pip = on);
+    _pipSync?.cancel();
+    var n = 0;
+    _pipSync = Timer.periodic(const Duration(milliseconds: 16), (t) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => playerSyncBounds());
+      if (++n > 40) t.cancel();
+    });
+  }
+
+  void _playNextNow() {
+    final n = _next;
+    if (n == null) return;
+    ApiService(widget.baseUrl).saveProgress(_fileId, _duration, _activeSub);
+    unawaited(_startNext(n));
+  }
+
+  void _cancelUpNext() {
+    _upNextCancelled = true;
+    _setPip(false);
+  }
+
+  void _keepWatching() {
+    _keepFull = true;
+    _setPip(false);
+  }
+
+  /// The title ended: hand over to the next one in place, or close with
+  /// 'ended' (episodes / a cancelled Up Next), or hold the last frame.
   Future<void> _onEnded() async {
-    PlayerNext? next;
-    // In-place only on the native player (ELKO); the browser leg can't swap
-    // media, so it closes and the show page opens the next one.
-    if (_nativeVideo) {
+    var next = _upNextCancelled ? null : _next;
+    if (next == null && !_upNextCancelled && _nativeVideo && widget.upNext != null) {
       try {
-        next = await widget.nextEpisode?.call();
+        next = await widget.upNext!(); // short title — never got to the 45 s mark
       } catch (_) {}
     }
     if (!mounted) return;
-    if (next == null) {
+    if (next != null && _nativeVideo) {
+      await _startNext(next);
+    } else if (_upNextCancelled) {
+      Navigator.of(context).pop('cancelled'); // B: no auto-play from the page either
+    } else if (widget.popOnEnd) {
       Navigator.of(context).pop('ended');
-      return;
     }
+  }
+
+  /// Fullscreen behind the shrunken video: the next title's backdrop, its
+  /// logo centred over its line (house rule), why it's next, the countdown.
+  /// Laid out in 1920×1080 like the Big Picture pages; the video sits in
+  /// the bottom-right (1110,520 – 720×405).
+  Widget _upNextScreen(UpNextInfo n) {
+    final left = (_duration - _position).clamp(0, 999).ceil();
+    final heading = Text(n.heading,
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w800));
+    return FittedBox(
+      fit: BoxFit.cover,
+      child: SizedBox(
+        width: 1920,
+        height: 1080,
+        child: Stack(fit: StackFit.expand, children: [
+          const ColoredBox(color: NasColors.bg),
+          if (n.backdropUrl != null)
+            Image.network(n.backdropUrl!,
+                fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink()),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [Color(0xF00A0E27), Color(0xB00A0E27), Color(0x660A0E27)],
+                stops: [0.0, 0.5, 1.0],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 110,
+            top: 150,
+            width: 900,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('UP NEXT',
+                  style: TextStyle(
+                      color: NasColors.amber, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: 4)),
+              const SizedBox(height: 26),
+              bpLogoOver(
+                logo: n.logoUrl == null
+                    ? Align(alignment: Alignment.bottomCenter, child: heading)
+                    : Image.network(n.logoUrl!,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.bottomCenter,
+                        errorBuilder: (_, _, _) =>
+                            Align(alignment: Alignment.bottomCenter, child: heading)),
+                below: Text(n.subtitle,
+                    style: const TextStyle(color: NasColors.text, fontSize: 30, fontWeight: FontWeight.w700)),
+                logoHeight: 170,
+                maxWidth: 820,
+              ),
+              if (n.reason.isNotEmpty) ...[
+                const SizedBox(height: 28),
+                Text(n.reason,
+                    style: const TextStyle(color: Color(0xFFDDE2F5), fontSize: 30)),
+              ],
+              const SizedBox(height: 40),
+              Text('Starts in $left',
+                  style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 40),
+              const PadHints([
+                (PadGlyph.a, 'Play now'),
+                (PadGlyph.y, 'Back to fullscreen'),
+                (PadGlyph.b, 'Cancel'),
+              ], size: 34, fontSize: 24),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _startNext(UpNextInfo next) async {
     final lang = await playerCurrentAudioLang();
     try {
       final p = await ApiService(widget.baseUrl).getPlay(next.fileId, client: 'native');
       if (!mounted) return;
-      playerShowText('Up next:  ${next.label}', ms: 5000);
+      next.onStart?.call();
+      playerShowText('Up next:  ${next.heading}${next.subtitle.isEmpty ? '' : '  ·  ${next.subtitle}'}', ms: 4000);
       playerLoadMedia(p.path ?? '${widget.baseUrl}${p.url}', start: 0, alang: lang, play: true);
       setState(() {
-        _fileId = next!.fileId;
+        _fileId = next.fileId;
         _title = next.title;
         _versions = next.versions;
         _mode = p.mode;
@@ -305,7 +456,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _duration = 0;
         _resumeApplied = true;
         _endHandled = false;
+        _next = null;
+        _nextAsked = false;
+        _keepFull = false;
+        _upNextCancelled = false;
       });
+      if (_pip) _setPip(false);
       setVersionsHandler(_versions.length > 1 ? _openVersions : null);
       _loadSubs();
     } catch (_) {
@@ -340,6 +496,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// here, not by the focus fallback: the native video window can hold focus,
   /// which left B dead on a failed start (2026-09-27).
   bool _onPad(PadButton b) {
+    if (_pip) {
+      switch (b) {
+        case PadButton.a:
+          _playNextNow();
+          return true;
+        case PadButton.b:
+          _cancelUpNext();
+          return true;
+        case PadButton.y:
+          _keepWatching();
+          return true;
+        default:
+          return true; // nothing else while Up Next is showing
+      }
+    }
     if (_nativeVideo && playerPad(b)) return true;
     if (b == PadButton.b) {
       Navigator.of(context).maybePop();
@@ -418,12 +589,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Every Flutter frame makes DWM re-compose our window with mpv's —
         // at 23.976 Hz that cost ~20 dropped frames per 30 s; mpv embedded
         // in a window that never repaints dropped 0 (ELKO, 2026-09-28).
-        if (_nativeVideo && _player != null && !_statsVisible) {
+        if (_nativeVideo && _player != null && !_statsVisible && !_pip) {
           read();
         } else {
           setState(read);
         }
-        if (widget.popOnEnd && !_endHandled && _duration > 0 && playerEnded()) {
+        _upNextTick();
+        if ((widget.popOnEnd || widget.upNext != null) &&
+            !_endHandled && _duration > 0 && playerEnded()) {
           _endHandled = true;
           ApiService(widget.baseUrl).saveProgress(_fileId, _duration, _activeSub);
           unawaited(_onEnded());
@@ -568,11 +741,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 : const SizedBox.shrink(),
             if (_syncMode) _syncBar(),
             Expanded(
-              child: Stack(
+              child: LayoutBuilder(builder: (context, box) => Stack(
                 fit: StackFit.expand,
                 children: [
+                  // Up Next sits BEHIND the video (the native window draws on
+                  // top) and is only visible around the shrunken picture.
+                  _pip && _next != null ? _upNextScreen(_next!) : const SizedBox.shrink(),
                   _player != null
-                      ? KeyedSubtree(key: _playerHost, child: _player!)
+                      ? AnimatedPositioned(
+                          duration: const Duration(milliseconds: 450),
+                          curve: Curves.easeInOutCubic,
+                          left: _pip ? box.maxWidth * 1110 / 1920 : 0,
+                          top: _pip ? box.maxHeight * 520 / 1080 : 0,
+                          width: _pip ? box.maxWidth * 720 / 1920 : box.maxWidth,
+                          height: _pip ? box.maxHeight * 405 / 1080 : box.maxHeight,
+                          child: KeyedSubtree(key: _playerHost, child: _player!),
+                        )
                       : _error != null
                           ? Center(
                               child: Padding(
@@ -595,7 +779,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: IgnorePointer(child: _statsPanel()),
                     ),
                 ],
-              ),
+              )),
             ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 350),

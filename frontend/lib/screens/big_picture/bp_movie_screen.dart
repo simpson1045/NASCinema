@@ -260,6 +260,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
     final pick = _pick ?? TrackPick(fileId: _files.first.id);
     unawaited(pick.save(_m.id));
     playerResetLastSubtitle();
+    var current = _m; // advances as Up Next chains film to film
     _openPlayer(
       pick,
       PlayerScreen(
@@ -271,6 +272,30 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
         subtitleTrack: pick.subtitle,
         versions: _files,
         externalSubtitle: pick.external,
+        // Never leave the screen dead: the next film in the franchise, else
+        // something like it — and that one chains on in turn.
+        upNext: () async {
+          final r = await _api.getMovieUpNext(current.id);
+          if (r == null) return null;
+          final d = await _api.getMovieDetail(r.movie.id);
+          if (d.files.isEmpty) return null;
+          final next = await TrackPick.load(r.movie.id, d.files);
+          final m = d.movie;
+          return UpNextInfo(
+            fileId: next?.fileId ?? d.files.first.id,
+            title: m.title,
+            heading: m.title,
+            subtitle: [
+              if (m.year != null) '${m.year}',
+              if (m.genres.isNotEmpty) m.genres.take(2).join(', '),
+            ].join('  ·  '),
+            reason: r.reason,
+            backdropUrl: m.backdropUrl(size: 'original'),
+            logoUrl: d.logo,
+            versions: d.files,
+            onStart: () => current = m,
+          );
+        },
       ),
     );
   }

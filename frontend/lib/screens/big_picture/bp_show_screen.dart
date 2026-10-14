@@ -157,15 +157,19 @@ class _BpShowScreenState extends State<BpShowScreen> {
           subtitleTrack: sub ?? (TrackPick.autoSubtitle(f) == null ? 0 : null),
           versions: ep.files,
           popOnEnd: true,
-          nextEpisode: () async {
+          upNext: () async {
             final n = _after(current);
             if (n == null || n.files.isEmpty) return null;
-            current = n;
-            return PlayerNext(
+            return UpNextInfo(
               fileId: n.files.first.id,
               title: '${_show.title} · ${n.code} · ${n.displayTitle}',
-              label: '${n.code} · ${n.displayTitle}',
+              heading: _show.title,
+              subtitle: '${n.code} · ${n.displayTitle}',
+              reason: 'Next episode',
+              backdropUrl: n.stillUrl(size: 'original') ?? _show.backdropUrl(size: 'original'),
+              logoUrl: _d?.logo,
               versions: n.files,
+              onStart: () => current = n,
             );
           },
         ),

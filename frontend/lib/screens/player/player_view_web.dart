@@ -233,3 +233,4 @@ void playerOpenMenu(Map<String, Object?> menu) {}
 Future<String?> playerCurrentAudioLang() async => null;
 void playerLoadMedia(String media, {double start = 0, String? alang, bool play = false}) {}
 void playerShowText(String text, {int ms = 3000}) {}
+void playerSyncBounds() {}

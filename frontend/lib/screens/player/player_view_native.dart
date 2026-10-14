@@ -62,6 +62,13 @@ void setStartTracks(int? audio, int? subtitle) {
 
 // The player screen's hooks: our script-messages from uosc buttons/menus
 // ("nascinema-versions", "nascinema-version <id>"), and what ▼ opens.
+void Function()? _syncHook;
+
+/// Re-glue the native video window to its Flutter rect right now — called
+/// every frame while the player animates the Up Next picture-in-picture
+/// (a moving Positioned doesn't rebuild the view, so it can't do it itself).
+void playerSyncBounds() => _syncHook?.call();
+
 void Function(List<String> args)? _messageHandler;
 void setPlayerMessageHandler(void Function(List<String> args)? h) =>
     _messageHandler = h;
@@ -169,6 +176,7 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
   @override
   void initState() {
     super.initState();
+    _syncHook = _syncBounds;
     // The rect only exists after the first layout; create everything then.
     WidgetsBinding.instance.addPostFrameCallback((_) => _create());
     // Drift guard: layout usually rebuilds us on size changes, but position
@@ -372,6 +380,7 @@ class _MpvEmbedViewState extends State<_MpvEmbedView> {
 
   @override
   void dispose() {
+    if (_syncHook == _syncBounds) _syncHook = null;
     _track?.cancel();
     _oscTimer?.cancel();
     if (_embedWin == _win) _embedWin = null;

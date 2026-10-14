@@ -75,6 +75,23 @@ class ApiService {
     return HomeData.fromJson(jsonDecode(r.body) as Map<String, dynamic>);
   }
 
+  /// What plays after a movie (franchise next, else something like it).
+  /// Null when the server has nothing (or is too old to say).
+  Future<({Movie movie, String reason})?> getMovieUpNext(int id) async {
+    try {
+      final r = await http.get(_u('/api/movies/$id/up-next')).timeout(const Duration(seconds: 15));
+      if (r.statusCode != 200) return null;
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      if (j['movie'] is! Map) return null;
+      return (
+        movie: Movie.fromJson(j['movie'] as Map<String, dynamic>),
+        reason: (j['reason'] ?? '').toString(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Every TV show, by title. Best-effort: empty on any failure (an older
   /// server has no /api/shows), so the home screen still loads.
   Future<List<Show>> getShows() async {
