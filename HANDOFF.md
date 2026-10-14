@@ -22,7 +22,13 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 - ELKO installs end with C:\Users\matth\.adms-desktop\front_app.ps1 via run_desktop
   (hide ffplay console, foreground the app). keep_audio_alive.vbs now in Startup (hidden);
   old .bat at C:\Users\matth\keep_audio_alive.bat.bak; current ffplay is the old one.
-- Open: full Up Next (PIP/countdown/movie auto-play); Monsters University test reminder.
+- **Full Up Next LIVE (b67 8e4d6b8 + backend aced83a/8e4d6b8):** 45 s before the end the
+  player asks upNext (episodes: show page; movies: GET /api/movies/{id}/up-next — franchise
+  next, else random of top-5 unwatched genre matches, else unwatched, else any; chains).
+  At 20 s left the video slides into a 720x405 corner (AnimatedPositioned + per-frame
+  playerSyncBounds) over the Up Next screen; A now / Y fullscreen (still auto-plays) /
+  B cancel (pop 'cancelled'). Native only. UNTESTED on ELKO — verify PIP alignment.
+- Open: Monsters University test reminder.
 
 ## Earlier (2026-10-11) — TV shows Step 1 LIVE (backend); b60 installed
 
