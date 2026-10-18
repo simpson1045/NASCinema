@@ -63,6 +63,10 @@ class RemoteControl {
     final s = io.io(
       baseUrl,
       io.OptionBuilder()
+          // dart:io only speaks WebSocket. Left on the default (polling
+          // first) it opened a WebSocket labelled transport=polling and the
+          // server dropped it every time (b70, 2026-10-18).
+          .setTransports(['websocket'])
           .enableReconnection()
           .setReconnectionDelay(2000)
           .setReconnectionDelayMax(15000)
