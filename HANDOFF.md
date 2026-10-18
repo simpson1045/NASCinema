@@ -7,6 +7,30 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
+## Latest (2026-10-17) — Claude remote control (house_cinema), BUILT, NOT DEPLOYED
+
+- **Branch `remote-control`** (facd326, be92ca5, c9d1c41 + this): NOT merged, NOT deployed,
+  NOT released. Backend `backend/app/api/remote.py`: renderer joins Socket.IO with
+  `player_hello {name}` (default = PC hostname; "ELKO" matches "DESKTOP-ELKO"), sends
+  `player_status` every 5 s; REST under `/api/remote` (token `NASCINEMA_REMOTE_TOKEN`,
+  Bearer/X-Remote-Token; blank = off/503): players, play (fuzzy title, version, from_start,
+  replace), show (resume via _next_up or exact SxEy), command (pause/resume/toggle/stop/seek/
+  tracks/set_track/version/sleep/sub_delay/reload_audio), search, versions, continue, recent,
+  watched. Commands go over `sio.call` and return the app's own reply — no queue.
+  Verified read-only in a scratch copy inside the container (search/versions/continue/recent).
+- **App:** `lib/services/remote/remote_control.dart`; Big Picture home = opener (pops to
+  home, opens BpMovieScreen(autoPlay, autoFileId, autoFromStart) / BpShowScreen
+  (playEpisodeId, playFromStart)); PlayerScreen registers status/handle hooks; mpv raw
+  get/set/command passthroughs. analyze clean. Web build not yet run.
+- **ADMS:** `house_cinema` patched into SOURCE (patch_house_cinema.py; backup
+  app/adms_mcp.py.bak-20261018-053426-precinema). Preflight: wake ELKO/TV/Denon (ZMON,
+  never PWON), movie-mode check → game, 15 s, movie only if needed (force=True redoes),
+  app check (connected / Get-Process) → NASCinemaLaunch + front_app.ps1, never a 2nd copy.
+  Reads the token from /mnt/NAS Storage/apps/nascinema/.env. Needs Matt's ADMS rebuild.
+- **To ship (each needs Matt's OK, not while he's watching):** add NASCINEMA_REMOTE_TOKEN
+  to the NAS .env → merge to main + push → deploy.sh (restart) → bump pubspec/CHANGELOG,
+  web build, tag b69 → install on ELKO → Matt rebuilds ADMS → end-to-end test.
+
 ## Latest (2026-10-14) — b66 live: audio-stream-silence fixes pause/rewind crackle
 
 - **b66 installed (5344ffc):** `--audio-stream-silence=yes` by default — pausing or
