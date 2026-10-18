@@ -159,7 +159,9 @@ def _rank(query: str, items: list, title, year) -> list[tuple[float, object]]:
     scored = [(_score(query, title(i), year(i)), i) for i in items]
     # Ties: the closer-length title, then the older film ("Star Wars" → 1977).
     scored.sort(key=lambda t: (-round(t[0], 3), len(title(t[1])), year(t[1]) or 9999))
-    return [t for t in scored if t[0] >= 0.55]
+    # 0.7: typos still land ("jurasic park"), lookalikes don't ("whose line"
+    # → Home Alone scored 0.63).
+    return [t for t in scored if t[0] >= 0.7]
 
 
 async def _movies(session: AsyncSession) -> list[Movie]:
