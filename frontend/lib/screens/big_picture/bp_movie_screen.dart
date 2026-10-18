@@ -306,6 +306,12 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
               if (m.year != null) '${m.year}',
               if (m.genres.isNotEmpty) m.genres.take(2).join(', '),
             ].join('  ·  '),
+            meta: [
+              if ((m.runtime ?? 0) > 0)
+                m.runtime! >= 60 ? '${m.runtime! ~/ 60}h ${m.runtime! % 60}m' : '${m.runtime} min',
+              if ((m.certification ?? '').isNotEmpty) m.certification!,
+            ].join('  ·  '),
+            overview: m.overview,
             reason: r.reason,
             backdropUrl: m.backdropUrl(size: 'original'),
             logoUrl: d.logo,

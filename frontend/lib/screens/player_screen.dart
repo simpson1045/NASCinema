@@ -37,12 +37,18 @@ class UpNextInfo {
     this.logoUrl,
     this.versions = const [],
     this.onStart,
+    this.name,
+    this.meta = '',
+    this.overview,
   });
 
   final int fileId;
   final String title; // the player's title line once it plays
   final String heading; // big name on the Up Next screen (the logo's fallback)
-  final String subtitle; // "S1 · E5 · Title" / "1994 · Comedy, Family"
+  final String subtitle; // small line under the logo: "SEASON 1 · EPISODE 5" / "1994 · Comedy, Family"
+  final String? name; // the episode's title, on its own line (null for movies)
+  final String meta; // "22 min · Aired Aug 5, 1998" / "2h 7m · PG-13"
+  final String? overview; // the synopsis (3 lines max)
   final String reason; // "Next in Jurassic Park" / "Because you watched …"
   final String? backdropUrl;
   final String? logoUrl;
@@ -313,6 +319,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // into Up Next for the new episode with "Starts in 999" (Whose Line S1E17,
   // 2026-10-17). Up Next + end checks wait until the new file reads near 0.
   DateTime? _handoffAt;
+  double _pipAspect = 16 / 9; // the playing video's shape, for the corner box
   bool _upNextCancelled = false; // B: no auto-play; leave at the end
   Timer? _pipSync;
 
@@ -334,6 +341,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (!_nextAsked && left <= 45) {
       _nextAsked = true;
+      unawaited(_readPipAspect());
       widget.upNext!().then((n) {
         if (mounted) setState(() => _next = n);
       }).catchError((_) {});
@@ -394,11 +402,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Laid out in 1920×1080 like the Big Picture pages; the video sits in
   /// the bottom-right (1110,520 – 720×405).
   Widget _upNextScreen(UpNextInfo n) {
-    final left = (_duration - _position).clamp(0, 999).ceil();
+    final secs = (_duration - _position).clamp(0.0, 999.0);
+    final left = secs.ceil();
     final heading = Text(n.heading,
         textAlign: TextAlign.center,
         maxLines: 2,
         style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w800));
+    const shadow = [Shadow(color: Color(0xCC000000), blurRadius: 12)];
     return FittedBox(
       fit: BoxFit.cover,
       child: SizedBox(
@@ -409,25 +419,36 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (n.backdropUrl != null)
             Image.network(n.backdropUrl!,
                 fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink()),
+          // Solid behind the words, clearing toward the right; plus a fade
+          // along the bottom so the hints and the corner video sit on dark.
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
-                colors: [Color(0xF00A0E27), Color(0xB00A0E27), Color(0x660A0E27)],
-                stops: [0.0, 0.5, 1.0],
+                colors: [Color(0xF70A0E27), Color(0xEB0A0E27), Color(0x990A0E27), Color(0x330A0E27)],
+                stops: [0.0, 0.42, 0.68, 1.0],
+              ),
+            ),
+          ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.center,
+                colors: [Color(0xCC0A0E27), Color(0x000A0E27)],
               ),
             ),
           ),
           Positioned(
             left: 110,
-            top: 150,
-            width: 900,
+            top: 110,
+            width: 860,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('UP NEXT',
                   style: TextStyle(
                       color: NasColors.amber, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: 4)),
-              const SizedBox(height: 26),
+              const SizedBox(height: 24),
               bpLogoOver(
                 logo: n.logoUrl == null
                     ? Align(alignment: Alignment.bottomCenter, child: heading)
@@ -436,20 +457,71 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         alignment: Alignment.bottomCenter,
                         errorBuilder: (_, _, _) =>
                             Align(alignment: Alignment.bottomCenter, child: heading)),
-                below: Text(n.subtitle,
-                    style: const TextStyle(color: NasColors.text, fontSize: 30, fontWeight: FontWeight.w700)),
-                logoHeight: 170,
+                below: Text(n.subtitle.toUpperCase(),
+                    style: const TextStyle(
+                        color: Color(0xFFC9CFEA),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 3,
+                        shadows: shadow)),
+                logoHeight: 220,
                 maxWidth: 820,
               ),
-              if (n.reason.isNotEmpty) ...[
-                const SizedBox(height: 28),
-                Text(n.reason,
-                    style: const TextStyle(color: Color(0xFFDDE2F5), fontSize: 30)),
+              if ((n.name ?? '').isNotEmpty) ...[
+                const SizedBox(height: 18),
+                Text(n.name!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        height: 1.15,
+                        shadows: shadow)),
               ],
-              const SizedBox(height: 40),
+              if (n.meta.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(n.meta,
+                    style: const TextStyle(color: NasColors.muted, fontSize: 26, shadows: shadow)),
+              ],
+              if ((n.overview ?? '').isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Text(n.overview!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Color(0xFFDDE2F5), fontSize: 27, height: 1.35, shadows: shadow)),
+              ],
+              if (n.reason.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Text(n.reason,
+                    style: const TextStyle(
+                        color: NasColors.amber, fontSize: 27, fontWeight: FontWeight.w700, shadows: shadow)),
+              ],
+              const SizedBox(height: 36),
               Text('Starts in $left',
-                  style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 40),
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 40, fontWeight: FontWeight.w800, shadows: shadow)),
+              const SizedBox(height: 14),
+              // Drains over the last 20 s (the poll ticks 4×/s; the animation
+              // smooths the steps).
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: SizedBox(
+                  width: 520,
+                  height: 6,
+                  child: Stack(children: [
+                    const ColoredBox(color: Color(0x33FFFFFF), child: SizedBox.expand()),
+                    AnimatedFractionallySizedBox(
+                      duration: const Duration(milliseconds: 260),
+                      alignment: Alignment.centerLeft,
+                      widthFactor: (secs / 20).clamp(0.0, 1.0),
+                      child: const ColoredBox(color: NasColors.amber, child: SizedBox.expand()),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 36),
               const PadHints([
                 (PadGlyph.a, 'Play now'),
                 (PadGlyph.y, 'Back to fullscreen'),
@@ -460,6 +532,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ]),
       ),
     );
+  }
+
+  /// The corner video's box in 1920×1080 space: the picture's own shape
+  /// (a 4:3 show gets a 4:3 box, not pillarbox bars) inside 720×405, pinned
+  /// to the bottom-right corner.
+  Rect get _pipRect {
+    const maxW = 720.0, maxH = 405.0, right = 1830.0, bottom = 925.0;
+    final a = _pipAspect > 0 ? _pipAspect : 16 / 9;
+    final wide = a >= maxW / maxH;
+    final w = wide ? maxW : maxH * a;
+    final h = wide ? maxW / a : maxH;
+    return Rect.fromLTWH(right - w, bottom - h, w, h);
+  }
+
+  Future<void> _readPipAspect() async {
+    final a = await playerGetProp('video-params/aspect');
+    if (a is num && a > 0 && mounted) setState(() => _pipAspect = a.toDouble());
   }
 
   Future<void> _startNext(UpNextInfo next) async {
@@ -955,14 +1044,43 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   // Up Next sits BEHIND the video (the native window draws on
                   // top) and is only visible around the shrunken picture.
                   _pip && _next != null ? _upNextScreen(_next!) : const SizedBox.shrink(),
+                  // A soft shadow + thin frame just outside the corner video
+                  // (the native window can't round or shade itself); fades in
+                  // with the shrink.
+                  if (_pip && _next != null && _player != null)
+                    Positioned(
+                      left: box.maxWidth * (_pipRect.left - 3) / 1920,
+                      top: box.maxHeight * (_pipRect.top - 3) / 1080,
+                      width: box.maxWidth * (_pipRect.width + 6) / 1920,
+                      height: box.maxHeight * (_pipRect.height + 6) / 1080,
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 450),
+                        curve: Curves.easeIn,
+                        builder: (_, t, child) => Opacity(opacity: t, child: child),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0x55FFFFFF), width: 1.5),
+                            boxShadow: const [
+                              BoxShadow(
+                                  color: Color(0xAA000000),
+                                  blurRadius: 40,
+                                  spreadRadius: 4,
+                                  offset: Offset(0, 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   _player != null
                       ? AnimatedPositioned(
                           duration: const Duration(milliseconds: 450),
                           curve: Curves.easeInOutCubic,
-                          left: _pip ? box.maxWidth * 1110 / 1920 : 0,
-                          top: _pip ? box.maxHeight * 520 / 1080 : 0,
-                          width: _pip ? box.maxWidth * 720 / 1920 : box.maxWidth,
-                          height: _pip ? box.maxHeight * 405 / 1080 : box.maxHeight,
+                          left: _pip ? box.maxWidth * _pipRect.left / 1920 : 0,
+                          top: _pip ? box.maxHeight * _pipRect.top / 1080 : 0,
+                          width: _pip ? box.maxWidth * _pipRect.width / 1920 : box.maxWidth,
+                          height: _pip ? box.maxHeight * _pipRect.height / 1080 : box.maxHeight,
                           child: KeyedSubtree(key: _playerHost, child: _player!),
                         )
                       : _error != null

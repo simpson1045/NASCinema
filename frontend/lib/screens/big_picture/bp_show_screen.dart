@@ -139,6 +139,17 @@ class _BpShowScreenState extends State<BpShowScreen> {
 
   // ── Playback ───────────────────────────────────────────────────────────────
 
+  /// "22 min · Aired Aug 5, 1998" for the Up Next screen.
+  static String _upNextMeta(Episode e) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final mins = e.runtime ?? (e.files.isNotEmpty ? ((e.files.first.duration ?? 0) / 60).round() : 0);
+    final d = DateTime.tryParse(e.airDate ?? '');
+    return [
+      if (mins > 0) '$mins min',
+      if (d != null) 'Aired ${months[d.month - 1]} ${d.day}, ${d.year}',
+    ].join('  ·  ');
+  }
+
   /// Play one episode; when it ends, the next one starts by itself.
   Future<void> _play(Episode e, {bool fromStart = false}) async {
     var ep = e;
@@ -167,8 +178,12 @@ class _BpShowScreenState extends State<BpShowScreen> {
               fileId: n.files.first.id,
               title: '${_show.title} · ${n.code} · ${n.displayTitle}',
               heading: _show.title,
-              subtitle: '${n.code} · ${n.displayTitle}',
-              reason: 'Next episode',
+              subtitle: n.season == 0
+                  ? 'Special'
+                  : 'Season ${n.season} · Episode ${n.numberEnd != null ? '${n.number}–${n.numberEnd}' : n.number ?? ''}',
+              name: n.displayTitle,
+              meta: _upNextMeta(n),
+              overview: n.overview,
               backdropUrl: n.stillUrl(size: 'original') ?? _show.backdropUrl(size: 'original'),
               logoUrl: _d?.logo,
               versions: n.files,
