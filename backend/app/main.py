@@ -20,6 +20,7 @@ from . import __version__
 from .api.flags import router as flags_router
 from .api.movies import router as movies_router
 from .api.progress import router as progress_router
+from .api import remote
 from .api.renderer import router as renderer_router
 from .api.shows import router as shows_router
 from .api.stream import router as stream_router
@@ -83,6 +84,7 @@ def create_fastapi() -> FastAPI:
     app.include_router(update_router)
     app.include_router(progress_router)
     app.include_router(renderer_router)
+    app.include_router(remote.router)
     app.include_router(flags_router)
     app.include_router(track_manager_router)
 
@@ -141,5 +143,8 @@ async def connect(sid, environ, auth):  # noqa: ANN001
     # Auth enforcement comes with the real-time features; accept for now.
     return True
 
+
+# Renderers register here as named players and take remote commands.
+remote.attach(sio)
 
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app)

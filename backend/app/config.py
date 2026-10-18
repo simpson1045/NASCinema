@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # Blank = no wired renderer in this deployment. Get the MAC via `getmac`.
     renderer_mac: str = ""
     wol_broadcast: str = "255.255.255.255"
+    # Remote control (/api/remote — Claude via ADMS, any automation): a shared
+    # secret, sent as Bearer or X-Remote-Token. Blank = remote control off.
+    remote_token: str = ""
 
     # Extras DB (crowdsourced bonus-feature naming — see EXTRAS_DB.md).
     # Opt-in: fingerprint extras so they can later be matched/contributed.
