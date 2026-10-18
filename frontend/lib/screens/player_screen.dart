@@ -308,6 +308,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _nextAsked = false;
   bool _pip = false; // the video is in the corner, Up Next screen behind
   bool _keepFull = false; // Y: back to fullscreen, still auto-plays at the end
+  // Set when the next title loads in place: for a moment mpv still reports
+  // the OLD file's time (seconds from its end), which re-shrank the video
+  // into Up Next for the new episode with "Starts in 999" (Whose Line S1E17,
+  // 2026-10-17). Up Next + end checks wait until the new file reads near 0.
+  DateTime? _handoffAt;
   bool _upNextCancelled = false; // B: no auto-play; leave at the end
   Timer? _pipSync;
 
@@ -319,6 +324,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _upNextTick() {
     if (!_upNextAllowed) return;
     final left = _duration - _position;
+    // Time jumped back out of the last 20 s (a rewind during the countdown):
+    // full screen again, and ask again when we get back to the end.
+    if (_pip && left > 30) {
+      _next = null;
+      _nextAsked = false;
+      _setPip(false);
+      return;
+    }
     if (!_nextAsked && left <= 45) {
       _nextAsked = true;
       widget.upNext!().then((n) {
@@ -455,6 +468,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final p = await ApiService(widget.baseUrl).getPlay(next.fileId, client: 'native');
       if (!mounted) return;
       next.onStart?.call();
+      _handoffAt = DateTime.now();
       playerLoadMedia(p.path ?? '${widget.baseUrl}${p.url}', start: 0, alang: lang, play: true);
       setState(() {
         _fileId = next.fileId;
@@ -778,6 +792,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
           read();
         } else {
           setState(read);
+        }
+        if (_handoffAt != null) {
+          final settled = !playerEnded() && playerCurrentTime() < 30;
+          if (settled ||
+              DateTime.now().difference(_handoffAt!) > const Duration(seconds: 15)) {
+            _handoffAt = null;
+          } else {
+            return; // still the old file's numbers
+          }
         }
         _upNextTick();
         if ((widget.popOnEnd || widget.upNext != null) &&
