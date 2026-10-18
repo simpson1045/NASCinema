@@ -7,7 +7,19 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-17) — Claude remote control (house_cinema), BUILT, NOT DEPLOYED
+## Latest (2026-10-18) — remote control LIVE end to end (b71)
+
+- Backend 6eef46e deployed (NASCINEMA_REMOTE_TOKEN in the NAS .env; backup
+  .env.bak-20261018-053847-preremote). ADMS rebuilt with house_cinema (Matt asked me to;
+  launched detached on NASHOST). b70 = Up Next fix (stale end-of-file time after an in-place
+  handoff re-shrank into PIP, "Starts in 999"; un-PIP on rewind). b70's remote never
+  connected: dart:io socket_io_client must use setTransports(['websocket']) → b71 (7e96445).
+- VERIFIED Oct 18: `house_cinema resume_show "Whose Line"` → movie mode already set
+  (skipped), app started + connected + fronted, S1E17 resumed at 17:02.
+- b69 built but never published/installed (superseded by b70).
+- Next idea (offered): beta tags (-bN) build Windows only to cut the ~12 min CI wait.
+
+## 2026-10-17 — Claude remote control (house_cinema), built
 
 - **Branch `remote-control`** (facd326, be92ca5, c9d1c41 + this): NOT merged, NOT deployed,
   NOT released. Backend `backend/app/api/remote.py`: renderer joins Socket.IO with
