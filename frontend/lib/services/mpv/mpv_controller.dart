@@ -567,6 +567,12 @@ class MpvController {
 
   void setPaused(bool p) => _ipc?.set('pause', p);
 
+  // Raw mpv access for the remote control (track-list, aid/sid/vid,
+  // ao-reload …) — everything else goes through the named helpers above.
+  Future<dynamic> getProperty(String name) async => _ipc?.get(name);
+  void setProperty(String name, Object? value) => _ipc?.set(name, value);
+  void command(List<Object?> args) => _ipc?.command(args);
+
   /// 0..1 like the web `<video>`; mpv wants 0..100.
   void setVolume(double v01) =>
       _ipc?.set('volume', (v01.clamp(0.0, 1.0) * 100).round());

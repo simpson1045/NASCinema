@@ -14,6 +14,7 @@ import '../services/cast_actions.dart';
 import '../services/cast_controller.dart';
 import '../services/flag_service.dart';
 import '../services/gamepad/pad_dispatch.dart';
+import '../services/remote/remote_control.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pad_hints.dart';
 import 'big_picture/bp_hero.dart' show bpLogoOver;
@@ -170,6 +171,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _controlsVisible = true;
   Timer? _hideControls;
 
+  // Remote control (Claude via ADMS house_cinema): this screen's hooks, a
+  // sleep timer, and "stop when this one ends" (rides the Up Next cancel).
+  RemotePlayerHooks? _remote;
+  Timer? _sleepTimer;
+  DateTime? _sleepAt;
+  bool _stopAfterCurrent = false;
+
   void _pokeControls([_]) {
     if (!_isDesktop) return;
     // Native leg: mpv's OSC handles its own show/hide; the Flutter chrome is
@@ -204,6 +212,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         });
     _cast = context.read<CastController>();
     if (_nativeVideo) HardwareKeyboard.instance.addHandler(_screenKeys);
+    _remote = RemotePlayerHooks(status: _remoteStatus, handle: _remoteHandle);
+    RemoteControl.player = _remote;
     _load();
   }
 
@@ -248,6 +258,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _hooksOwner = null;
     }
     FlagService.unregister(this);
+    if (RemoteControl.player == _remote) RemoteControl.player = null;
+    _sleepTimer?.cancel();
     _saveProgress(); // capture the resume point on the way out
     _poll?.cancel();
     _cachePoll?.cancel();
@@ -471,10 +483,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Swap to another version in place, at the same moment, keeping the
   /// audio language. Cuts can differ by a few seconds (added scenes) — close
   /// enough to land in the same scene.
-  Future<void> _switchVersion(int id) async {
+  Future<void> _switchVersion(int id, {double? at}) async {
     if (id == _fileId) return;
     _saveProgress();
-    final at = _position;
+    at ??= _position;
     final lang = await playerCurrentAudioLang();
     try {
       final p = await ApiService(widget.baseUrl).getPlay(id, client: 'native');
@@ -516,6 +528,180 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return true;
     }
     return false;
+  }
+
+  // ── Remote control ─────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _remoteStatus() {
+    final v = _versions.where((v) => v.id == _fileId).firstOrNull;
+    return {
+      'state': _paused ? 'paused' : 'playing',
+      'title': _title,
+      'file_id': _fileId,
+      'position': _position.round(),
+      'duration': _duration.round(),
+      if (v?.label != null) 'version': v!.label,
+      'version_count': _versions.length,
+      'audio_out': playerStats()['Audio out'],
+      'sub_delay': _subOffset,
+      if (_next != null) 'up_next': _next!.title,
+      if (_pip) 'up_next_showing': true,
+      if (_stopAfterCurrent) 'stop_after_current': true,
+      if (_sleepAt != null) 'sleep_at': _sleepAt!.toIso8601String(),
+    };
+  }
+
+  RemoteReply _remoteOk(String state, [Map<String, dynamic> extra = const {}]) =>
+      {'ok': true, 'state': state, 'title': _title, 'position': _position.round(), ...extra};
+
+  Future<RemoteReply> _remoteHandle(String action, Map<String, dynamic> a) async {
+    double? num_(String k) => (a[k] as num?)?.toDouble();
+    switch (action) {
+      case 'pause':
+        playerSetProp('pause', true);
+        return _remoteOk('paused');
+      case 'resume':
+        playerSetProp('pause', false);
+        return _remoteOk('playing');
+      case 'toggle':
+        playerTogglePlay();
+        return _remoteOk(_paused ? 'playing' : 'paused');
+      case 'stop':
+        _saveProgress();
+        final title = _title;
+        if (mounted) Navigator.of(context).maybePop();
+        return {'ok': true, 'state': 'stopped', 'title': title};
+      case 'seek':
+        final secs = num_('seconds');
+        if (secs == null) return {'ok': false, 'error': 'seek needs seconds'};
+        final end = _duration > 1 ? _duration - 1 : double.infinity;
+        final to = (a['relative'] == true ? _position + secs : secs).clamp(0.0, end);
+        playerSeek(to);
+        setState(() => _position = to);
+        return _remoteOk(_paused ? 'paused' : 'playing', {'position': to.round()});
+      case 'tracks':
+        return _remoteTracks();
+      case 'set_track':
+        return _remoteSetTrack(a);
+      case 'version':
+        return _remoteVersion(a);
+      case 'sleep':
+        return _remoteSleep(a);
+      case 'sub_delay':
+        final secs = num_('seconds');
+        if (secs == null) return {'ok': false, 'error': 'sub_delay needs seconds'};
+        setState(() => _subOffset = double.parse(secs.toStringAsFixed(1)));
+        playerSetSubtitleOffset(_subOffset);
+        ApiService(widget.baseUrl).setSubtitleOffset(_fileId, _subOffset).catchError((_) {});
+        return _remoteOk(_paused ? 'paused' : 'playing', {'sub_delay': _subOffset});
+      case 'reload_audio':
+        // After a room switch mpv holds a stale WASAPI endpoint: reopen the
+        // output, then a tiny exact seek so the bitstream restarts on a sync.
+        playerCommand(['ao-reload']);
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        playerCommand(['seek', -1, 'relative+exact']);
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        return _remoteOk(_paused ? 'paused' : 'playing', {'audio_out': playerStats()['Audio out']});
+    }
+    return {'ok': false, 'error': 'unknown action $action'};
+  }
+
+  Future<RemoteReply> _remoteTracks() async {
+    final list = (await playerGetProp('track-list') as List?) ?? const [];
+    Map<String, dynamic> row(Map t) => {
+          'id': t['id'],
+          if (t['title'] != null) 'title': t['title'],
+          if (t['lang'] != null) 'lang': t['lang'],
+          'codec': t['codec'],
+          'selected': t['selected'] == true,
+          if (t['default'] == true) 'default': true,
+          if (t['external'] == true) 'external': true,
+          if (t['type'] == 'audio') 'channels': t['demux-channel-count'],
+          if (t['type'] == 'video') 'size': '${t['demux-w']}x${t['demux-h']}',
+        };
+    final tracks = list.whereType<Map>().where((t) => t['image'] != true).toList();
+    return {
+      'ok': true,
+      'title': _title,
+      'video': [for (final t in tracks.where((t) => t['type'] == 'video')) row(t)],
+      'audio': [for (final t in tracks.where((t) => t['type'] == 'audio')) row(t)],
+      'subtitles': [for (final t in tracks.where((t) => t['type'] == 'sub')) row(t)],
+      'versions': [
+        for (final v in _versions)
+          {'file_id': v.id, 'label': v.label, 'quality': v.quality, 'current': v.id == _fileId}
+      ],
+      'sub_delay': _subOffset,
+      'audio_out': playerStats()['Audio out'],
+    };
+  }
+
+  Future<RemoteReply> _remoteSetTrack(Map<String, dynamic> a) async {
+    const props = {'audio': 'aid', 'sub': 'sid', 'subs': 'sid', 'subtitle': 'sid', 'video': 'vid'};
+    final prop = props[(a['type'] ?? '').toString().toLowerCase()];
+    if (prop == null) return {'ok': false, 'error': 'type must be audio, sub or video'};
+    final raw = a['id'];
+    final Object value = raw is num ? raw.toInt() : (int.tryParse('$raw') ?? '$raw');
+    playerSetProp(prop, value);
+    if (prop != 'sid') {
+      // A live audio/video switch needs a fresh sync point — without it a
+      // TrueHD bitstream starts mid-frame and the Denon never locks.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      playerCommand(['seek', -1, 'relative+exact']);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    return _remoteOk(_paused ? 'paused' : 'playing',
+        {prop: await playerGetProp(prop), 'audio_out': playerStats()['Audio out']});
+  }
+
+  Future<RemoteReply> _remoteVersion(Map<String, dynamic> a) async {
+    final id = (a['file_id'] as num?)?.toInt();
+    final want = (a['version'] ?? '').toString().toLowerCase();
+    final f = _versions.where((v) => id != null
+        ? v.id == id
+        : want.isNotEmpty &&
+            ('${v.label ?? ''} ${v.quality ?? ''}').toLowerCase().contains(want)).firstOrNull;
+    if (f == null) {
+      return {
+        'ok': false,
+        'error': 'no such version — has: ${_versions.map((v) => v.label).join(', ')}',
+      };
+    }
+    if (f.id == _fileId) return _remoteOk(_paused ? 'paused' : 'playing', {'version': f.label, 'note': 'already playing'});
+    final same = a['same_spot'] == true;
+    await _switchVersion(f.id, at: same ? null : 0);
+    return _remoteOk('playing', {
+      'version': f.label,
+      'from': same ? 'the same timestamp (approximate — cuts differ)' : 'the beginning',
+    });
+  }
+
+  RemoteReply _remoteSleep(Map<String, dynamic> a) {
+    if (a['cancel'] == true) {
+      _sleepTimer?.cancel();
+      _sleepAt = null;
+      if (_stopAfterCurrent) {
+        _stopAfterCurrent = false;
+        _upNextCancelled = false;
+      }
+      return _remoteOk(_paused ? 'paused' : 'playing', {'sleep': 'off'});
+    }
+    if (a['after_current'] == true) {
+      _stopAfterCurrent = true;
+      _upNextCancelled = true; // no Up Next; close when this one ends
+      if (_pip) _setPip(false);
+      return _remoteOk(_paused ? 'paused' : 'playing', {'sleep': 'stops when "$_title" ends'});
+    }
+    final mins = (a['minutes'] as num?)?.toDouble();
+    if (mins == null || mins <= 0) return {'ok': false, 'error': 'sleep needs minutes, after_current or cancel'};
+    _sleepTimer?.cancel();
+    _sleepAt = DateTime.now().add(Duration(seconds: (mins * 60).round()));
+    _sleepTimer = Timer(Duration(seconds: (mins * 60).round()), () {
+      if (!mounted) return;
+      playerSetProp('pause', true);
+      _saveProgress();
+      Navigator.of(context).maybePop();
+    });
+    return _remoteOk(_paused ? 'paused' : 'playing', {'sleep_at': _sleepAt!.toIso8601String()});
   }
 
   /// Persist the local playback position + active subtitle for resume. Skips

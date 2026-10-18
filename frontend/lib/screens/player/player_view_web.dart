@@ -234,3 +234,6 @@ Future<String?> playerCurrentAudioLang() async => null;
 void playerLoadMedia(String media, {double start = 0, String? alang, bool play = false}) {}
 void playerShowText(String text, {int ms = 3000}) {}
 void playerSyncBounds() {}
+Future<dynamic> playerGetProp(String name) async => null;
+void playerSetProp(String name, Object? value) {}
+void playerCommand(List<Object?> args) {}

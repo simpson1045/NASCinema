@@ -514,6 +514,16 @@ void playerSeek(double seconds) {
   }
 }
 
+/// Raw mpv property/command access (remote control). No-ops off mpv.
+Future<dynamic> playerGetProp(String name) async =>
+    _useMpv ? await _mpv?.getProperty(name) : null;
+void playerSetProp(String name, Object? value) {
+  if (_useMpv) _mpv?.setProperty(name, value);
+}
+void playerCommand(List<Object?> args) {
+  if (_useMpv) _mpv?.command(args);
+}
+
 void playerTogglePlay() =>
     _useMpv ? _mpv?.togglePlay() : _player?.playOrPause();
 

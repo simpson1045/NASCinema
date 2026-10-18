@@ -30,10 +30,22 @@ import '../../widgets/pad_hints.dart';
 /// the extras, Up/Down switch between them, A/Enter select, B/Esc back.
 /// (The desktop page's edit pencils stay on the desktop page.)
 class BpMovieScreen extends StatefulWidget {
-  const BpMovieScreen({super.key, required this.movie, required this.baseUrl});
+  const BpMovieScreen({
+    super.key,
+    required this.movie,
+    required this.baseUrl,
+    this.autoPlay = false,
+    this.autoFileId,
+    this.autoFromStart = false,
+  });
 
   final Movie movie;
   final String baseUrl;
+  // Remote control: press Play as soon as the page has loaded — optionally a
+  // specific version (else the saved pick / Theatrical-first) and from 0.
+  final bool autoPlay;
+  final int? autoFileId;
+  final bool autoFromStart;
 
   @override
   State<BpMovieScreen> createState() => _BpMovieScreenState();
@@ -128,8 +140,13 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
         _seriesIdx = here < 0 ? 0 : here;
         _loaded = true;
       });
-      final pick = await TrackPick.load(_m.id, d.files);
+      var pick = await TrackPick.load(_m.id, d.files);
+      final want = widget.autoFileId;
+      if (want != null && pick?.fileId != want) pick = TrackPick(fileId: want);
       if (mounted) setState(() => _pick = pick);
+      if (widget.autoPlay && mounted && _files.isNotEmpty) {
+        _play(fromStart: widget.autoFromStart);
+      }
       unawaited(_refreshProgress());
       final rel = await _api.getRelated(_m.id);
       if (mounted) {

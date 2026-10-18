@@ -87,7 +87,13 @@ def attach(sio: socketio.AsyncServer) -> None:
 
 
 def _player(name: str) -> dict:
-    p = _players.get(name.strip().lower())
+    key = name.strip().lower()
+    p = _players.get(key)
+    if not p and key:
+        # "ELKO" finds "DESKTOP-ELKO" (the app defaults to the PC's hostname)
+        # when it's the only connected player with that in its name.
+        near = [v for k, v in _players.items() if key in k]
+        p = near[0] if len(near) == 1 else None
     if not p:
         raise HTTPException(409, f"{name} isn't connected — is NASCinema open on it?")
     return p

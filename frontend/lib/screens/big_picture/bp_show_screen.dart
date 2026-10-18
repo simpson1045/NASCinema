@@ -25,6 +25,7 @@ class BpShowScreen extends StatefulWidget {
     required this.baseUrl,
     required this.show,
     this.playEpisodeId,
+    this.playFromStart = false,
   });
 
   final String baseUrl;
@@ -32,6 +33,8 @@ class BpShowScreen extends StatefulWidget {
   final Show show;
   // From Up Next on the home screen: open straight into this episode.
   final int? playEpisodeId;
+  // With playEpisodeId (remote control): ignore its resume point.
+  final bool playFromStart;
 
   @override
   State<BpShowScreen> createState() => _BpShowScreenState();
@@ -119,7 +122,7 @@ class _BpShowScreenState extends State<BpShowScreen> {
       _revealSeason();
       if (first && widget.playEpisodeId != null) {
         final e = d.episodes.where((e) => e.id == widget.playEpisodeId).firstOrNull;
-        if (e != null) unawaited(_play(e));
+        if (e != null) unawaited(_play(e, fromStart: widget.playFromStart));
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);

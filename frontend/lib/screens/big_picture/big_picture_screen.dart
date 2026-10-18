@@ -12,10 +12,12 @@ import '../../services/api_service.dart';
 import '../../services/flag_service.dart';
 import '../../services/fullscreen.dart';
 import '../../services/gamepad/pad_dispatch.dart';
+import '../../services/remote/remote_control.dart';
 import '../../services/update_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/pad_hints.dart';
 import '../library_screen.dart';
+import '../player/player_view.dart' show playerDuration, playerReady;
 import '../settings_screen.dart';
 import 'bp_collection_screen.dart';
 import 'bp_franchise_tile.dart';
@@ -77,6 +79,8 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
     setFullscreen(true);
     PadDispatch.add(_onPad);
     FlagService.register(this, 'bp-home', widget.baseUrl, _flagInfo);
+    RemoteControl.opener = _remoteOpen;
+    unawaited(RemoteControl.start(widget.baseUrl));
     _load();
     if (widget.initialData == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
@@ -87,6 +91,7 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
   void dispose() {
     PadDispatch.remove(_onPad);
     FlagService.unregister(this);
+    if (RemoteControl.opener == _remoteOpen) RemoteControl.opener = null;
     _focus.dispose();
     super.dispose();
   }
@@ -414,6 +419,50 @@ class _BigPictureScreenState extends State<BigPictureScreen> {
         child: Focus(autofocus: true, child: page),
       ),
     ));
+  }
+
+  /// Remote control: close whatever's open back to home, then open the movie
+  /// / show page in auto-play mode (so saved picks, resume and Up Next all
+  /// apply), and answer once the player is actually running.
+  Future<RemoteReply> _remoteOpen(String action, Map<String, dynamic> a) async {
+    final home = ModalRoute.of(context);
+    if (home != null && !home.isCurrent) {
+      Navigator.of(context).popUntil((r) => r == home);
+      // Let the old player close (its mpv quits) before the next one starts.
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+    }
+    if (!mounted) return {'ok': false, 'error': 'NOT STARTED: home screen closed'};
+    final fromStart = a['from_start'] == true;
+    if (action == 'play_movie') {
+      final d = await _api.getMovieDetail((a['movie_id'] as num).toInt());
+      if (!mounted) return {'ok': false, 'error': 'NOT STARTED: home screen closed'};
+      unawaited(_pushPage(MaterialPageRoute(
+        builder: (_) => BpMovieScreen(
+          movie: d.movie,
+          baseUrl: widget.baseUrl,
+          autoPlay: true,
+          autoFileId: (a['file_id'] as num?)?.toInt(),
+          autoFromStart: fromStart,
+        ),
+      )));
+    } else {
+      final d = await _api.getShow((a['show_id'] as num).toInt());
+      if (!mounted) return {'ok': false, 'error': 'NOT STARTED: home screen closed'};
+      unawaited(_pushPage(MaterialPageRoute(
+        builder: (_) => BpShowScreen(
+          baseUrl: widget.baseUrl,
+          show: d.show,
+          playEpisodeId: (a['episode_id'] as num).toInt(),
+          playFromStart: fromStart,
+        ),
+      )));
+    }
+    final ok = await RemoteControl.waitForPlayback(
+        () => playerReady() && playerDuration() > 0);
+    if (!ok) {
+      return {'ok': false, 'error': 'NOT STARTED: the player did not start within 30 s'};
+    }
+    return {'ok': true, ...RemoteControl.currentStatus()};
   }
 
   // The big picture movie page handles its own keys/controller and focus.
