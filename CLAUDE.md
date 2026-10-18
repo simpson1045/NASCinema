@@ -31,6 +31,10 @@ Never bump the version just to ship a build (0.5 → 0.9 in two days, 2026-09-26
    builds Windows/Android/web on GitHub and publishes a GitHub Release (it
    checks the tag against pubspec version/build).
    Watch: `https://api.github.com/repos/simpson1045/NASCinema/actions/runs`.
+   **Beta tags (`-bN`) build Windows only** (~6 min); version tags build Windows +
+   Android + web. To loop Android/web into a beta: Actions → Release → Run workflow,
+   tag = the beta, platforms = all. version.json tracks each platform's own build
+   (`platforms`), so the Android app never sees a Windows-only beta.
 3. On NASHOST: `sudo bash "/mnt/NAS Storage/apps/nascinema/deploy.sh" --release <tag>`
    (no restart).
 Backend changes: **push to GitHub first**, then plain `deploy.sh` (pulls main

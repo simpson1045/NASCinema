@@ -17,7 +17,12 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 - VERIFIED Oct 18: `house_cinema resume_show "Whose Line"` → movie mode already set
   (skipped), app started + connected + fronted, S1E17 resumed at 17:02.
 - b69 built but never published/installed (superseded by b70).
-- Next idea (offered): beta tags (-bN) build Windows only to cut the ~12 min CI wait.
+- **Windows-only betas LIVE (0dbd978, b72):** release.yml skips Android/web for -bN tags
+  (platforms=all via Run workflow loops them in); deploy.sh --release keeps the server's
+  APK/web when a release lacks them and merges version.json per platform; backend
+  /api/update/check?platform= answers per platform (no param = lowest). Verified: b72 →
+  windows 72, android 71. b71 on ELKO doesn't send ?platform → install b72 by hand once.
+  Live deploy.sh backup: deploy.sh.bak-20261018-0706-prewinbeta.
 
 ## 2026-10-17 — Claude remote control (house_cinema), built
 
