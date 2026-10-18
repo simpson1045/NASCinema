@@ -444,7 +444,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
             left: 110,
             top: 110,
             width: 860,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // One center line for the whole column — the logo's (house rule: a logo
+            // centers over its line), so nothing sits on a second, left edge.
+            child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
               const Text('UP NEXT',
                   style: TextStyle(
                       color: NasColors.amber, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: 4)),
@@ -470,6 +472,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               if ((n.name ?? '').isNotEmpty) ...[
                 const SizedBox(height: 18),
                 Text(n.name!,
+                    textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -482,11 +485,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
               if (n.meta.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(n.meta,
+                    textAlign: TextAlign.center,
                     style: const TextStyle(color: NasColors.muted, fontSize: 26, shadows: shadow)),
               ],
               if ((n.overview ?? '').isNotEmpty) ...[
                 const SizedBox(height: 20),
                 Text(n.overview!,
+                    textAlign: TextAlign.center,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -495,6 +500,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               if (n.reason.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 Text(n.reason,
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
                         color: NasColors.amber, fontSize: 27, fontWeight: FontWeight.w700, shadows: shadow)),
               ],
