@@ -16,10 +16,14 @@
 #
 # Flow: commit the pubspec + CHANGELOG change, then
 #   git tag v0.9.0-b37 && git push origin main v0.9.0-b37
-# This workflow builds Windows, Android and web in parallel and publishes the
-# GitHub Release (nascinema-windows.zip, nascinema-android.apk,
-# nascinema-web.tar.gz, version.json). The server pulls it:
-#   deploy.sh --release v0.9.0-b37
+# Which platforms (Matt, 2026-10-18 — ELKO is where NASCinema is used):
+#   - beta tags (vX.Y.Z-bN): Windows only (nascinema-windows.zip, version.json)
+#   - version tags (vX.Y.Z): Windows + Android + web, in parallel
+#   - to loop Android/web into a beta: Actions → Release → Run workflow,
+#     tag = the beta tag, platforms = all
+# The server pulls it: deploy.sh --release v0.9.0-b37. version.json lists each
+# platform's own build under "platforms", and deploy.sh merges it with the
+# server's, so a Windows-only beta never offers the Android app an update.
 #
 # Android signing: if the ANDROID_DEBUG_KEYSTORE secret (base64 of a
 # debug.keystore) is set, it's used so installed phones accept the update;
@@ -35,6 +39,11 @@ on:
       tag:
         description: "Tag to build (e.g. v0.9.0 or v0.9.0-b37) — must already exist"
         required: true
+      platforms:
+        description: "auto = betas Windows only, versions everything; or force windows / all"
+        type: choice
+        options: [auto, windows, all]
+        default: auto
 
 permissions:
   contents: write
@@ -54,6 +63,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       build: ${{ steps.v.outputs.build }}
       label: ${{ steps.v.outputs.label }}
+      all: ${{ steps.v.outputs.all }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -85,6 +95,14 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "label=$label" >> "$GITHUB_OUTPUT"
+          # Android + web too? Version releases yes, betas no — unless forced.
+          case "${{ github.event.inputs.platforms || 'auto' }}" in
+            all) all=true ;;
+            windows) all=false ;;
+            *) if [ -n "$tag_build" ]; then all=false; else all=true; fi ;;
+          esac
+          echo "Android + web: $all"
+          echo "all=$all" >> "$GITHUB_OUTPUT"
 
   windows:
     needs: version
@@ -123,6 +141,7 @@ jobs:
 
   android:
     needs: version
+    if: needs.version.outputs.all == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -162,6 +181,7 @@ jobs:
 
   web:
     needs: version
+    if: needs.version.outputs.all == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -186,6 +206,11 @@ jobs:
 
   publish:
     needs: [version, windows, android, web]
+    # Runs when Android/web were skipped (betas), never when one failed.
+    if: >-
+      always() && needs.windows.result == 'success' &&
+      (needs.version.outputs.all != 'true' ||
+       (needs.android.result == 'success' && needs.web.result == 'success'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -200,15 +225,19 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           BUILD: ${{ needs.version.outputs.build }}
         run: |
-          cat > dist/version.json <<EOF
-          {
-              "released_at": "$(date -u +%Y-%m-%d)",
-              "build_number": $BUILD,
-              "android_size": $(stat -c %s dist/nascinema-android.apk),
-              "version": "$VERSION",
-              "windows_size": $(stat -c %s dist/nascinema-windows.zip)
-          }
-          EOF
+          # Each platform this release built, with its own build — the server
+          # merges these so a Windows-only beta leaves Android's build alone.
+          python3 - <<'PY'
+          import json, os
+          v, b = os.environ["VERSION"], int(os.environ["BUILD"])
+          files = {"windows": "dist/nascinema-windows.zip", "android": "dist/nascinema-android.apk"}
+          plats = {p: {"version": v, "build": b, "size": os.path.getsize(f)}
+                   for p, f in files.items() if os.path.exists(f)}
+          out = {"released_at": __import__("datetime").date.today().isoformat(),
+                 "version": v, "build_number": b, "platforms": plats}
+          out.update({f"{p}_size": e["size"] for p, e in plats.items()})
+          json.dump(out, open("dist/version.json", "w"), indent=2)
+          PY
           cat dist/version.json
           # This version's CHANGELOG section becomes the release notes.
           awk -v v="## $VERSION " 'index($0,v)==1{on=1} on&&/^## /&&index($0,v)!=1{exit} on' CHANGELOG.md > notes.md

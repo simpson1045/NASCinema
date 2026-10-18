@@ -1,7 +1,8 @@
 """In-app update: version manifest + per-platform artifact download.
 
-The release script (`backend/release.bat`) builds the apps, drops the artifacts
-into `backend/updates/`, and writes `version.json`. Clients poll `/check`,
+`deploy.sh --release` drops the artifacts GitHub Actions built into
+`backend/updates/` and merges `version.json` (per-platform builds under
+"platforms"). Clients poll `/check`,
 compare against their own PackageInfo, and pull `/download/<platform>`.
 """
 
@@ -49,14 +50,18 @@ def _latest_changelog() -> str:
 
 
 @router.get("/check")
-async def check_update() -> dict:
+async def check_update(platform: str | None = None) -> dict:
+    """`platform` (windows | android | linux) gets that platform's own latest
+    build — beta releases are Windows-only, so the Android app must not hear
+    about them. Without it (older apps) the top level = the lowest platform."""
     v = _read_version()
     if not v:
         raise HTTPException(status_code=404, detail="No version info available")
+    own = (v.get("platforms") or {}).get(platform or "")
     return {
         "status": "ok",
-        "version": v.get("version", "0.0.0"),
-        "build_number": v.get("build_number", 0),
+        "version": own["version"] if own else v.get("version", "0.0.0"),
+        "build_number": own["build"] if own else v.get("build_number", 0),
         "changelog": _latest_changelog(),
         "android_size": v.get("android_size", 0),
         "windows_size": v.get("windows_size", 0),

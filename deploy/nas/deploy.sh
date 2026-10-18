@@ -50,28 +50,65 @@ trap 'rm -rf "$TMP"' EXIT
 if [ "$MODE" = release ]; then
   BASE="https://github.com/$GH_REPO/releases/download/$REL_TAG"
   echo "[deploy] downloading release $REL_TAG from GitHub…"
-  for f in nascinema-windows.zip nascinema-android.apk nascinema-web.tar.gz version.json; do
+  # Windows + version.json are in every release. Beta tags (vX.Y.Z-bN) are
+  # Windows-only by default, so the APK and web app are optional: missing =
+  # keep the ones already on the server.
+  for f in nascinema-windows.zip version.json; do
     curl -fsSL --retry 3 -o "$TMP/$f" "$BASE/$f"
+  done
+  for f in nascinema-android.apk nascinema-web.tar.gz; do
+    curl -fsSL --retry 3 -o "$TMP/$f" "$BASE/$f" 2>/dev/null || rm -f "$TMP/$f"
   done
   curl -fsSL --retry 3 -o "$TMP/CHANGELOG.md" \
     "https://raw.githubusercontent.com/$GH_REPO/$REL_TAG/CHANGELOG.md"
   grep -q '"version"' "$TMP/version.json"   # sanity: a real version.json
-  # Web app: unpack beside the live one, then swap (the last one kept as .prev).
-  mkdir -p "$TMP/web" "$APP/repo/frontend/build"
-  tar -xzf "$TMP/nascinema-web.tar.gz" -C "$TMP/web"
   B="$APP/repo/frontend/build"
-  rm -rf "$B/web.new" && cp -a "$TMP/web" "$B/web.new"
-  rm -rf "$B/web.prev"; [ -d "$B/web" ] && mv "$B/web" "$B/web.prev"
-  mv "$B/web.new" "$B/web"
+  if [ -f "$TMP/nascinema-web.tar.gz" ]; then
+    # Web app: unpack beside the live one, then swap (the last one kept as .prev).
+    mkdir -p "$TMP/web" "$B"
+    tar -xzf "$TMP/nascinema-web.tar.gz" -C "$TMP/web"
+    rm -rf "$B/web.new" && cp -a "$TMP/web" "$B/web.new"
+    rm -rf "$B/web.prev"; [ -d "$B/web" ] && mv "$B/web" "$B/web.prev"
+    mv "$B/web.new" "$B/web"
+  else
+    echo "[deploy] no web app in $REL_TAG — keeping the current one"
+  fi
   # App packages + changelog first, version.json LAST: clients poll it, so it
   # must never advertise a build whose APK/zip is still being copied.
   U="$APP/repo/backend/updates"
   mkdir -p "$U"
   for f in nascinema-windows.zip nascinema-android.apk; do
+    [ -f "$TMP/$f" ] || { echo "[deploy] no $f in $REL_TAG — keeping the current one"; continue; }
     cp "$TMP/$f" "$U/$f.part" && mv "$U/$f.part" "$U/$f"
   done
   cp "$TMP/CHANGELOG.md" "$APP/repo/CHANGELOG.md"
-  cp "$TMP/version.json" "$U/version.json.part" && mv "$U/version.json.part" "$U/version.json"
+  # version.json tracks each platform's own latest build ("platforms"), so a
+  # Windows-only beta never tells the Android app there's an update (it would
+  # re-download the old APK forever). Merge this release's platforms into the
+  # server's; the top-level version/build_number = the LOWEST platform, for
+  # older apps that don't say which platform they are.
+  python3 - "$U/version.json" "$TMP/version.json" "$U/version.json.part" <<'PY'
+import json, os, sys
+cur_p, new_p, out_p = sys.argv[1:]
+cur = json.load(open(cur_p, encoding="utf-8-sig")) if os.path.exists(cur_p) else {}
+new = json.load(open(new_p, encoding="utf-8-sig"))
+plats = dict(cur.get("platforms") or {})
+if not plats and cur:  # pre-"platforms" manifest: every platform was at its build
+    for p in ("windows", "android"):
+        if cur.get(f"{p}_size"):
+            plats[p] = {"version": cur["version"], "build": cur["build_number"], "size": cur[f"{p}_size"]}
+plats.update(new.get("platforms") or {
+    p: {"version": new["version"], "build": new["build_number"], "size": new[f"{p}_size"]}
+    for p in ("windows", "android") if new.get(f"{p}_size")})
+low = min(plats.values(), key=lambda e: (tuple(int(x) for x in e["version"].split(".")), e["build"]))
+out = {"released_at": new["released_at"], "version": low["version"],
+       "build_number": low["build"], "platforms": plats}
+for p, e in plats.items():
+    out[f"{p}_size"] = e["size"]
+json.dump(out, open(out_p, "w"), indent=2)
+print(json.dumps(out))
+PY
+  mv "$U/version.json.part" "$U/version.json"
   chown -R 3000:3000 "$B/web" "$U" "$APP/repo/CHANGELOG.md" 2>/dev/null || true
   echo "[deploy] published $REL_TAG:"
   curl -fs http://127.0.0.1:8400/api/update/check | head -c 300; echo

@@ -37,7 +37,9 @@ class UpdateService {
   static Future<UpdateInfo?> checkForUpdate(String baseUrl) async {
     try {
       final r = await http
-          .get(Uri.parse('${_base(baseUrl)}/api/update/check'))
+          // Say which platform: betas are Windows-only, and the server
+          // answers with this platform's own latest build.
+          .get(Uri.parse('${_base(baseUrl)}/api/update/check?platform=${Platform.isWindows ? 'windows' : Platform.isLinux ? 'linux' : 'android'}'))
           .timeout(const Duration(seconds: 10));
       if (r.statusCode != 200) return null;
       final data = jsonDecode(r.body) as Map<String, dynamic>;
