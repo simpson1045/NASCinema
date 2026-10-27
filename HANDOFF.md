@@ -46,8 +46,17 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   nascinema_player.log for `stall:` lines), movie Up Next "Press A to play", TV search.
 - **Open:** why the stream dies (NPM idle drop vs NAS disk wait) — if `stall:` lines show
   up, compare their times with NPM logs; streaming ELKO from the LAN IP instead of the
-  public hostname would take NPM out of the path. 21 MythBusters episodes still without
-  stills (multi-segment titles TMDB names differently; stillless specials).
+  public hostname would take NPM out of the path.
+- **Follow-up (same night):** the 21 misses were Sonarr multi-story titles ("Stinky Car,
+  Raccoon Rocket" = TMDB "Stinky Car", "James Bond Special Part 1" = "James Bond (1)").
+  `_episode_meta` rules 2–3 (TMDB words ⊆ file words within the year, ties skipped; same
+  number in that year's season + a real shared word). Dry run 237/237, all 16 new matches
+  checked by eye. Applied by running rematch from a scratch copy inside the container (no
+  restart): 237 synopses, 232 stills (5 stillless 2005 specials on TMDB). **That scanner
+  commit is pushed but NOT deployed** — plain deploy.sh (restart) when Matt's not in the app.
+- ELKO focus: front_app.ps1's SetForegroundWindow is refused from a background task (the
+  taskbar stayed up after the b75 relaunch). A synthetic Alt tap (keybd_event 0x12) before
+  SetForegroundWindow on the process's MainWindowHandle worked — front_app.ps1 not changed yet.
 
 ## 2026-10-18 — remote control LIVE end to end (b71)
 

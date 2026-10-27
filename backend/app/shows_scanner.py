@@ -214,14 +214,36 @@ async def _year_season_meta(cache: dict, tmdb_id: int, year: int) -> dict | None
             "air_date": first.get("air_date"),
             "episodes": {},
             "by_title": by_title,
+            # The looser rules in _episode_meta only look inside the year.
+            "year_eps": [em for _, sm in seasons for em in sm.get("episodes", {}).values()
+                         if (em.get("air_date") or "")[:4] == str(year)],
+            "by_number": first.get("episodes") or {},
         } if seasons else None
     return cache[key]
 
 
+# Words too common in MythBusters-style titles to tie two titles together alone.
+_WEAK_WORDS = {"the", "and", "of", "a", "vs", "part", "special", "myth", "myths",
+               "hour", "revisited", "mythbusters"}
+
+
+def _title_words(title: str | None) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", (title or "").lower()))
+
+
 def _episode_meta(sm: dict | None, ep: int | None, file_title: str | None) -> dict | None:
     """TMDB's data for one episode: by its number — or, for a year season, by
-    the filename's title (exact once punctuation is gone, else a close
-    match; no match = keep the filename title rather than guess a still)."""
+    the filename's title. No match = keep the filename title rather than
+    guess a still. Year-season rules, strictest first:
+      1. same title once punctuation is gone, or a close match (any season);
+      2. TMDB's whole title (or one of its "/" halves) is inside the file's
+         words, within that year — Sonarr titles list every story of the
+         episode: "Stinky Car, Raccoon Rocket" = "Stinky Car", "James Bond
+         Special Part 1" = "James Bond (1)", "Christmas Special" =
+         "Viewers-Choice/Christmas Special", "Dirty vs Clean Car" = "Clean
+         Car vs. Dirty Car";
+      3. the same episode number in the season that aired that year AND a
+         real word in common ("Diet Coke and Mentos" = "Mentos and Soda")."""
     if not sm:
         return None
     by_title = sm.get("by_title")
@@ -233,7 +255,25 @@ def _episode_meta(sm: dict | None, ep: int | None, file_title: str | None) -> di
     if k in by_title:
         return by_title[k]
     close = difflib.get_close_matches(k, list(by_title), n=1, cutoff=0.85)
-    return by_title[close[0]] if close else None
+    if close:
+        return by_title[close[0]]
+    words = _title_words(file_title)
+    best: list[tuple[int, dict]] = []
+    for em in sm.get("year_eps") or []:
+        for part in [em.get("title") or "", *(em.get("title") or "").split("/")]:
+            pw = _title_words(part)
+            if len("".join(pw)) >= 8 and pw <= words:
+                best.append((len(pw), em))
+                break
+    if best:
+        top = max(n for n, _ in best)
+        winners = {id(em): em for n, em in best if n == top}
+        if len(winners) == 1:  # a tie is a guess — skip it
+            return next(iter(winners.values()))
+    em = (sm.get("by_number") or {}).get(ep) if ep is not None else None
+    if em and {w for w in words & _title_words(em.get("title")) if len(w) >= 4} - _WEAK_WORDS:
+        return em
+    return None
 
 
 async def _episode_for(session, show: Show, season: int, ep: int | None,
