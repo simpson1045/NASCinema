@@ -3,6 +3,10 @@
 The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.9.0 - 2026-09-26
+- **No more false endings:** if the connection to the server drops in the middle of a movie, the player reconnects and carries on from the same spot — it no longer jumps to the end, marks the movie watched and starts the next one. If it really can't get the stream back, it tells you (“Lost the stream at 0:55:12 — press A to try again”) and keeps your place.
+- **Up Next asks before the next movie:** when a movie ends, the Up Next screen waits for **A** instead of counting down (episodes still roll on after their countdown). Nothing ever starts unless the Up Next screen was showing first.
+- **Search finds TV shows:** type a show's name (“myth”) and it comes up, marked TV SHOW; **A** opens its page.
+- **Pictures for year-numbered seasons:** shows whose seasons are named by year (MythBusters' “Season 2003”) now get their episode pictures, synopses and air dates.
 - **Remote control:** the Windows player now shows up as a named player your server can drive — play a movie or a show's next episode, pause, seek, switch audio/subtitles or a movie's version, set a sleep timer or "stop after this one" — all with the same picks and resume points as pressing Play yourself. Off unless the server has a remote token set.
 - **Nicer Up Next:** everything lines up on one center line under the logo; the next episode's title on its own line with its runtime, air date and a short synopsis; easier-to-read text over the picture; a bar that drains as the countdown runs; a bigger logo; and the shrunken video now fits its own shape (no black bars on older 4:3 shows) with a soft shadow.
 - **Updates per device:** each app now checks for its own platform's updates, so a Windows-only test build never offers your phone an update it doesn't have.

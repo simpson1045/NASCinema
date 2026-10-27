@@ -7,7 +7,38 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
 
 ---
 
-## Latest (2026-10-18) — remote control LIVE end to end (b71)
+## Latest (2026-10-26) — b75: fake end-of-file, Up Next asks for movies, TV search, year seasons
+
+- **Bug (Oct 21, Scooby-Doo on ELKO):** jumped from ~0:55 to "the end", saved progress =
+  duration (5194.8 → watched) and auto-started The Suicide Squad with NO Up Next screen.
+  Evidence: backend log — mpv's last range request for file 9044 at 22:55 PT, then
+  `GET /api/movies/1445/up-next` at 23:16:57 and the next file's progress 8 s later (a
+  natural end asks 45 s early). So: the HTTP stream died, mpv played out its 1 GiB cache,
+  reported eof-reached mid-movie, and the poll trusted it (`saveProgress(_duration)` +
+  `_onEnded` → the "short title" path that starts the next one immediately). mpv.log for
+  that night was already overwritten. Unproven theory for WHY the stream died: ELKO
+  streams via the public hostname → NPM; when mpv's cache is full it stops reading and
+  nginx can drop the idle connection.
+- **Fix (app):** an EOF more than 15 s before the duration = stall, never the end:
+  save the real position, `playerRecover` (seek → then reload, 3 tries 10 s apart), then
+  "Lost the stream at H:MM:SS — press A to try again". mpv gets
+  `--stream-lavf-o=reconnect=1,reconnect_on_network_error=1,reconnect_delay_max=10`.
+  mpv.log now rotates (mpv.1/2/3.log). Every end/stall decision logs to
+  nascinema_player.log (`end:` / `stall:` lines).
+- **Up Next:** `UpNextInfo.autoPlay` — movies false (screen says "Press A to play", no
+  countdown), episodes true. Nothing starts unless the Up Next screen was shown; an end
+  that skipped the countdown holds on the screen for A (B closes).
+- **Search:** Big Picture search loads `getShows()` too (rankTitles shared with movies;
+  shows win ties); results tagged TV SHOW open BpShowScreen. Test added.
+- **Year seasons (backend):** `Season 2003` asked TMDB for season 2003 → 404 → no stills.
+  Now year folders match episodes BY TITLE across all TMDB seasons (`_year_season_meta`,
+  `_episode_meta`; exact after stripping punctuation, else difflib ≥ 0.85; no match keeps
+  the filename title). Dry run on real data: MythBusters 216/237 with stills; the 21 left
+  are multi-segment titles TMDB names differently + stillless specials. Tom and Jerry
+  (show 48, Golden Era Anthology) isn't year-seasoned here — unaffected.
+- Deploy status: see the end of this section (updated as it ships).
+
+## 2026-10-18 — remote control LIVE end to end (b71)
 
 - Backend 6eef46e deployed (NASCINEMA_REMOTE_TOKEN in the NAS .env; backup
   .env.bak-20261018-053847-preremote). ADMS rebuilt with house_cinema (Matt asked me to;
