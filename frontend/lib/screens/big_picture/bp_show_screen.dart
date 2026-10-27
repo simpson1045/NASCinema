@@ -303,9 +303,32 @@ class _BpShowScreenState extends State<BpShowScreen> {
         _season(1);
       case PadButton.a:
         _activate();
+      case PadButton.y:
+        if (!_episodeDetails()) return false;
       default:
         return false;
     }
+    return true;
+  }
+
+  /// The focused episode with something to read, or null.
+  Episode? get _detailsEp {
+    final eps = _eps;
+    if (_row != _Row.episodes || eps.isEmpty) return null;
+    final e = eps[_episodeIdx.clamp(0, eps.length - 1)];
+    return (e.overview ?? '').isNotEmpty ? e : null;
+  }
+
+  /// Y: the focused episode's whole description — the line under the cards
+  /// cuts it off with "…" (Matt, 2026-10-26).
+  bool _episodeDetails() {
+    final e = _detailsEp;
+    if (e == null) return false;
+    final mins = _minutes(e);
+    showBpReadMore(context,
+        title: e.displayTitle,
+        subtitle: [e.code, ?_airDate(e), if (mins > 0) '$mins min'].join(' · '),
+        text: e.overview!);
     return true;
   }
 
@@ -419,6 +442,7 @@ class _BpShowScreenState extends State<BpShowScreen> {
             if (_seasons.length > 1) (PadGlyph.lb, 'Season'),
             if (_seasons.length > 1) (PadGlyph.rb, ''),
             (PadGlyph.a, _row == _Row.overview ? 'Read more' : 'Play'),
+            if (_detailsEp != null) (PadGlyph.y, 'Details'),
             (PadGlyph.b, 'Back'),
           ], size: 30, fontSize: 20),
         ),
