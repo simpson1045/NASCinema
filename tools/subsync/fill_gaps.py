@@ -49,6 +49,35 @@ for block in re.split(r"\n\s*\n", open(vtt_in, encoding="utf-8").read().replace(
     m = re.search(TS + r"\s*-->\s*" + TS, block)
     if m:
         cues.append((secs(*m.groups()[:4]), secs(*m.groups()[4:]), block[m.end():].strip(), False))
+words = [w for w in json.load(open(words_path, encoding="utf-8")) if w["word"].strip()]
+
+
+def toks(text):
+    text = re.sub(r"^\s*[A-Za-z ]{1,20}:", " ", text, flags=re.M)  # "Narrator:"
+    return re.findall(r"[a-z0-9']+", text.lower())
+
+
+# Drop lines nobody says here: the broadcast's ad-break bumpers and recaps ("AFTER
+# THE BREAK...", "FOR THOSE OF YOU JUST TUNING IN", "NEXT ON MYTHBUSTERS") aren't
+# in FilmRise's cut, so align.py parks them at the nearest cut point where they
+# show over real dialogue ("bleeding through", 77 lines in S2009E1). A line with
+# 2+ real words of which under a third are heard within 4 s of it goes; if it
+# was real but misheard, the gap fill below covers that speech instead.
+starts_w = [w["start"] for w in words]
+
+
+def heard_near(c):
+    lo, hi = bisect.bisect_left(starts_w, c[0] - 4), bisect.bisect_right(starts_w, c[1] + 4)
+    return {t for w in words[lo:hi] for t in toks(w["word"])}
+
+
+kept = []
+for c in cues:
+    sig = [t for t in toks(c[2]) if len(t) > 3]
+    if len(sig) >= 2 and sum(t in heard_near(c) for t in sig) / len(sig) < 0.34:
+        continue
+    kept.append(c)
+dropped, cues = len(cues) - len(kept), kept
 starts = [c[0] for c in cues]
 
 
@@ -57,7 +86,6 @@ def covered(t):
     return i >= 0 and cues[i][0] - 0.3 <= t <= cues[i][1] + 0.3
 
 
-words = [w for w in json.load(open(words_path, encoding="utf-8")) if w["word"].strip()]
 stretches, cur = [], []
 for w in words:
     if covered(w["start"]):
@@ -99,5 +127,5 @@ for n, (s, e, text, new) in enumerate(merged):
         filled += 1
     out += [f"{stamp(s)} --> {stamp(e)}", text, ""]
 open(vtt_out, "w", encoding="utf-8").write("\n".join(out))
-print(f"real cues {len(cues)}, transcript cues added {filled} "
+print(f"real cues kept {len(cues)} (dropped {dropped} not spoken in this file), transcript cues added {filled} "
       f"(from {sum(1 for r in stretches if len(r) >= 3)} uncovered stretches)")
