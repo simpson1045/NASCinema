@@ -71,6 +71,12 @@ class _BpShowScreenState extends State<BpShowScreen> {
   static const _cardW = 420.0;
   static const _cardH = 236.0;
   static const _gap = 28.0;
+  // Card text: title / S·E · aired · runtime / quality — one line each, fixed
+  // line heights, so the focused episode's description can sit right under
+  // them (it was pinned at y 975 and the wrapped "Stereo" line pushed every
+  // title into it, 2026-10-26).
+  static const _railTop = 650.0;
+  static const _cardTextH = 10 + 26 * 1.2 + 20 * 1.2 + 18 * 1.2; // gap + 3 lines
 
   Show get _show => _d?.show ?? widget.show;
   List<ShowSeason> get _seasons => _d?.seasons ?? const [];
@@ -141,13 +147,22 @@ class _BpShowScreenState extends State<BpShowScreen> {
 
   /// "22 min · Aired Aug 5, 1998" for the Up Next screen.
   static String _upNextMeta(Episode e) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final mins = e.runtime ?? (e.files.isNotEmpty ? ((e.files.first.duration ?? 0) / 60).round() : 0);
-    final d = DateTime.tryParse(e.airDate ?? '');
+    final mins = _minutes(e);
+    final aired = _airDate(e);
     return [
       if (mins > 0) '$mins min',
-      if (d != null) 'Aired ${months[d.month - 1]} ${d.day}, ${d.year}',
+      if (aired != null) 'Aired $aired',
     ].join('  ·  ');
+  }
+
+  static int _minutes(Episode e) =>
+      e.runtime ?? (e.files.isNotEmpty ? ((e.files.first.duration ?? 0) / 60).round() : 0);
+
+  /// "Aug 5, 1998", or null when TMDB has no date.
+  static String? _airDate(Episode e) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final d = DateTime.tryParse(e.airDate ?? '');
+    return d == null ? null : '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   /// Play one episode; when it ends, the next one starts by itself.
@@ -379,8 +394,8 @@ class _BpShowScreenState extends State<BpShowScreen> {
         Positioned(
           left: 0,
           right: 0,
-          top: 660,
-          height: 340,
+          top: _railTop,
+          height: _cardH + _cardTextH + 8,
           child: _loading && eps.isEmpty
               ? const Center(child: CircularProgressIndicator(color: NasColors.amber))
               : _episodeRail(eps),
@@ -388,15 +403,13 @@ class _BpShowScreenState extends State<BpShowScreen> {
         if (focusedEp != null && _row == _Row.episodes)
           Positioned(
             left: 90,
-            top: 975,
-            width: 1500,
+            top: _railTop + _cardH + _cardTextH + 12,
+            width: 1250, // clear of the pad hints, bottom right
             child: Text(
-              [focusedEp.overview ?? '', if (focusedEp.runtime != null) '${focusedEp.runtime} min']
-                  .where((t) => t.isNotEmpty)
-                  .join('   ·   '),
+              focusedEp.overview ?? '',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFFDDE2F5), fontSize: 22),
+              style: const TextStyle(color: Color(0xFFDDE2F5), fontSize: 22, height: 1.2),
             ),
           ),
         Positioned(
@@ -656,17 +669,31 @@ class _BpShowScreenState extends State<BpShowScreen> {
                 ]),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              [e.code, if (f?.quality != null) f!.quality!].join('   ·   '),
-              style: TextStyle(
-                  color: focused ? NasColors.amber : NasColors.muted, fontSize: 20, fontWeight: FontWeight.w700),
-            ),
+            const SizedBox(height: 10),
             Text(e.displayTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    color: focused ? Colors.white : NasColors.text, fontSize: 26, fontWeight: FontWeight.w600)),
+                    color: focused ? Colors.white : NasColors.text,
+                    fontSize: 26,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600)),
+            Text(
+              [e.code, ?_airDate(e), if (_minutes(e) > 0) '${_minutes(e)} min'].join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: focused ? NasColors.amber : NasColors.muted,
+                  fontSize: 20,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700),
+            ),
+            if (f?.quality != null)
+              Text(f!.quality!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: NasColors.muted, fontSize: 18, height: 1.2, fontWeight: FontWeight.w600)),
           ],
         ),
       ),

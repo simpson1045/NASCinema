@@ -3,6 +3,8 @@
 The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.9.0 - 2026-09-26
+- **Cleaner episode cards:** the episode's name comes first, then its number, air date and length (“S2009 · E1 · Apr 8, 2009 · 44 min”), then the picture/sound quality on its own small line — nothing wraps onto a second line anymore, and the focused episode's description no longer runs over the titles.
+- **More episode details for year-numbered seasons:** every MythBusters episode now has its description and air date, and nearly all have their picture.
 - **No more false endings:** if the connection to the server drops in the middle of a movie, the player reconnects and carries on from the same spot — it no longer jumps to the end, marks the movie watched and starts the next one. If it really can't get the stream back, it tells you (“Lost the stream at 0:55:12 — press A to try again”) and keeps your place.
 - **Up Next asks before the next movie:** when a movie ends, the Up Next screen waits for **A** instead of counting down (episodes still roll on after their countdown). Nothing ever starts unless the Up Next screen was showing first.
 - **Search finds TV shows:** type a show's name (“myth”) and it comes up, marked TV SHOW; **A** opens its page.
