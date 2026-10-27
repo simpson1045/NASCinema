@@ -36,7 +36,18 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   the filename title). Dry run on real data: MythBusters 216/237 with stills; the 21 left
   are multi-segment titles TMDB names differently + stillless specials. Tom and Jerry
   (show 48, Golden Era Anthology) isn't year-seasoned here — unaffected.
-- Deploy status: see the end of this section (updated as it ships).
+- **SHIPPED Oct 26 (~21:10 PT):** backend 3c24f0b deployed (deploy.sh also recreated
+  nascinema-postgres — data is on the nascinema_pgdata volume, API fine after). MythBusters
+  (show 21) rematched → 216/237 stills, 221 synopses. b75 built (GitHub), published
+  (`deploy.sh --release v0.9.0-b75`, windows 75 / android stays 71), installed on ELKO by
+  hand (update-b75 → robocopy → relaunch via run_desktop + front_app.ps1); remote control
+  reports DESKTOP-ELKO 0.9.0+75 idle. Scooby-Doo progress needed no reset (1:04:19).
+- **Untested on the TV:** stall recovery (only a real drop exercises it — watch
+  nascinema_player.log for `stall:` lines), movie Up Next "Press A to play", TV search.
+- **Open:** why the stream dies (NPM idle drop vs NAS disk wait) — if `stall:` lines show
+  up, compare their times with NPM logs; streaming ELKO from the LAN IP instead of the
+  public hostname would take NPM out of the path. 21 MythBusters episodes still without
+  stills (multi-segment titles TMDB names differently; stillless specials).
 
 ## 2026-10-18 — remote control LIVE end to end (b71)
 
