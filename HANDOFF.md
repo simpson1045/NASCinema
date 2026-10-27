@@ -52,8 +52,13 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   `_episode_meta` rules 2–3 (TMDB words ⊆ file words within the year, ties skipped; same
   number in that year's season + a real shared word). Dry run 237/237, all 16 new matches
   checked by eye. Applied by running rematch from a scratch copy inside the container (no
-  restart): 237 synopses, 232 stills (5 stillless 2005 specials on TMDB). **That scanner
-  commit is pushed but NOT deployed** — plain deploy.sh (restart) when Matt's not in the app.
+  restart): 237 synopses, 232 stills (5 stillless 2005 specials on TMDB). Scanner commit
+  deployed with b76 (backend 1f7d60f).
+- **b76 (1f7d60f) installed on ELKO:** episode cards = title / "S2009 · E1 · Apr 8, 2009 ·
+  44 min" (amber when focused) / quality (small), one line each, ellipsis not wrap; the
+  focused episode's description sits under them (`_railTop` 650 + card + `_cardTextH`),
+  width 1250 to clear the pad hints. Before: three-space separators wrapped "Stereo" on
+  every card and pushed titles into the description pinned at y 975 (Matt's photo, Oct 26).
 - ELKO focus: front_app.ps1's SetForegroundWindow is refused from a background task (the
   taskbar stayed up after the b75 relaunch). A synthetic Alt tap (keybd_event 0x12) before
   SetForegroundWindow on the process's MainWindowHandle worked — front_app.ps1 not changed yet.
