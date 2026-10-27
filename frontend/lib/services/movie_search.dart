@@ -27,28 +27,36 @@ String normalizeForSearch(String s) {
 /// every word matches a word start, then plain contains; popularity breaks
 /// ties.
 List<Movie> searchMovies(List<Movie> all, String query) {
-  final q = normalizeForSearch(query);
-  if (q.isEmpty) return const [];
-  final words = q.split(' ');
-  final scored = <(int, double, Movie)>[];
-  for (final m in all) {
-    final title = normalizeForSearch(m.title);
-    final hay = '$title ${normalizeForSearch(m.collectionName ?? '')}';
-    final tokens = hay.split(' ');
-    bool wordStart(String w) => tokens.any((t) => t.startsWith(w));
-    int rank;
-    if (title.startsWith(q)) {
-      rank = 0;
-    } else if (words.every(wordStart)) {
-      rank = 1;
-    } else if (hay.contains(q)) {
-      rank = 2;
-    } else {
-      continue;
-    }
-    scored.add((rank, -(m.popularity ?? 0), m));
-  }
+  final scored = [
+    for (final (rank, m) in rankTitles(all, query, (m) => m.title, (m) => m.collectionName))
+      (rank, -(m.popularity ?? 0), m),
+  ];
   scored.sort((a, b) =>
       a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
   return [for (final s in scored) s.$3];
+}
+
+/// Every item matching [query] with its rank — 0: the title starts with the
+/// query, 1: every query word starts a word of the title (or [extra], e.g. the
+/// franchise), 2: plain contains. Movies and TV shows rank the same way.
+List<(int, T)> rankTitles<T>(Iterable<T> all, String query,
+    String Function(T) title, [String? Function(T)? extra]) {
+  final q = normalizeForSearch(query);
+  if (q.isEmpty) return const [];
+  final words = q.split(' ');
+  final out = <(int, T)>[];
+  for (final item in all) {
+    final t = normalizeForSearch(title(item));
+    final hay = '$t ${normalizeForSearch(extra?.call(item) ?? '')}';
+    final tokens = hay.split(' ');
+    bool wordStart(String w) => tokens.any((tok) => tok.startsWith(w));
+    if (t.startsWith(q)) {
+      out.add((0, item));
+    } else if (words.every(wordStart)) {
+      out.add((1, item));
+    } else if (hay.contains(q)) {
+      out.add((2, item));
+    }
+  }
+  return out;
 }

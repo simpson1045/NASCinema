@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nascinema/models/movie.dart';
+import 'package:nascinema/models/show.dart';
 import 'package:nascinema/screens/big_picture/bp_search_screen.dart';
 import 'package:nascinema/services/movie_search.dart';
 
@@ -55,6 +56,25 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.pump();
     expect(find.textContaining('Start typing'), findsOneWidget);
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('TV shows come up too (MythBusters, 2026-10-26)', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1920, 1080));
+    await tester.pumpWidget(MaterialApp(
+        home: BpSearchScreen(
+            baseUrl: 'http://nas',
+            initialLibrary: _lib,
+            initialShows: [Show(id: 1, title: 'MythBusters', year: 2003)])));
+    await tester.pumpAndSettle();
+    for (final k in [LogicalKeyboardKey.keyM, LogicalKeyboardKey.keyY,
+        LogicalKeyboardKey.keyT, LogicalKeyboardKey.keyH]) {
+      await tester.sendKeyEvent(k);
+      await tester.pump();
+    }
+    expect(find.text('1 result'), findsOneWidget);
+    expect(find.text('MythBusters (2003)'), findsOneWidget);
+    expect(find.text('TV SHOW'), findsOneWidget);
     await tester.binding.setSurfaceSize(null);
   });
 }
