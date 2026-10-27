@@ -772,3 +772,21 @@ void playerLoadMedia(String media, {double start = 0, String? alang, bool play =
   _mpv?.loadFile(media, start: start, alang: alang);
   if (play) _mpv?.setPaused(false);
 }
+
+/// A line in nascinema_player.log (the player screen's end-of-file calls).
+void playerDiag(String line) => _diag(line);
+
+/// Read on after a fake end-of-file (the stream died mid-movie): a seek
+/// reopens the HTTP connection at [at]; [reload] reopens the whole file
+/// there instead. mpv paused itself at the "end" (keep-open), so un-pause.
+Future<void> playerRecover(double at, {bool reload = false}) async {
+  final m = _mpv;
+  if (m == null) return;
+  if (reload) {
+    final path = await m.getProperty('path');
+    if (path is String && path.isNotEmpty) m.loadFile(path, start: at);
+  } else {
+    m.seek(at);
+  }
+  m.setPaused(false);
+}

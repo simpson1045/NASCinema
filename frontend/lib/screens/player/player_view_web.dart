@@ -232,6 +232,8 @@ void setVersionsHandler(void Function()? h) {}
 void playerOpenMenu(Map<String, Object?> menu) {}
 Future<String?> playerCurrentAudioLang() async => null;
 void playerLoadMedia(String media, {double start = 0, String? alang, bool play = false}) {}
+void playerDiag(String line) {}
+Future<void> playerRecover(double at, {bool reload = false}) async {}
 void playerShowText(String text, {int ms = 3000}) {}
 void playerSyncBounds() {}
 Future<dynamic> playerGetProp(String name) async => null;

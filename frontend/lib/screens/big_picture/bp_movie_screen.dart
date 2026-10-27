@@ -313,6 +313,7 @@ class _BpMovieScreenState extends State<BpMovieScreen> {
             ].join('  ·  '),
             overview: m.overview,
             reason: r.reason,
+            autoPlay: false, // movie → movie asks first (A on the Up Next screen)
             backdropUrl: m.backdropUrl(size: 'original'),
             logoUrl: d.logo,
             versions: d.files,

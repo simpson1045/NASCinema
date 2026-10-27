@@ -143,6 +143,16 @@ class MpvController {
 
     final pipeName = 'nascinema-mpv-${DateTime.now().millisecondsSinceEpoch}';
     final exeDir = File(Platform.resolvedExecutable).parent.path;
+    // Keep the last three launches' logs (mpv.1.log is the one before this):
+    // each launch truncates mpv.log, and the Oct 21 stall's log was gone by
+    // the time anyone looked.
+    final sep = Platform.pathSeparator;
+    for (var i = 2; i >= 0; i--) {
+      try {
+        final f = File('$exeDir${sep}mpv${i == 0 ? '' : '.$i'}.log');
+        if (f.existsSync()) f.renameSync('$exeDir${sep}mpv.${i + 1}.log');
+      } catch (_) {}
+    }
     final args = <String>[
       '--input-ipc-server=\\\\.\\pipe\\$pipeName',
       ...extraArgs,
@@ -213,6 +223,10 @@ class MpvController {
       '--demuxer-max-bytes=1GiB',
       '--demuxer-max-back-bytes=512MiB',
       '--demuxer-readahead-secs=60',
+      // A dropped HTTP connection reconnects instead of reading as the end
+      // of the file (Scooby-Doo stopped at ~0:55 and "ended", 2026-10-21).
+      // The player screen also refuses an end-of-file that isn't near the end.
+      '--stream-lavf-o=reconnect=1,reconnect_on_network_error=1,reconnect_delay_max=10',
       media,
     ];
 

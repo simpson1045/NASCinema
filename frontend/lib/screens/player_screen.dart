@@ -40,6 +40,7 @@ class UpNextInfo {
     this.name,
     this.meta = '',
     this.overview,
+    this.autoPlay = true,
   });
 
   final int fileId;
@@ -55,6 +56,9 @@ class UpNextInfo {
   final List<MovieFile> versions;
   // Called when it actually starts (not when it's merely offered).
   final void Function()? onStart;
+  // Episodes roll on after the countdown; a movie waits on the Up Next
+  // screen for A (Matt, 2026-10-26: movie → movie should ask first).
+  final bool autoPlay;
 }
 
 class PlayerScreen extends StatefulWidget {
@@ -321,7 +325,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   DateTime? _handoffAt;
   double _pipAspect = 16 / 9; // the playing video's shape, for the corner box
   bool _upNextCancelled = false; // B: no auto-play; leave at the end
+  bool _holdAtEnd = false; // ended on the Up Next screen, waiting for A / B
   Timer? _pipSync;
+
+  // mpv's end-of-file only counts as "the end" this close to the duration;
+  // anything earlier is the stream dying (see _onStall).
+  static const _endSlack = 15.0;
+  int _stallTries = 0;
+  DateTime? _stallAt;
+  bool _stallGaveUp = false;
 
   bool get _upNextAllowed =>
       widget.upNext != null && _nativeVideo && _duration > 120 && !_upNextCancelled;
@@ -369,19 +381,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _cancelUpNext() {
+    if (_holdAtEnd) {
+      Navigator.of(context).pop('cancelled'); // already over: B leaves
+      return;
+    }
     _upNextCancelled = true;
     _setPip(false);
   }
 
   void _keepWatching() {
+    if (_holdAtEnd) return; // nothing left to watch
     _keepFull = true;
     _setPip(false);
   }
 
   /// The title ended: hand over to the next one in place, or close with
   /// 'ended' (episodes / a cancelled Up Next), or hold the last frame.
+  /// Nothing starts unless the Up Next screen was on screen first: an
+  /// episode rolls on after its countdown; a movie (autoPlay off), or
+  /// anything that ended before its countdown could show, waits there for A.
   Future<void> _onEnded() async {
     var next = _upNextCancelled ? null : _next;
+    final counted = _pip || _keepFull; // the countdown was shown
     if (next == null && !_upNextCancelled && _nativeVideo && widget.upNext != null) {
       try {
         next = await widget.upNext!(); // short title — never got to the 45 s mark
@@ -389,12 +410,67 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (!mounted) return;
     if (next != null && _nativeVideo) {
-      await _startNext(next);
+      if (next.autoPlay && counted) {
+        playerDiag('end: up next "${next.title}" after the countdown');
+        await _startNext(next);
+      } else {
+        playerDiag('end: holding on Up Next "${next.title}" for A');
+        unawaited(_readPipAspect());
+        setState(() {
+          _next = next;
+          _holdAtEnd = true;
+        });
+        if (!_pip) _setPip(true);
+      }
     } else if (_upNextCancelled) {
       Navigator.of(context).pop('cancelled'); // B: no auto-play from the page either
     } else if (widget.popOnEnd) {
       Navigator.of(context).pop('ended');
     }
+  }
+
+  /// mpv reports end-of-file but we're nowhere near the end: the stream died.
+  /// Scooby-Doo, 2026-10-21: the connection dropped, mpv played out its
+  /// cache, hit "EOF" at ~0:55 — and the app marked the movie watched and
+  /// started the next one with no Up Next screen. Never treat that as the
+  /// end: save the real position and read on from it (seek, then reload),
+  /// three tries ten seconds apart; then stop and say so.
+  void _onStall(double left) {
+    final now = DateTime.now();
+    if (_stallAt != null && now.difference(_stallAt!) < const Duration(seconds: 10)) return;
+    _saveProgress(); // the real position, never the duration
+    if (!_nativeVideo || _stallTries >= 3) {
+      if (!_stallGaveUp) {
+        _stallGaveUp = true;
+        playerDiag('stall: gave up at ${_hms(_position)} of ${_hms(_duration)}');
+        playerShowText('Lost the stream at ${_hms(_position)} — press A to try again', ms: 600000);
+      }
+      return;
+    }
+    _stallTries++;
+    _stallAt = now;
+    final at = (_position - 2).clamp(0.0, _duration);
+    playerDiag('stall: end-of-file at ${_hms(_position)} of ${_hms(_duration)} '
+        '(${left.toStringAsFixed(0)} s left) — retry $_stallTries/3 from ${_hms(at)}');
+    unawaited(playerRecover(at, reload: _stallTries > 1));
+  }
+
+  /// Playing again well past a stall: forget it, so a later one gets fresh tries.
+  void _clearStall() {
+    if (_stallAt == null && !_stallGaveUp) return;
+    if (_stallGaveUp || DateTime.now().difference(_stallAt!) > const Duration(seconds: 60)) {
+      if (_stallGaveUp) playerShowText('', ms: 1);
+      playerDiag('stall: playing again at ${_hms(_position)}');
+      _stallTries = 0;
+      _stallAt = null;
+      _stallGaveUp = false;
+    }
+  }
+
+  static String _hms(double s) {
+    final t = s.round();
+    final m = (t ~/ 60) % 60, sec = t % 60;
+    return '${t ~/ 3600}:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
   /// Fullscreen behind the shrunken video: the next title's backdrop, its
@@ -404,6 +480,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _upNextScreen(UpNextInfo n) {
     final secs = (_duration - _position).clamp(0.0, 999.0);
     final left = secs.ceil();
+    final waits = !n.autoPlay || _holdAtEnd; // no countdown: A starts it
     final heading = Text(n.heading,
         textAlign: TextAlign.center,
         maxLines: 2,
@@ -505,33 +582,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         color: NasColors.amber, fontSize: 27, fontWeight: FontWeight.w700, shadows: shadow)),
               ],
               const SizedBox(height: 36),
-              Text('Starts in $left',
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 40, fontWeight: FontWeight.w800, shadows: shadow)),
-              const SizedBox(height: 14),
-              // Drains over the last 20 s (the poll ticks 4×/s; the animation
-              // smooths the steps).
-              ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: SizedBox(
-                  width: 520,
-                  height: 6,
-                  child: Stack(children: [
-                    const ColoredBox(color: Color(0x33FFFFFF), child: SizedBox.expand()),
-                    AnimatedFractionallySizedBox(
-                      duration: const Duration(milliseconds: 260),
-                      alignment: Alignment.centerLeft,
-                      widthFactor: (secs / 20).clamp(0.0, 1.0),
-                      child: const ColoredBox(color: NasColors.amber, child: SizedBox.expand()),
-                    ),
-                  ]),
+              if (waits)
+                const Text('Press A to play',
+                    style: TextStyle(
+                        color: Colors.white, fontSize: 40, fontWeight: FontWeight.w800, shadows: shadow))
+              else ...[
+                Text('Starts in $left',
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 40, fontWeight: FontWeight.w800, shadows: shadow)),
+                const SizedBox(height: 14),
+                // Drains over the last 20 s (the poll ticks 4×/s; the animation
+                // smooths the steps).
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: SizedBox(
+                    width: 520,
+                    height: 6,
+                    child: Stack(children: [
+                      const ColoredBox(color: Color(0x33FFFFFF), child: SizedBox.expand()),
+                      AnimatedFractionallySizedBox(
+                        duration: const Duration(milliseconds: 260),
+                        alignment: Alignment.centerLeft,
+                        widthFactor: (secs / 20).clamp(0.0, 1.0),
+                        child: const ColoredBox(color: NasColors.amber, child: SizedBox.expand()),
+                      ),
+                    ]),
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 36),
-              const PadHints([
-                (PadGlyph.a, 'Play now'),
-                (PadGlyph.y, 'Back to fullscreen'),
-                (PadGlyph.b, 'Cancel'),
+              PadHints([
+                (PadGlyph.a, waits ? 'Play' : 'Play now'),
+                if (!_holdAtEnd) (PadGlyph.y, 'Back to fullscreen'),
+                (PadGlyph.b, _holdAtEnd ? 'Close' : 'Cancel'),
               ], size: 34, fontSize: 24),
             ]),
           ),
@@ -580,6 +663,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _nextAsked = false;
         _keepFull = false;
         _upNextCancelled = false;
+        _holdAtEnd = false;
+        _stallTries = 0;
+        _stallAt = null;
+        _stallGaveUp = false;
       });
       if (_pip) _setPip(false);
       setVersionsHandler(_versions.length > 1 ? _openVersions : null);
@@ -616,6 +703,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// here, not by the focus fallback: the native video window can hold focus,
   /// which left B dead on a failed start (2026-09-27).
   bool _onPad(PadButton b) {
+    if (_stallGaveUp && b == PadButton.a) {
+      // "Lost the stream — press A": three fresh tries from the poll.
+      playerShowText('Reconnecting…', ms: 3000);
+      _stallGaveUp = false;
+      _stallTries = 0;
+      _stallAt = null;
+      return true;
+    }
     if (_pip) {
       switch (b) {
         case PadButton.a:
@@ -898,9 +993,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
           }
         }
         _upNextTick();
-        if ((widget.popOnEnd || widget.upNext != null) &&
-            !_endHandled && _duration > 0 && playerEnded()) {
+        final ended = _duration > 0 && playerEnded();
+        if (!ended) {
+          _clearStall();
+        } else if (!_endHandled && _duration - _position > _endSlack) {
+          _onStall(_duration - _position); // not the end — the stream died
+          return;
+        } else if ((widget.popOnEnd || widget.upNext != null) && !_endHandled) {
           _endHandled = true;
+          playerDiag('end: reached ${_hms(_position)} of ${_hms(_duration)}');
           ApiService(widget.baseUrl).saveProgress(_fileId, _duration, _activeSub);
           unawaited(_onEnded());
           return;
