@@ -64,26 +64,47 @@ for a, b, n in sm.get_matching_blocks():
 per = [statistics.median(s) if s else None for s in shifts]
 matched = sum(p is not None for p in per)
 
-# fill gaps from the nearest matched neighbour, then a running median (window 9)
-filled = per[:]
-last = None
-for i, p in enumerate(filled):
+# Each cue keeps its OWN measured shift. A running median over every cue (the
+# first version) dragged cues across the cut points — at a jump the last cues of
+# one section took the next section's shift and showed before the lines ahead of
+# them ("bleeding through", MythBusters 42:01, 2026-10-26). Now: a matched cue is
+# only overridden when it's a lone outlier (both matched neighbours agree with
+# each other and not with it); an unmatched cue borrows from its nearest matched
+# neighbour in time.
+idx = [i for i, p in enumerate(per) if p is not None]
+smooth = per[:]
+for k, i in enumerate(idx):
+    if 0 < k < len(idx) - 1:
+        a, b = per[idx[k - 1]], per[idx[k + 1]]
+        if abs(a - b) < 2 and abs(per[i] - a) > 5:
+            smooth[i] = (a + b) / 2
+for i, p in enumerate(per):
     if p is None:
-        filled[i] = last
-    else:
-        last = p
-nxt = None
-for i in range(len(filled) - 1, -1, -1):
-    if per[i] is not None:
-        nxt = per[i]
-    if filled[i] is None:
-        filled[i] = nxt if nxt is not None else 0.0
-smooth = [statistics.median(filled[max(0, i - 4): i + 5]) for i in range(len(filled))]
+        before = max((j for j in idx if j < i), default=None)
+        after = min((j for j in idx if j > i), default=None)
+        if before is None and after is None:
+            smooth[i] = 0.0
+        elif after is None or (before is not None and
+                               cues[i]["start"] - cues[before]["end"] <= cues[after]["start"] - cues[i]["end"]):
+            smooth[i] = smooth[before]
+        else:
+            smooth[i] = smooth[after]
+
+# Never start before the line ahead, never overlap the next one: mpv stacks
+# overlapping cues on screen.
+timed = sorted(((c["start"] + d, c["end"] + d, c["text"]) for c, d in zip(cues, smooth)),
+               key=lambda t: t[0])
+fixed = []
+for n, (s, e, text) in enumerate(timed):
+    nxt = timed[n + 1][0] if n + 1 < len(timed) else e
+    fixed.append((s, max(min(e, nxt - 0.02), s + 0.3), text))
 
 out = ["WEBVTT", ""]
-for c, d in zip(cues, smooth):
-    out += [f"{stamp(c['start'] + d)} --> {stamp(c['end'] + d)}", c["text"], ""]
+for s, e, text in fixed:
+    out += [f"{stamp(s)} --> {stamp(e)}", text, ""]
 open(vtt_out, "w", encoding="utf-8").write("\n".join(out))
+overlaps = sum(1 for x, y in zip(fixed, fixed[1:]) if y[0] < x[1] - 0.01)
+print(f"overlapping cues after the fix: {overlaps}")
 
 print(f"cues {len(cues)}, matched {matched} ({100 * matched / len(cues):.0f}%), transcript words {len(tw)}")
 prev = None
