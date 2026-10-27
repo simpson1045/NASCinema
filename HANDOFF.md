@@ -59,6 +59,18 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   focused episode's description sits under them (`_railTop` 650 + card + `_cardTextH`),
   width 1250 to clear the pad hints. Before: three-space separators wrapped "Stereo" on
   every card and pushed titles into the description pinned at y 975 (Matt's photo, Oct 26).
+- **b77 (0ada6a5) PUBLISHED, NOT INSTALLED** (Matt started watching): Y on a focused
+  episode = Details (showBpReadMore: title, S·E · aired · runtime, full description); hint
+  bar shows "Y Details". Install when ELKO is idle, or let the in-app updater offer it.
+- **Episode subtitles — gap found (Oct 26):** MythBusters files have NO subtitle streams;
+  `/api/subtitles/{id}/search` only searches movies (episode = hash-only → nothing) and
+  shows have no picker. OpenSubtitles DOES have them by `parent_tmdb_id` + TMDB
+  season/episode (MythBusters S2009E1 = TMDB 7x1 → 5 English results). Live workaround
+  done: downloaded os_file_id 11498566 into file 5264's subs (en-11498566.vtt) and
+  `sub-add`ed it over mpv's JSON IPC (pipe name from nascinema_player.log, via
+  run_desktop). **TODO (Matt asked):** episode search by parent_tmdb_id + TMDB S/E
+  (year seasons need the matched TMDB numbers — store them on Episode or re-derive via
+  _year_season_meta), a subtitle picker for shows, and maybe auto-pick for subless episodes.
 - ELKO focus: front_app.ps1's SetForegroundWindow is refused from a background task (the
   taskbar stayed up after the b75 relaunch). A synthetic Alt tap (keybd_event 0x12) before
   SetForegroundWindow on the process's MainWindowHandle worked — front_app.ps1 not changed yet.
