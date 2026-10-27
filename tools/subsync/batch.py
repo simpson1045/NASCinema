@@ -16,6 +16,7 @@ env: OS_API_KEY. Usage:
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -179,6 +180,13 @@ for e in eps:
     if base_vtt == empty and cands:
         log("  no subtitle lined up -> transcript only")
     report = run(os.path.join(HERE, "fill_gaps.py"), words_p, base_vtt, dest)
+    # Ready to copy into the server's data/subs/ as one tree: <file_id>/en-matched.{vtt,json}
+    up = os.path.join(out, "up", str(fid))
+    os.makedirs(up, exist_ok=True)
+    shutil.copyfile(dest, os.path.join(up, "en-matched.vtt"))
+    label = ("Matched to this file (speech)" if base_vtt != empty
+             else "Transcript of this file (speech recognition)")
+    json.dump({"release": label}, open(os.path.join(up, "en-matched.json"), "w", encoding="utf-8"))
     log(f"  {report.strip()} | {time.time() - t0:.0f} s total")
 
 log("== batch done")
