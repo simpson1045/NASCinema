@@ -75,7 +75,11 @@ def os_candidates(title, ep):
             a = it["attributes"]
             names = [a.get("release") or "", (a.get("feature_details") or {}).get("title") or ""]
             rel, feat = (len(ours & title_words(n)) / max(len(ours), 1) for n in names)
-            if max(rel, feat) < 0.75 or not nums <= set().union(*(title_words(n) for n in names)):
+            # A release name with real title words has to match ("...S07E04 - Banana
+            # Slip, Double Dip" filed under "YouTube Special" cost two downloads);
+            # the episode title only counts when the release name says nothing.
+            score = rel if title_words(names[0]) else feat
+            if score < 0.75 or not nums <= title_words(names[0] if title_words(names[0]) else names[1]):
                 continue
             for f in a.get("files", []):
                 # the release name outranks the episode title (mislabeled entries)
@@ -161,10 +165,10 @@ for e in eps:
         except Exception as ex:
             log(f"  download {os_id} failed ({ex})")
             continue
-        base = os.path.join(work, f"base{k}.vtt")
-        open(base, "w", encoding="utf-8").write(srt_to_vtt(got[0]))
+        sub_vtt = os.path.join(work, f"base{k}.vtt")  # not `base` — that's the server URL
+        open(sub_vtt, "w", encoding="utf-8").write(srt_to_vtt(got[0]))
         matched = os.path.join(work, f"matched{k}.vtt")
-        report = run(os.path.join(HERE, "align.py"), words_p, base, matched)
+        report = run(os.path.join(HERE, "align.py"), words_p, sub_vtt, matched)
         m = re.search(r"matched \d+ \((\d+)%\)", report)
         pct = int(m.group(1)) if m else 0
         log(f"  aligned: {pct}% of lines matched")
