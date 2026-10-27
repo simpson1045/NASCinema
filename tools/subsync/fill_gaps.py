@@ -3,7 +3,7 @@
 A re-edited copy (FilmRise MythBusters) has narration and footage the broadcast
 never had, so no downloaded subtitle covers it (~10% of the words in S2009E1).
 Every stretch of speech with no cue on screen becomes new cues from the
-transcript: ALL CAPS like broadcast captions, two lines of ~42 characters at
+transcript, in the real subtitle's style (ALL CAPS or sentence case), two lines of ~42 characters at
 most, broken at pauses and sentence ends, never overlapping a real cue.
 Usage: fill_gaps.py words.json matched.vtt out.vtt
 """
@@ -16,8 +16,9 @@ words_path, vtt_in, vtt_out = sys.argv[1:4]
 TS = r"(\d+):(\d\d):(\d\d)\.(\d{3})"
 LINE, MAX_CHARS, MAX_SECS, PAUSE = 42, 84, 6.0, 0.7
 # Names Whisper hears wrong (MythBusters cast); whole words, case-insensitive.
-FIXES = {"cary": "KARI", "carrie": "KARI", "kerry": "KARI", "tori": "TORY", "torrey": "TORY",
-         "jamie hyneman": "JAMIE HYNEMAN", "myth busters": "MYTHBUSTERS"}
+FIXES = {"cary": "Kari", "carrie": "Kari", "kerry": "Kari", "tori": "Tory", "torrey": "Tory",
+         "heineman": "Hyneman", "hineman": "Hyneman", "myth busters": "MythBusters"}
+SHOUT = False  # set once the real cues are read: ALL CAPS broadcast captions vs sentence case
 
 
 def secs(h, m, s, ms):
@@ -31,10 +32,10 @@ def stamp(t):
 
 
 def fix(text):
-    text = re.sub(r" -(?=\w)", "-", text.upper())  # Whisper writes "MIND -BLOWING"
+    text = re.sub(r" -(?=\w)", "-", text)  # Whisper writes "MIND -BLOWING"
     for wrong, right in FIXES.items():
-        text = re.sub(rf"\b{wrong.upper()}\b", right, text)
-    return text
+        text = re.sub(rf"\b{wrong}\b", right, text, flags=re.I)
+    return text.upper() if SHOUT else text
 
 
 def wrap(text):
@@ -78,6 +79,8 @@ for c in cues:
         continue
     kept.append(c)
 dropped, cues = len(cues) - len(kept), kept
+letters = [ch for c in cues for ch in re.sub(r"^\s*[A-Za-z ]{1,20}:", "", c[2]) if ch.isalpha()]
+SHOUT = sum(ch.isupper() for ch in letters) > 0.7 * max(len(letters), 1)
 starts = [c[0] for c in cues]
 
 

@@ -86,6 +86,19 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   ~/.cache/whisper/large-v3-turbo.pt). Audio via jellyfin ffmpeg (16 kHz mono wav,
   182 MB; 3.5 min to extract on the busy pool); ~5 min to transcribe. The NAS has no
   GPU — CPU Whisper (small/int8) there is the option for doing this automatically.
+- **Full recipe (Oct 26, after Matt's bleed-through reports):** `align.py` keeps each
+  cue's own measured shift (smoothing across cut points made lines show early and stack),
+  `fill_gaps.py` drops lines whose words aren't heard within 4 s (the broadcast's ad-break
+  bumpers/recaps — "AFTER THE BREAK…", "FOR THOSE OF YOU JUST TUNING IN"), then fills
+  uncovered speech from the transcript in the real subtitle's case style, cast names fixed.
+  E1 (file 5264): 1854 kept / 77 dropped / 213 added. E2 (file 5265, base os 2579141):
+  96% matched, 949 kept / 17 dropped / 159 added; both 0 unspoken, 0 out of order.
+  Per episode ≈ 3.5 min audio extract + 2.5 min Whisper + seconds to align.
+- **b78 INSTALLED on ELKO (Oct 26 ~23:40).** Up Next check: watched naturally from 50 s
+  out, E1 fetched up-next at 45 s, showed the countdown at 20 s, rolled into E2. A test
+  that started paused + jumped to 30 s left never got the countdown → the end held on
+  "Press A to play" (the new nothing-starts-unseen rule doing its job). Screenshots of
+  ELKO need SetProcessDPIAware first (4K at 200%; otherwise you get the top-left quarter).
 - **b78 (375ad70) tagged:** held ←/→ adds up and seeks once (30 seeks in 3.5 s were 30
   HTTP reconnects; mpv settled in 5.5 s and came out paused — no pause command was
   sent, the stall code never fired). Not installed yet (Matt watching).
