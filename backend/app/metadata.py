@@ -662,6 +662,8 @@ async def get_show_metadata_by_id(tmdb_id: int) -> dict | None:
         "certification": _tv_certification(detail),
         "status": detail.get("status"),
         "first_air_date": aired or None,
+        "seasons": [s.get("season_number") for s in detail.get("seasons", [])
+                    if s.get("season_number") is not None],
     }
 
 

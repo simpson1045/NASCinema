@@ -9,6 +9,7 @@ carries its resume point to the new file.
 
 from __future__ import annotations
 
+import difflib
 import os
 import re
 from collections import defaultdict
@@ -157,10 +158,82 @@ async def _season_meta(cache: dict, show: Show, season: int) -> dict | None:
     tmdb_id, tmdb_season = _tmdb_season(show, season)
     if not tmdb_id or season == 0 and show.season_map:
         return None
+    if season >= _YEAR_SEASON and tmdb_season == season:
+        return await _year_season_meta(cache, tmdb_id, season)
     key = (tmdb_id, tmdb_season)
     if key not in cache:
         cache[key] = await get_season_metadata(tmdb_id, tmdb_season)
     return cache[key]
+
+
+_YEAR_SEASON = 1900  # "Season 2003": a folder numbered by year, not TMDB's season
+
+
+def _title_key(title: str | None) -> str:
+    return re.sub(r"[^a-z0-9]", "", (title or "").lower())
+
+
+async def _all_tmdb_seasons(cache: dict, tmdb_id: int) -> list[tuple[int, dict]]:
+    """Every TMDB season of a show, regular seasons first, Specials last."""
+    key = (tmdb_id, "all")
+    if key not in cache:
+        from .metadata import get_show_metadata_by_id
+        meta = await get_show_metadata_by_id(tmdb_id) or {}
+        out = []
+        for n in sorted(meta.get("seasons") or [], key=lambda n: (n == 0, n)):
+            if (tmdb_id, n) not in cache:
+                cache[(tmdb_id, n)] = await get_season_metadata(tmdb_id, n)
+            if cache[(tmdb_id, n)]:
+                out.append((n, cache[(tmdb_id, n)]))
+        cache[key] = out
+    return cache[key]
+
+
+async def _year_season_meta(cache: dict, tmdb_id: int, year: int) -> dict | None:
+    """Year-numbered folders (MythBusters "Season 2003", Tom and Jerry "Season
+    1940"): TMDB numbers its seasons 1, 2, 3… (MythBusters 2003 = TMDB season
+    1), and episode numbers inside a year needn't agree with Sonarr's either —
+    so episodes are found by TITLE across every TMDB season ("by_title", see
+    _episode_meta). The season's poster/overview come from the TMDB season
+    that aired that year. Asking TMDB for "season 2003" 404'd: no stills, no
+    synopses, filename titles only (2026-10-26)."""
+    key = (tmdb_id, "year", year)
+    if key not in cache:
+        seasons = await _all_tmdb_seasons(cache, tmdb_id)
+        by_title: dict[str, dict] = {}
+        for _, sm in seasons:
+            for em in sm.get("episodes", {}).values():
+                if k := _title_key(em.get("title")):
+                    by_title.setdefault(k, em)
+        aired = [sm for n, sm in seasons if n > 0 and (sm.get("air_date") or "")[:4] == str(year)]
+        first = aired[0] if aired else {}
+        cache[key] = {
+            "name": f"Season {year}",
+            "overview": first.get("overview"),
+            "poster_path": first.get("poster_path"),
+            "air_date": first.get("air_date"),
+            "episodes": {},
+            "by_title": by_title,
+        } if seasons else None
+    return cache[key]
+
+
+def _episode_meta(sm: dict | None, ep: int | None, file_title: str | None) -> dict | None:
+    """TMDB's data for one episode: by its number — or, for a year season, by
+    the filename's title (exact once punctuation is gone, else a close
+    match; no match = keep the filename title rather than guess a still)."""
+    if not sm:
+        return None
+    by_title = sm.get("by_title")
+    if by_title is None:
+        return (sm.get("episodes") or {}).get(ep) if ep is not None else None
+    k = _title_key(file_title)
+    if not k:
+        return None
+    if k in by_title:
+        return by_title[k]
+    close = difflib.get_close_matches(k, list(by_title), n=1, cutoff=0.85)
+    return by_title[close[0]] if close else None
 
 
 async def _episode_for(session, show: Show, season: int, ep: int | None,
@@ -181,11 +254,11 @@ async def _episode_for(session, show: Show, season: int, ep: int | None,
             Episode.episode_number == ep))
         if existing:
             return existing
-    em = ((sm or {}).get("episodes") or {}).get(ep) if ep is not None else None
+    em = _episode_meta(sm, ep, file_title)
     episode = Episode(
         show_id=show.id, season_number=season, episode_number=ep, episode_end=ep_end,
         # TMDB's title when it knows the episode; the filename's otherwise
-        # (MythBusters' year seasons, loose shorts).
+        # (loose shorts, a year-season title TMDB doesn't have).
         title=(em or {}).get("title") or file_title,
         overview=(em or {}).get("overview"), still_path=(em or {}).get("still_path"),
         air_date=(em or {}).get("air_date"), runtime=(em or {}).get("runtime"),
@@ -234,8 +307,8 @@ async def rematch_show(show_id: int, tmdb_id: int, season_map: list | None) -> d
         for e in (await session.scalars(select(Episode).where(Episode.show_id == show_id))).all():
             if e.episode_number is None:
                 continue
-            em = ((await _season_meta(cache, show, e.season_number)) or {}).get(
-                "episodes", {}).get(e.episode_number)
+            em = _episode_meta(await _season_meta(cache, show, e.season_number),
+                               e.episode_number, e.title)
             if em:
                 e.title = em.get("title") or e.title
                 e.overview, e.still_path = em.get("overview"), em.get("still_path")
