@@ -690,7 +690,69 @@ bool _menuHint = false;
 ///   A play/pause · ←/→ skip 10 s · LB/RB chapter · X audio · Y subtitles ·
 ///   Start menu · ↑/↓ show the controls. With a menu open, the D-pad/A/B
 ///   navigate it instead.
+// Held ←/→: the pad repeats every 110 ms, and every repeat used to be its own
+// seek — 30 seeks in 3.5 s were 30 fresh HTTP connections into a 9.5 GB file;
+// mpv took 5.5 s to settle and came out paused (MythBusters, 2026-10-26). Now
+// a tap still seeks at once; repeats only add up (the target shows on screen)
+// and ONE seek goes out when they stop, then playback resumes if it was playing.
+const _seekSettle = Duration(milliseconds: 300); // > the 110 ms repeat
+double? _seekFrom; // where the held seek started
+double _seekTotal = 0;
+int _seekPresses = 0;
+bool _seekWasPlaying = false;
+Timer? _seekTimer;
+int _seekGen = 0;
+
+void _padSeek(MpvController c, double step) {
+  _seekGen++;
+  if (_seekTimer == null) {
+    // A fresh press: seek right away (a tap feels instant).
+    _seekFrom = c.position;
+    _seekTotal = step;
+    _seekPresses = 1;
+    _seekWasPlaying = !c.paused;
+    c.seekBy(step);
+  } else {
+    _seekTotal += step;
+    _seekPresses++;
+    _seekTimer!.cancel();
+    c.showText('${step > 0 ? '⏩' : '⏪'} ${_clock(_seekTarget(c))}', ms: 1000);
+  }
+  c.uosc('flash-timeline');
+  _seekTimer = Timer(_seekSettle, () {
+    _seekTimer = null;
+    if (_seekPresses > 1) c.seek(_seekTarget(c)); // the tap already moved for one press
+    if (_seekWasPlaying) _keepPlaying(c, _seekGen);
+  });
+}
+
+double _seekTarget(MpvController c) {
+  final end = c.duration > 2 ? c.duration - 2 : double.infinity;
+  return ((_seekFrom ?? c.position) + _seekTotal).clamp(0.0, end);
+}
+
+/// After a seek that started while playing: make sure it's still playing once
+/// mpv has settled, unless a button was pressed since (A to pause, etc.).
+void _keepPlaying(MpvController c, int gen) {
+  c.setPaused(false);
+  Timer(const Duration(seconds: 2), () {
+    if (gen == _seekGen && _mpv == c && c.paused) {
+      _diag('seek: mpv was paused after the seek — resuming');
+      c.setPaused(false);
+    }
+  });
+}
+
+String _clock(double s) {
+  final t = s.round();
+  final m = (t ~/ 60) % 60, sec = t % 60;
+  return t >= 3600
+      ? '${t ~/ 3600}:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}'
+      : '$m:${sec.toString().padLeft(2, '0')}';
+}
+
 bool playerPad(PadButton b) {
+  if (b != PadButton.left && b != PadButton.right) _seekGen++; // a real press cancels the auto-resume
   final c = _mpv;
   if (!_useMpv || c == null || !c.running) {
     // No live player (it failed to start or exited): a stale "menu open" must
@@ -716,11 +778,9 @@ bool playerPad(PadButton b) {
       c.uosc('flash-pause-indicator');
       c.uosc('flash-timeline');
     case PadButton.left:
-      c.seekBy(-10);
-      c.uosc('flash-timeline');
+      _padSeek(c, -10);
     case PadButton.right:
-      c.seekBy(10);
-      c.uosc('flash-timeline');
+      _padSeek(c, 10);
     case PadButton.lb:
       c.chapter(-1);
       c.uosc('flash-timeline');

@@ -3,6 +3,7 @@
 The in-app updater shows the newest `## ` section below. Newest on top.
 
 ## 0.9.0 - 2026-09-26
+- **Smoother fast-forward and rewind:** holding left or right on the controller now counts up where you'll land (“⏩ 39:16”) and jumps there once when you let go, instead of making the player jump thirty times — it settles right away, and it keeps playing afterwards instead of sitting paused.
 - **Read the whole episode description:** on a show's page, highlight an episode and press **Y** (Details) to see its full description, with its number, air date and length.
 - **Cleaner episode cards:** the episode's name comes first, then its number, air date and length (“S2009 · E1 · Apr 8, 2009 · 44 min”), then the picture/sound quality on its own small line — nothing wraps onto a second line anymore, and the focused episode's description no longer runs over the titles.
 - **More episode details for year-numbered seasons:** every MythBusters episode now has its description and air date, and nearly all have their picture.
