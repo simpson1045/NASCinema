@@ -71,6 +71,28 @@ actually are and what's next." Current version: **v0.8.0+35 (first GitHub-built 
   run_desktop). **TODO (Matt asked):** episode search by parent_tmdb_id + TMDB S/E
   (year seasons need the matched TMDB numbers — store them on Episode or re-derive via
   _year_season_meta), a subtitle picker for shows, and maybe auto-pick for subless episodes.
+- **Episode subtitle timing — SOLVED by speech matching (Oct 26, Matt: "perfect"):**
+  MythBusters files are **FilmRise re-edits** (FilmRise logo at 0:00; 94.7 min vs the
+  87.5-min Discovery cut every OpenSubtitles sub is timed to). Fixed delays, a second
+  release's sub and **alass all failed** (alass v2.0.0 found 2 splits, +47 s / +93 s —
+  wrong; MythBusters' music and explosions fool VAD). What worked: Whisper
+  (openai-whisper `turbo`, word timestamps) on ALPINE's 3080 → 14,518 words; then one
+  difflib sequence alignment of subtitle words vs transcript words, per-cue median
+  shift, running median (9), gaps filled from neighbours → 94% of 1,931 cues matched
+  directly; the shift runs −2.7 s at the start → +7 min at the end (continuous, not a
+  few ad breaks). Spot checks 7/8 word-for-word. Saved as data/subs/5264/en-matched.vtt.
+  Scripts: `tools/subsync/transcribe.py` + `align.py`. Whisper venv on ALPINE:
+  `C:\Users\matth\.venvs\whisper` (system-site-packages → torch 2.11 cu128; model
+  ~/.cache/whisper/large-v3-turbo.pt). Audio via jellyfin ffmpeg (16 kHz mono wav,
+  182 MB; 3.5 min to extract on the busy pool); ~5 min to transcribe. The NAS has no
+  GPU — CPU Whisper (small/int8) there is the option for doing this automatically.
+- **b78 (375ad70) tagged:** held ←/→ adds up and seeks once (30 seeks in 3.5 s were 30
+  HTTP reconnects; mpv settled in 5.5 s and came out paused — no pause command was
+  sent, the stall code never fired). Not installed yet (Matt watching).
+- mpv 0.41 on ELKO streams HTTP through its **curl** stream, not lavf → b75's
+  `--stream-lavf-o=reconnect…` flags are probably inert; the app-side stall guard is the
+  real protection. Scrubber: uosc already tracks every cached range but marks UNcached
+  ones with a faint hatch on a 3 px line — nearly invisible; check on screen first.
 - ELKO focus: front_app.ps1's SetForegroundWindow is refused from a background task (the
   taskbar stayed up after the b75 relaunch). A synthetic Alt tap (keybd_event 0x12) before
   SetForegroundWindow on the process's MainWindowHandle worked — front_app.ps1 not changed yet.
