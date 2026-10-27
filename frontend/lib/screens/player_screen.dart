@@ -1049,9 +1049,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (!mounted) return;
         }
         var n = 0;
+        final want = _wantedSub();
         for (final s in _subs) {
           n++;
-          final sel = s['id'] == _resumeSubtitle;
+          final sel = s['id'] == want;
           final rel = (s['release'] ?? '').toString();
           final title = rel.isNotEmpty
               ? 'Downloaded: $rel'
@@ -1065,9 +1066,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return;
       }
       // Re-enable the subtitle the user had on last time, if it still exists.
-      if (_resumeSubtitle != null && _activeSub == null) {
+      final want = _wantedSub();
+      if (want != null && _activeSub == null) {
         for (final s in _subs) {
-          if (s['id'] == _resumeSubtitle) {
+          if (s['id'] == want) {
             _selectSub(s);
             break;
           }
@@ -1076,6 +1078,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (_) {
       // best-effort
     }
+  }
+
+  /// The server subtitle to turn on: the one picked last time on this file —
+  /// or, if none of the server's is that one, the speech-matched subtitle made
+  /// for files with no usable subs (`en-matched`: MythBusters' FilmRise cuts).
+  /// Without this an episode that started by itself sat with subs off and the
+  /// matched track waiting in the Y menu (2026-10-27). [_resumeSubtitle] is
+  /// also the previous episode's after an in-place handoff, hence the check.
+  String? _wantedSub() {
+    if (_subs.any((s) => s['id'] == _resumeSubtitle)) return _resumeSubtitle;
+    return _subs.any((s) => s['id'] == 'en-matched') ? 'en-matched' : null;
   }
 
   void _nudgeSync(double delta) {
